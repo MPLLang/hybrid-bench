@@ -97,6 +97,7 @@ struct
     end
 
   fun destroy (a1, a2, n) = (GPUArray.gpu_free(a1);GPUArray.gpu_free(a2))
+  (*
   (*)
   fun filter p (a1, a2, n) = 
     let
@@ -106,7 +107,7 @@ struct
       val () = filter_cuda(a1, a2, n, p, o1, o2, outlen)
     in
       (!o1, !o2, !outlen)
-    end*)
+    end
   (*)
   (* requires both have the same length *)
   fun zipwith f (a1, n, _) (a2, _, _) =
@@ -114,6 +115,6 @@ struct
       val out = zipwith_cuda(a1, a2, f, n)
     in
       (out, n, CTYPES.CINTxINT)
-    end*)
-
+    end
+  *)
 end
