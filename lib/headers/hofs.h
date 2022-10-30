@@ -21,4 +21,6 @@ typedef int2 (*reduce_fun_int_tuple)(int x_1, int x_2, int y_1, int y_2);
 typedef int2 (*scan_fun_int_tuple)(int x_1, int x_2, int y_1, int y_2);
 typedef bool (*filter_fun_int_tuple)(int x_1, int x_2);
 typedef int2 (*zipwith_fun_int_tuple)(int x_1, int x_2, int y_1, int y_2);
+
+typedef float (*cublasDGEMM_fun)(float x);
 #endif
