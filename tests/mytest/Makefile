@@ -3,10 +3,10 @@ MLTONFLAGS = -default-ann 'allowFFI true' -default-ann 'allowLineComments true' 
 LIBPATH = ../../lib/
 BLOB = $(LIBPATH)/gpublob.o
 
-mandel : mandel.sml $(BLOB)
-	mlton $(MLTONFLAGS) mandel.mlb ../../lib/gpublob.o
+test : test.sml $(BLOB)
+	mlton $(MLTONFLAGS) test.mlb ../../lib/gpublob.o
 $(LIBPATH)/gpublob.o :
 	(cd ../../lib/;make)
 
 clean : 
-	rm mandel
+	rm test

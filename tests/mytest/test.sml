@@ -1,4 +1,4 @@
-structure CPUMandel = 
+(*structure CPUMandel = 
 struct
   
   fun mandel c_re c_im count = 
@@ -35,9 +35,9 @@ struct
       Array.tabulate(Real.floor width * Real.floor height, loop)
     end
 
-end
+end*)
 
-structure GPUMandel = 
+(*structure GPUMandel = 
 struct
   fun runMandel () = 
     let
@@ -54,15 +54,26 @@ struct
       GPUArray.toIntArray gpuarr
     end
 
+end*)
+
+structure GPUMandel = 
+struct
+    fun testCuda () = 
+      let 
+        val _ = GPUKernels.test_cuda()
+      in
+        ()
+      end
 end
+
 
 structure Main = 
 struct
   fun run () = 
     let
-      val (res1, time) = Timer.run CPUMandel.runMandel
-      val _ = print("SML time " ^ time ^ "\n")
-      val (res2, time) = Timer.run GPUMandel.runMandel
+      (*val (res1, time) = Timer.run CPUMandel.runMandel
+      val _ = print("SML time " ^ time ^ "\n")*)
+      val (res2, time) = Timer.run GPUMandel.testCuda
       val _ = print("SMLGPU time " ^ time ^ "\n")
       (*
       val bools = List.tabulate

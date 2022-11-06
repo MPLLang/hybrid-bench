@@ -33,7 +33,7 @@ void* copy_float_into_gpu(Pointer src, int size){
 
 extern "C"
 void* copy_int_into_gpu(Pointer src, int size){
-	printf("I have entered copy to gpu\n");
+	//printf("I have entered copy to gpu\n");
 	void* ret_ptr;
 	cudaMalloc(&ret_ptr, sizeof(int) * size);
   cudaMemcpy(ret_ptr, src, sizeof(int) * size, cudaMemcpyHostToDevice);
@@ -49,11 +49,11 @@ void copy_float_gpu(Pointer dest, void* gpuarr, size_t size){
 
 extern "C"
 void copy_int_gpu(Pointer dest, void* gpuarr, size_t size){
-  printf("i have entered the function\n");
+  //printf("i have entered the function\n");
 	size_t typesize = sizeof(int);
   int* ptr = (int*)dest;    
   cudaMemcpy(ptr, gpuarr, size * typesize, cudaMemcpyDeviceToHost);
-  printf("this is my printf: %d", ptr[0]);
+  //printf("this is my printf: %d", ptr[0]);
 }
 
 extern "C"

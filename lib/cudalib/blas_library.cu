@@ -29,3 +29,25 @@ void * cublasSGEMM(void* A, void* B, void* C, int m, int n, int k, void* f){
 
     return C;
 }
+
+__global__ 
+void test_cuda(float* arr, int len, test_cuda f){
+  
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    printf("hello from thread %d\n", idx);
+}
+
+extern "C"
+void* test_cuda(int size, void* f){
+  
+  test_cuda hof = (test_cuda)f;
+  
+  void* dev_ptr;
+  cudaMalloc(&dev_ptr, sizeof(float) * size);
+
+  int blockNum = (size / 256) + 1;
+  test_cuda<<<1, 10>>>((float*)dev_ptr, size, hof);
+  cudaDeviceSynchronize();
+  return dev_ptr;
+
+}

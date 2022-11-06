@@ -1,4 +1,4 @@
-structure CPUMandel = 
+(*structure CPUMandel = 
 struct
   
   fun mandel c_re c_im count = 
@@ -35,9 +35,9 @@ struct
       Array.tabulate(Real.floor width * Real.floor height, loop)
     end
 
-end
+end*)
 
-structure GPUMandel = 
+(*structure GPUMandel = 
 struct
   fun runMandel () = 
     let
@@ -54,15 +54,33 @@ struct
       GPUArray.toIntArray gpuarr
     end
 
+end*)
+
+structure GPUBLAS = 
+struct
+  fun runGEMM () = 
+    let
+      val n = 3
+      val gpuarr1 = 
+        GPUArray.init (n * n) (CTYPES.CFLOAT)
+      val gpuarr2 = 
+        GPUArray.init (n * n) (CTYPES.CFLOAT)
+        val gpuarr3 = 
+        GPUArray.init (n * n) (CTYPES.CFLOAT)
+      val _ = GPUKernels.cublasSGEMM
+              (GPUArray.getDevicePtr gpuarr1, GPUArray.getDevicePtr gpuarr2, GPUArray.getDevicePtr gpuarr3, n,n, n)
+    in
+      GPUArray.toIntArray gpuarr3
+    end
 end
 
 structure Main = 
 struct
   fun run () = 
     let
-      val (res1, time) = Timer.run CPUMandel.runMandel
-      val _ = print("SML time " ^ time ^ "\n")
-      val (res2, time) = Timer.run GPUMandel.runMandel
+      (*val (res1, time) = Timer.run CPUMandel.runMandel
+      val _ = print("SML time " ^ time ^ "\n")*)
+      val (res2, time) = Timer.run GPUBLAS.runGEMM
       val _ = print("SMLGPU time " ^ time ^ "\n")
       (*
       val bools = List.tabulate
