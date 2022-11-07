@@ -62,9 +62,9 @@ struct
     let
       val n = 3
       val gpuarr1 = 
-        GPUArray.init (n * n) (CTYPES.CFLOAT)
+        GPUArray.initFloat (n * n) (1.0)
       val gpuarr2 = 
-        GPUArray.init (n * n) (CTYPES.CFLOAT)
+        GPUArray.initFloat (n * n) (2.0)
         val gpuarr3 = 
         GPUArray.init (n * n) (CTYPES.CFLOAT)
       val _ = GPUKernels.cublasSGEMM
@@ -81,6 +81,7 @@ struct
       (*val (res1, time) = Timer.run CPUMandel.runMandel
       val _ = print("SML time " ^ time ^ "\n")*)
       val (res2, time) = Timer.run GPUBLAS.runGEMM
+      val _ = print("result: " ^ res2 ^ "\n")
       val _ = print("SMLGPU time " ^ time ^ "\n")
       (*
       val bools = List.tabulate
