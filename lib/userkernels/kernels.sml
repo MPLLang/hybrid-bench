@@ -1,6 +1,10 @@
 structure GPUKernels = 
 struct
   open Real
+  val chooseSGEMM = 
+    _import "chooseSGEMM" public : MLton.Pointer.t * MLton.Pointer.t * MLton.Pointer.t * int * int *
+     int -> unit;
+
   val mandel_gpu = 
     _import "mandel_gpu" public : MLton.Pointer.t * int * int * int * real *
     real * real * real -> unit;

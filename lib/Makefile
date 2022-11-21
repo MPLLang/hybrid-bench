@@ -10,7 +10,7 @@ gpublob.o : $(OUTDIR) $(GOBJS)
 objs : 
 	mkdir -p $(OUTDIR)
 $(OUTDIR)/blas_library.o : userkernels/blas_library.cu
-	nvcc -lcublas -c -o $(OUTDIR)/blas_library.o userkernels/blas_library.cu $(NVFLAGS)
+	nvcc -lcublas -c -o $(OUTDIR)/blas_library.o userkernels/blas_library.cu $(NVFLAGS) -llapack -lblas
 $(OUTDIR)/allocate.o : cudalib/allocate.cu
 	nvcc -c -o $(OUTDIR)/allocate.o cudalib/allocate.cu $(NVFLAGS)
 $(OUTDIR)/int_sequence.o : cudalib/int_sequence.cu

@@ -49,7 +49,7 @@ void copy_float_gpu(Pointer dest, void* gpuarr, size_t size){
 
 extern "C"
 void copy_int_gpu(Pointer dest, void* gpuarr, size_t size){
-  printf("i have entered the function\n");
+  printf("i have entered the function copy int to gpu\n");
 	size_t typesize = sizeof(int);
   int* ptr = (int*)dest;    
   cudaMemcpy(ptr, gpuarr, size * typesize, cudaMemcpyDeviceToHost);
@@ -89,9 +89,9 @@ void initwith_float(float* arr, float b, int len){
   }
 }
 extern "C"
-void* initFloat_gpu(int size, Real64 b){
+void* initFloat_gpu(int size, Real32 b){
   void* dev_ptr;
-  cudaMallocManaged(&dev_ptr, sizeof(Real64) * size);
+  cudaMallocManaged(&dev_ptr, sizeof(Real32) * size);
 
   int blocks = (size / 256) + 1;
   initwith_float<<<blocks, 256>>>((float*)dev_ptr, b, size);
