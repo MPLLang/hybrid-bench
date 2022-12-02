@@ -60,7 +60,7 @@ structure GPUBLAS =
 struct
   fun runGEMM () = 
     let
-      val n = 1000
+      val n = 1024
       val gpuarr1 = 
         GPUArray.initFloat (n) (1.0)
       val gpuarr2 = 
@@ -74,15 +74,35 @@ struct
     end
 end
 
+fun mplGEMM () =
+  let
+    val n = 1024
+    val m1 = TreeMatrix.tabulate n (fn _ => 1.0)
+    val m2 = TreeMatrix.tabulate n (fn _ => 2.0)
+  in
+    TreeMatrix.multiply (m1, m2)
+  end
+
+fun together () = ForkJoin.par(mplGEMM, GPUBLAS.runGEMM)
+
 structure Main = 
 struct
   fun run () = 
     let
       (*val (res1, time) = Timer.run CPUMandel.runMandel
       val _ = print("SML time " ^ time ^ "\n")*)
+      val _ = print "============ GPU ==============\n"
       val (res2, time) = Timer.run GPUBLAS.runGEMM
      (* val _ = print("result: " ^ res2 ^ "\n")*)
       val _ = print("SMLGPU time " ^ time ^ "\n")
+
+      val _ = print "\n============ MPL CPU ==============\n"
+      val (res3, time) = Timer.run mplGEMM
+      val _ = print("MPL CPU " ^ time ^ "\n")
+
+      val _ = print "\n============ BOTH ==============\n"
+      val (res4, time) = Timer.run together
+      val _ = print("both in parallel " ^ time ^ "\n")
       (*
       val bools = List.tabulate
           (Array.length res1, fn i => if Array.sub(res1, i) = Array.sub(res2,i)

@@ -29,34 +29,6 @@ void * basicSGEMM(void * A, void* B, void * C, int m, int n, int k) {
     return C; 
   }
 
-extern "C"
-void * cublasSGEMM(void* A, void* B, void* C, int m, int n, int k){
-    
-    cublasHandle_t handle;
-    cublasCreate(&handle);
-    float alpha = 1.0;
-    float beta = 0.0;
-    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, (float*) B, n, (float*) A, k, &beta, (float*) C, n);
-    cublasDestroy(handle);
-
-    return C;
-}
-
-extern "C"
-void * chooseSGEMM(void * A, void* B, void * C, int m, int n, int k) {
-  //printf("hello from chooseSGEMM");
-  if(k <= 100) {
-    printf("entered cpu test\n");
-    basicSGEMM(A, B, C, m, n, k);
-  }
-  else {
-    printf("entered gpu test\n");
-    cublasSGEMM(A, B, C, m, n, k);
-  }
-  return C;
-}
-
-
 __global__ 
 void tc(){
   
@@ -75,3 +47,34 @@ void test_cuda(){
   cudaDeviceSynchronize();
 
 }
+
+
+extern "C"
+void * cublasSGEMM(void* A, void* B, void* C, int m, int n, int k){
+    
+    cublasHandle_t handle;
+    cublasCreate(&handle);
+    float alpha = 1.0;
+    float beta = 0.0;
+    cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, (float*) B, n, (float*) A, k, &beta, (float*) C, n);
+    // cublasDestroy(handle);
+
+    return C;
+}
+
+extern "C"
+void * chooseSGEMM(void * A, void* B, void * C, int m, int n, int k) {
+  //printf("hello from chooseSGEMM");
+  if(k <= 100) {
+    printf("entered cpu test\n");
+    basicSGEMM(A, B, C, m, n, k);
+  }
+  else {
+    printf("entered gpu test\n");
+    //test_cuda();
+    cublasSGEMM(A, B, C, m, n, k);
+  }
+  return C;
+}
+
+

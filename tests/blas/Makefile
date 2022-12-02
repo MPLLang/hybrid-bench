@@ -1,10 +1,12 @@
 MLTONFLAGS = -default-ann 'allowFFI true' -default-ann 'allowLineComments true' -link-opt \
-						 '-rdynamic -L/usr/local/cuda-11.4/lib64/ -lcublas -lcudart -lstdc++'
+						 '-rdynamic -L/opt/nvidia/cuda/lib64/ -lcublas -lcudart -lstdc++'
 LIBPATH = ../../lib/
 BLOB = $(LIBPATH)/gpublob.o
 
 blas : blas.sml $(BLOB)
 	mlton $(MLTONFLAGS) blas.mlb ../../lib/gpublob.o
+blas.mpl : blas.sml $(BLOB)
+	mpl $(MLTONFLAGS) blas.mpl.mlb ../../lib/gpublob.o
 $(LIBPATH)/gpublob.o :
 	(cd ../../lib/;make)
 
