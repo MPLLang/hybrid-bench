@@ -62,13 +62,13 @@ struct
     let
       val n = 1024
       val gpuarr1 = 
-        GPUArray.initFloat (n) (1.0)
+        Array.array (n, 0)
       val gpuarr2 = 
-        GPUArray.initFloat (n) (2.0)
-        val gpuarr3 = 
-        GPUArray.initFloat (n) (0.0)
-      val _ = GPUKernels.chooseSGEMM
-              (GPUArray.getDevicePtr gpuarr1, GPUArray.getDevicePtr gpuarr2, GPUArray.getDevicePtr gpuarr3, n,n, n)
+        Array.array (n, 0)
+      val gpuarr3 = 
+        Array.array (n, 0)
+      val _ = GPUKernels.chooseSGEMMInt
+              (gpuarr1, gpuarr2, gpuarr3, n,n, n)
     in
       gpuarr3
     end
@@ -85,13 +85,45 @@ fun mplGEMM () =
 
 fun together () = ForkJoin.par(mplGEMM, GPUBLAS.runGEMM)
 
+
+fun twoWayReduction () =
+  let
+    val n = 10
+    val arr = Array.array(n, 1)
+    fun onCPU (lo, hi) =
+      SeqBasis.reduce 1000 op+ 0 (lo, hi ) (fn i => Array.sub (arr, i))
+    fun onGPU (arr1, size) =
+      GPUKernels.test_cuda (arr1, size)
+    fun wtr (lo, hi) =
+      if true then 
+        let
+          val arr' = Array.tabulate ((hi-lo), (fn i => (Array.sub (arr, i+lo)))) 
+        in
+          onGPU(arr', hi-lo)
+        end
+      else 
+        onCPU(lo, hi)
+    (* val(left, right) = ForkJoin.par(fn() => wtr(0, Array.length arr div 2), 
+                        fn() => wtr(Array.length arr div 2, Array.length arr)) *)
+     val(left, right) = ForkJoin.par(fn() => onCPU(0, Array.length arr div 2), 
+                        fn() =>  let
+          val arr' = Array.tabulate (((Array.length arr) - (Array.length arr div 2)), (fn i => (Array.sub (arr, i+(Array.length arr div 2))))) 
+        in
+          onGPU(arr', ((Array.length arr) - (Array.length arr div 2)))
+        end)
+    val res = left + right
+  in
+    res
+  end
+
+
 structure Main = 
 struct
   fun run () = 
     let
       (*val (res1, time) = Timer.run CPUMandel.runMandel
       val _ = print("SML time " ^ time ^ "\n")*)
-      val _ = print "============ GPU ==============\n"
+      (* val _ = print "============ GPU ==============\n"
       val (res2, time) = Timer.run GPUBLAS.runGEMM
      (* val _ = print("result: " ^ res2 ^ "\n")*)
       val _ = print("SMLGPU time " ^ time ^ "\n")
@@ -102,7 +134,12 @@ struct
 
       val _ = print "\n============ BOTH ==============\n"
       val (res4, time) = Timer.run together
-      val _ = print("both in parallel " ^ time ^ "\n")
+      val _ = print("both in parallel " ^ time ^ "\n") *)
+
+      val _ = print "\n============ multitask ==============\n"
+      val (res4, time) = Timer.run twoWayReduction
+      val _ = print("MPL result " ^ Int.toString(res4) ^ "\n")
+      val _ = print("Execution Time " ^ time ^ "\n")
       (*
       val bools = List.tabulate
           (Array.length res1, fn i => if Array.sub(res1, i) = Array.sub(res2,i)

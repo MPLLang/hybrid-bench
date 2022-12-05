@@ -2,7 +2,8 @@
 #include <time.h>
 #include "../headers/export.h"
 #include "cublas_v2.h"
-
+#define SIZE 256
+#define SHMEM_SIZE 1024
 // void * blasSGEMM(void * A, void* B, void * C, int m, int n, int k) {
 //   float alpha = 1.0;
 //   float beta = 0.0;
@@ -36,15 +37,60 @@ void tc(){
     printf("hello from thread %d\n", idx);
 }
 
+
+__global__ void sum_reduction(int *v, int *v_r) {
+	// Allocate shared memory
+	__shared__ int partial_sum[SHMEM_SIZE];
+
+	// Calculate thread ID
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	// Load elements into shared memory
+	partial_sum[threadIdx.x] = v[tid];
+	__syncthreads();
+
+	// Start at 1/2 block stride and divide by two each iteration
+	for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+		// Each thread does work unless it is further than the stride
+		if (threadIdx.x < s) {
+			partial_sum[threadIdx.x] += partial_sum[threadIdx.x + s];
+		}
+		__syncthreads();
+	}
+
+	// Let the thread 0 for this block write it's result to main memory
+	// Result is inexed by this block
+	if (threadIdx.x == 0) {
+		v_r[blockIdx.x] = partial_sum[0];
+	}
+}
+
+
 extern "C"
-void test_cuda(){
+int test_cuda(int * A, int n){
   
-  
+  for(int i = 0; i < n; i++) {
+    printf("gpu value %d ", A[i]);
+  }
+  printf("\n");
+  int * A2;
+  cudaMallocManaged(&A2, n *sizeof(int));
+  for(int i = 0; i < n; i++) {
+    A2[i] = A[i];
+  }
+  int * result;
+  cudaMallocManaged(&result, 1*sizeof(int));
   // void* dev_ptr;
   // cudaMalloc(&dev_ptr, sizeof(float) * size);
   // int blockNum = (size / 256) + 1;
-  tc<<<1, 10>>>();
+
+  int GRID = n/SIZE;
+  if(GRID == 0) {
+    GRID = 1;
+  }
+  printf("%d, %d\n", GRID, SIZE);
+  sum_reduction<<<GRID, SIZE>>>(A2, result);
   cudaDeviceSynchronize();
+  return result[0];
 
 }
 
