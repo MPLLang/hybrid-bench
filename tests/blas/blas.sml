@@ -98,9 +98,19 @@ fun twoWayReduction () =
     fun wtr (lo, hi) =
       if SpinLock.trylock lock then 
         let
+          (* SAM_NOTE: see dep/lib/.../SeqBasis.sml
+           * Parallel tabulate:
+           *   val tabulate: grain -> (int * int) -> (int -> 'a) -> 'a array
+           *)
           val arr' = Array.tabulate ((hi-lo), (fn i => (Array.sub (arr, i+lo)))) 
+
           (* val _ = SpinLock.lock lock *)
+
+          (* SAM_NOTE: consider avoiding double copy by giving onGPU indices
+           *   onGPU(arr, lo, hi)
+           *)
           val result = onGPU(arr', hi-lo)
+
           (* val _ = SpinLock.unlock lock *)
         in
           result
