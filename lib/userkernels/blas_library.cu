@@ -3,7 +3,7 @@
 #include "../headers/export.h"
 #include "cublas_v2.h"
 #define SIZE 256
-#define SHMEM_SIZE 1024
+#define SHMEM_SIZE 256
 // void * blasSGEMM(void * A, void* B, void * C, int m, int n, int k) {
 //   float alpha = 1.0;
 //   float beta = 0.0;
@@ -38,14 +38,17 @@ void tc(){
 }
 
 
-__global__ void sum_reduction(int *v, int *v_r) {
+__global__ void sum_reduction(int *v, int *v_r, int n) {
 	// Allocate shared memory
 	__shared__ int partial_sum[SHMEM_SIZE];
 
 	// Calculate thread ID
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
 	// Load elements into shared memory
-	partial_sum[threadIdx.x] = v[tid];
+  if(tid < n)
+	  partial_sum[threadIdx.x] = v[tid];
+  else 
+    partial_sum[threadIdx.x] = 0;
 	__syncthreads();
 
 	// Start at 1/2 block stride and divide by two each iteration
@@ -60,7 +63,8 @@ __global__ void sum_reduction(int *v, int *v_r) {
 	// Let the thread 0 for this block write it's result to main memory
 	// Result is inexed by this block
 	if (threadIdx.x == 0) {
-		v_r[blockIdx.x] = partial_sum[0];
+		//v_r[blockIdx.x] = partial_sum[0];
+    atomicAdd(v_r, partial_sum[threadIdx.x]);
 	}
 }
 
@@ -68,10 +72,10 @@ __global__ void sum_reduction(int *v, int *v_r) {
 extern "C"
 int test_cuda(int * A, int n){
   
-  for(int i = 0; i < n; i++) {
-    printf("gpu value %d ", A[i]);
-  }
-  printf("\n");
+  // for(int i = 0; i < n; i++) {
+  //   printf("gpu value %d ", A[i]);
+  // }
+  // printf("\n");
   int * A2;
   cudaMallocManaged(&A2, n *sizeof(int));
   for(int i = 0; i < n; i++) {
@@ -83,13 +87,14 @@ int test_cuda(int * A, int n){
   // cudaMalloc(&dev_ptr, sizeof(float) * size);
   // int blockNum = (size / 256) + 1;
 
-  int GRID = n/SIZE;
+  int GRID = (n+(SIZE-1))/SIZE;
   if(GRID == 0) {
     GRID = 1;
   }
-  printf("%d, %d\n", GRID, SIZE);
-  sum_reduction<<<GRID, SIZE>>>(A2, result);
+  printf("input size %d, grid size %d, size %d\n", n, GRID, SIZE);
+  sum_reduction<<<GRID, SIZE>>>(A2, result, n);
   cudaDeviceSynchronize();
+  printf("the result is %d\n", result[0]);
   return result[0];
 
 }
