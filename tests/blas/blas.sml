@@ -88,7 +88,7 @@ fun together () = ForkJoin.par(mplGEMM, GPUBLAS.runGEMM)
 
 fun twoWayReduction () =
   let
-    val n = 10000000
+    val n = CommandLineArgs.parseInt "n" 10000000
     val arr = Array.array(n, 1)
     val lock = SpinLock.new ()
     fun onCPU (lo, hi) =
