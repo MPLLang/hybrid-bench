@@ -13,8 +13,8 @@ struct
     _import "mandel_gpu" public : MLton.Pointer.t * int * int * int * real *
     real * real * real -> unit;
   
-  val test_cuda = 
-    _import "test_cuda" public : int array * int -> int;
+  val reduction = 
+    _import "reduction" public : int array * int * int -> int;
   
   val cublasSGEMM = 
     _import "cublasSGEMM" public : MLton.Pointer.t * MLton.Pointer.t * MLton.Pointer.t * int * int *

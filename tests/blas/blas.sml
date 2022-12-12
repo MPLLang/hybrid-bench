@@ -91,40 +91,51 @@ fun twoWayReduction () =
     val n = CommandLineArgs.parseInt "n" 10000000
     val arr = Array.array(n, 1)
     val lock = SpinLock.new ()
-    fun onCPU (lo, hi) =
-      SeqBasis.reduce 1000 op+ 0 (lo, hi ) (fn i => Array.sub (arr, i))
-    fun onGPU (arr1, size) =
-      GPUKernels.test_cuda (arr1, size)
-    fun wtr (lo, hi) =
+    fun onGPU (arr1, lo, hi) =
+      GPUKernels.reduction (arr, lo, hi)
+    (* fun onCPU (lo, hi) =
+      SeqBasis.reduce 1000 op+ 0 (lo, hi ) (fn i => Array.sub (arr, i)) *)
+      fun wtr (arr1, lo, hi) =
       if SpinLock.trylock lock then 
         let
           (* SAM_NOTE: see dep/lib/.../SeqBasis.sml
            * Parallel tabulate:
            *   val tabulate: grain -> (int * int) -> (int -> 'a) -> 'a array
            *)
-          val arr' = Array.tabulate ((hi-lo), (fn i => (Array.sub (arr, i+lo)))) 
+          (* val arr' = Array.tabulate ((hi-lo), (fn i => (Array.sub (arr, i+lo))))  *)
 
           (* val _ = SpinLock.lock lock *)
 
           (* SAM_NOTE: consider avoiding double copy by giving onGPU indices
            *   onGPU(arr, lo, hi)
            *)
-          val result = onGPU(arr', hi-lo)
+          val result = onGPU(arr1, lo, hi)
 
           (* val _ = SpinLock.unlock lock *)
         in
           result
         end
-      else 
-        let 
+      else
+        if (hi - lo) = 0 then
+        0
+        else if hi - lo = 1 then
+        Array.nth arr 0 
+        else
+          let 
+            val(left, right) = ForkJoin.par(fn() => wtr(subseq arr (0, Array.length arr div 2),  0, Array.length arr div 2), 
+                        fn() => wtr(subseq arr (Array.length arr div 2, Array.length arr), Array.length arr div 2, Array.length arr))
+          in
+            left + right
+          end 
+        (* let 
         val _ = print ("on cpu" ^ "\n")
         val result = onCPU(lo, hi)
         in
           result
-        end
+        end *)
     
-    val(left, right) = ForkJoin.par(fn() => wtr(0, Array.length arr div 2), 
-                        fn() => wtr(Array.length arr div 2, Array.length arr))
+    val(left, right) = ForkJoin.par(fn() => wtr(subseq arr (0, Array.length arr div 2), 0, Array.length arr div 2), 
+                        fn() => wtr(subseq arr (Array.length arr div 2, Array.length arr), Array.length arr div 2, Array.length arr))
      (* val(left, right) = ForkJoin.par(fn() => onCPU(0, Array.length arr div 2), 
                         fn() =>  let
           val arr' = Array.tabulate (((Array.length arr) - (Array.length arr div 2)), (fn i => (Array.sub (arr, i+(Array.length arr div 2))))) 

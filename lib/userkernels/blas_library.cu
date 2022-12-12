@@ -70,19 +70,21 @@ __global__ void sum_reduction(int *v, int *v_r, int n) {
 
 
 extern "C"
-int test_cuda(int * A, int n){
-  
-  // for(int i = 0; i < n; i++) {
-  //   printf("gpu value %d ", A[i]);
+int reduction(int * A, int lo, int hi){
+  // for(int i = 0; i < (hi-lo); i++) {
+  //   printf("gpu value %d ", A[i+lo]);
   // }
   // printf("\n");
   int * A2;
-  cudaMallocManaged(&A2, n *sizeof(int));
-  for(int i = 0; i < n; i++) {
-    A2[i] = A[i];
-  }
+  int n = hi - lo;
+  // printf("%d\n", hi-lo);
+  cudaMalloc(&A2, n *sizeof(int));
+  // for(int i = 0; i < n; i++) {
+  //   A2[i] = A[i];
+  // }
+  cudaMemcpy(A2, A+lo, n*sizeof(int), cudaMemcpyHostToDevice);
   int * result;
-  cudaMallocManaged(&result, 1*sizeof(int));
+  cudaMalloc(&result, 1*sizeof(int));
   // void* dev_ptr;
   // cudaMalloc(&dev_ptr, sizeof(float) * size);
   // int blockNum = (size / 256) + 1;
@@ -91,11 +93,14 @@ int test_cuda(int * A, int n){
   if(GRID == 0) {
     GRID = 1;
   }
-  printf("input size %d, grid size %d, size %d\n", n, GRID, SIZE);
+  // printf("input size %d, grid size %d, size %d\n", n, GRID, SIZE);
   sum_reduction<<<GRID, SIZE>>>(A2, result, n);
   cudaDeviceSynchronize();
-  printf("the result is %d\n", result[0]);
-  return result[0];
+  // printf("copying back\n");
+  int h_result = 0;
+  cudaMemcpy(&h_result, result, 1*sizeof(int), cudaMemcpyDeviceToHost);
+  printf("the gpu result is %d\n", h_result);
+  return h_result;
 
 }
 
