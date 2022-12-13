@@ -95,7 +95,7 @@ fun twoWayReduction () =
       GPUKernels.reduction (arr, lo, hi)
     (* fun onCPU (lo, hi) =
       SeqBasis.reduce 1000 op+ 0 (lo, hi ) (fn i => Array.sub (arr, i)) *)
-      fun wtr (arr1, lo, hi) =
+    fun wtr (arr1, lo, hi) =
       if SpinLock.trylock lock then 
         let
           (* SAM_NOTE: see dep/lib/.../SeqBasis.sml
@@ -117,13 +117,15 @@ fun twoWayReduction () =
         end
       else
         if (hi - lo) = 0 then
-        0
+          0
         else if hi - lo = 1 then
-        Array.nth arr 0 
+          Array.sub (arr1, lo)
         else
           let 
-            val(left, right) = ForkJoin.par(fn() => wtr(subseq arr (0, Array.length arr div 2),  0, Array.length arr div 2), 
-                        fn() => wtr(subseq arr (Array.length arr div 2, Array.length arr), Array.length arr div 2, Array.length arr))
+            val mid = lo + (hi-lo) div 2
+            val (left, right) =
+              ForkJoin.par (fn() => wtr (arr1, lo, mid), 
+                            fn() => wtr (arr1, mid, hi))
           in
             left + right
           end 
