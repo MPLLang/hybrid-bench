@@ -99,7 +99,7 @@ int reduction(int * A, int lo, int hi){
   // printf("copying back\n");
   int h_result = 0;
   cudaMemcpy(&h_result, result, 1*sizeof(int), cudaMemcpyDeviceToHost);
-  printf("the gpu result is %d\n", h_result);
+  // printf("the gpu result is %d\n", h_result);
   return h_result;
 
 }
