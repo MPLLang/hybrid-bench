@@ -156,6 +156,8 @@ fun plusReduceOnlyCPU arr =
 fun plusReduceOnlyGPU arr =
   reduceOnGPU (arr, 0, Array.length arr)
 
+val splitFraction = CommandLineArgs.parseReal "split" 0.66
+val _ = print ("split " ^ Real64.toString splitFraction ^ "\n")
 
 fun plusReduceHybrid arr =
   let
@@ -186,7 +188,7 @@ fun plusReduceHybrid arr =
           end
         else
           let 
-            val mid = lo + (hi-lo) div 2
+            val mid = lo + Real64.round (splitFraction * Real64.fromInt (hi-lo))
             val (left, right) =
               ForkJoin.par (fn() => wtr (lo, mid),
                             fn() => maybeGPU (mid, hi))
@@ -200,6 +202,9 @@ fun plusReduceHybrid arr =
 
 val n = CommandLineArgs.parseInt "n" (100 * 1000 * 1000)
 val impl = CommandLineArgs.parseString "impl" "hybrid"
+
+val _ = print ("n " ^ Int.toString n ^ "\n")
+val _ = print ("impl " ^ impl ^ "\n")
 
 val reduce =
   case impl of
