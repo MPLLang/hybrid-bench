@@ -68,6 +68,24 @@ __global__ void sum_reduction(int *v, int *v_r, int n) {
 	}
 }
 
+extern "C"
+void timespec_subtract(struct timespec *x, struct timespec *y) {
+  if (x->tv_nsec < y->tv_nsec) {
+    x->tv_sec -= 1;
+    x->tv_nsec += 1000000000L;
+  }
+  x->tv_sec -= y->tv_sec;
+  x->tv_nsec -= y->tv_nsec;
+}
+
+extern "C"
+void report_elapsed(const char *msg, struct timespec *x, struct timespec *y) {
+  struct timespec diff = *x;
+  timespec_subtract(&diff, y);
+  double secs = (double)diff.tv_sec + ((double)diff.tv_nsec / 1000000000.0);
+  printf("|%s: elapsed: %lf\n", msg, secs);
+}
+
 
 extern "C"
 int reduction(int * A, int lo, int hi){
@@ -75,6 +93,8 @@ int reduction(int * A, int lo, int hi){
   //   printf("gpu value %d ", A[i+lo]);
   // }
   // printf("\n");
+  struct timespec t0, t1, t2;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
   int * A2;
   int n = hi - lo;
   // printf("%d\n", hi-lo);
@@ -82,7 +102,11 @@ int reduction(int * A, int lo, int hi){
   // for(int i = 0; i < n; i++) {
   //   A2[i] = A[i];
   // }
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  report_elapsed("cudaMalloc", &t1, &t0);
   cudaMemcpy(A2, A+lo, n*sizeof(int), cudaMemcpyHostToDevice);
+  clock_gettime(CLOCK_MONOTONIC, &t2);
+  report_elapsed("cudaMemcpy", &t2, &t1);
   int * result;
   cudaMalloc(&result, 1*sizeof(int));
   // void* dev_ptr;
