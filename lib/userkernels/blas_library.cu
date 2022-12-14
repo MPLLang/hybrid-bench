@@ -100,6 +100,10 @@ int reduction(int * A, int lo, int hi){
   int h_result = 0;
   cudaMemcpy(&h_result, result, 1*sizeof(int), cudaMemcpyDeviceToHost);
   // printf("the gpu result is %d\n", h_result);
+
+  cudaFree(A2);
+  cudaFree(result);
+
   return h_result;
 
 }
