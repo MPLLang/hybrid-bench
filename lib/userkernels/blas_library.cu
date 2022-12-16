@@ -88,12 +88,54 @@ void report_elapsed(const char *msg, struct timespec *x, struct timespec *y) {
 
 
 extern "C"
+void * allocCudaManagedMemory(Int64 numBytes) {
+  void *result;
+  cudaMallocManaged(&result, (size_t)numBytes);
+  return result;
+}
+
+
+extern "C"
+void freeCudaMemory(void *p) {
+  cudaFree(p);
+}
+
+
+extern "C"
+int reduction_managed(int * A, int lo, int hi){
+  struct timespec t0, t1;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+
+  int * result;
+  cudaMalloc(&result, 1*sizeof(int));
+
+  int n = hi - lo;
+  int GRID = (n+(SIZE-1))/SIZE;
+  if(GRID == 0) {
+    GRID = 1;
+  }
+
+  sum_reduction<<<GRID, SIZE>>>(A+lo, result, n);
+  cudaDeviceSynchronize();
+
+  int h_result = 0;
+  cudaMemcpy(&h_result, result, 1*sizeof(int), cudaMemcpyDeviceToHost);
+  cudaFree(result);
+
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  report_elapsed("sum_reduction", &t1, &t0);
+
+  return h_result;
+}
+
+
+extern "C"
 int reduction(int * A, int lo, int hi){
   // for(int i = 0; i < (hi-lo); i++) {
   //   printf("gpu value %d ", A[i+lo]);
   // }
   // printf("\n");
-  struct timespec t0, t1, t2;
+  struct timespec t0, t1, t2, t3, t4;
   clock_gettime(CLOCK_MONOTONIC, &t0);
   int * A2;
   int n = hi - lo;
@@ -125,8 +167,14 @@ int reduction(int * A, int lo, int hi){
   cudaMemcpy(&h_result, result, 1*sizeof(int), cudaMemcpyDeviceToHost);
   // printf("the gpu result is %d\n", h_result);
 
+  clock_gettime(CLOCK_MONOTONIC, &t3);
+  report_elapsed("sum_reduction", &t3, &t2);
+
   cudaFree(A2);
   cudaFree(result);
+
+  clock_gettime(CLOCK_MONOTONIC, &t4);
+  report_elapsed("cudaFree", &t4, &t3);
 
   return h_result;
 
