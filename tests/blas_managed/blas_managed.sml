@@ -47,7 +47,7 @@ fun plusReduceOnlyCPU arr =
 fun plusReduceOnlyGPU arr =
   reduceOnGPU (arr, 0, DuplicatedInt32Array.length arr)
 
-val splitFraction = CommandLineArgs.parseReal "split" 0.2
+val splitFraction = CommandLineArgs.parseReal "split" 0.1
 val minGPU = CommandLineArgs.parseInt "min-gpu" (1000 * 1000)
 val _ = print ("split " ^ Real64.toString splitFraction ^ "\n")
 val _ = print ("min-gpu " ^ Int.toString minGPU ^ "\n")
@@ -70,11 +70,12 @@ fun plusReduceHybrid arr =
      and wtr (lo, hi) =
         if (hi - lo) = 0 then
           0
-        else if hi - lo < 10000 then
+        else if hi - lo < minGPU then
           let
             val arr = DuplicatedInt32Array.onCpu arr
           in
-            SeqBasis.foldl op+ 0 (lo, hi) (fn i => Int32.toInt (Array.sub (arr, i)))
+            SeqBasis.reduce 10000 op+ 0 (lo, hi) (fn i =>
+              Int32.toInt (Array.sub (arr, i)))
           end
         else
           let 
@@ -90,7 +91,7 @@ fun plusReduceHybrid arr =
   end
 
 
-val n = CommandLineArgs.parseInt "n" (100 * 1000 * 1000)
+val n = CommandLineArgs.parseInt "n" (1000 * 1000 * 1000)
 val impl = CommandLineArgs.parseString "impl" "hybrid"
 
 val _ = print ("n " ^ Int.toString n ^ "\n")
