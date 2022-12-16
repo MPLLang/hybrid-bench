@@ -3,5 +3,5 @@ local
   ../../dep/dep.mlb
   ../../lib/lib.mlb
 in
-  ./blas.sml
+  ./blas_managed.sml
 end

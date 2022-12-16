@@ -1,27 +1,25 @@
-fun reduceOnGPU (arr, lo, hi) =
+fun reduceOnGPU (arr: MLton.Pointer.t, lo, hi) =
   let
-    val result = GPUKernels.reduction (arr, lo, hi)
+    val result = GPUKernels.reductionManaged (arr, lo, hi)
   in
-    print ("|onGPU\n"
-           ^ "|  lo = " ^ Int.toString lo ^ "\n"
-           ^ "|  hi-lo = " ^ Int.toString (hi-lo) ^ "\n"
-           ^ "|  result = " ^ Int.toString result ^ "\n");
+    print ("|onGPU size " ^ Int.toString (hi-lo) ^ "\n");
     result
   end
 
-fun plusReduceOnlyCPU arr =
-  SeqBasis.reduce 10000 op+ 0 (0, Array.length arr) (fn i => Array.sub (arr, i))
 
+fun plusReduceOnlyCPU (arr, n) =
+  SeqBasis.reduce 10000 op+ 0 (0, n) (fn i => 
+    Int32.toInt (MLton.Pointer.getInt32 (arr, i))
+  )
 
-fun plusReduceOnlyGPU arr =
-  reduceOnGPU (arr, 0, Array.length arr)
+fun plusReduceOnlyGPU (arr, n) =
+  reduceOnGPU (arr, 0, n)
 
 val splitFraction = CommandLineArgs.parseReal "split" 0.66
 val _ = print ("split " ^ Real64.toString splitFraction ^ "\n")
 
-fun plusReduceHybrid arr =
+fun plusReduceHybrid (arr, n) =
   let
-    val n = Array.length arr
     val lock = SpinLock.new ()
     fun maybeGPU (lo, hi) = 
       if (hi - lo) >= 100000 andalso SpinLock.trylock lock then 
@@ -39,13 +37,7 @@ fun plusReduceHybrid arr =
         if (hi - lo) = 0 then
           0
         else if hi - lo < 10000 then
-          let
-          (* Array.sub (arr1, lo) *)
-          (* val _ = print ("on cpu" ^ "\n") *)
-          in
-            SeqBasis.foldl op+ 0 (lo, hi) (fn i => Array.sub (arr, i))
-          (*Util.loop (lo, hi) 0 (fn(i,j) => i + Array.sub (arr1, j))*)
-          end
+          SeqBasis.foldl op+ 0 (lo, hi) (fn i => Int32.toInt (MLton.Pointer.getInt32 (arr, i)))
         else
           let 
             val mid = lo + Real64.round (splitFraction * Real64.fromInt (hi-lo))
@@ -73,7 +65,22 @@ val reduce =
   | "hybrid" => plusReduceHybrid
   | _ => Util.die ("unknown -impl " ^ impl)
 
-val (input, tm) = Util.getTime (fn _ => SeqBasis.tabulate 10000 (0, n) (fn i => 1))
+fun genInput () =
+  let
+    (* need 4n bytes to store n 32-bit integers *)
+    val arr = GPUKernels.allocCudaManagedMemory (4 * Int64.fromInt n)
+  in
+    ForkJoin.parfor 10000 (0, n) (fn i =>
+      MLton.Pointer.setInt32 (arr, i, Int32.fromInt 1)
+    );
+    
+    (arr, n)
+  end
+
+fun freeInput (arr, _) =
+  GPUKernels.freeCudaMemory arr
+
+val (input, tm) = Util.getTime (fn _ => genInput ())
 val _ = print ("generated input in " ^ Time.fmt 4 tm ^ "s\n")
 
 val result = Benchmark.run ("reduce " ^ impl) (fn _ =>
@@ -81,4 +88,5 @@ val result = Benchmark.run ("reduce " ^ impl) (fn _ =>
   ; reduce input
   )
 )
+val _ = freeInput input
 val _ = print ("result " ^ Int.toString result ^ "\n")

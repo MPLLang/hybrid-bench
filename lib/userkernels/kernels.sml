@@ -23,7 +23,7 @@ struct
     _import "freeCudaMemory" public: MLton.Pointer.t -> unit;
 
   val reductionManaged = 
-    _import "reduction_managed" public : int array * int * int -> int;
+    _import "reduction_managed" public : MLton.Pointer.t * int * int -> int;
   
   val cublasSGEMM = 
     _import "cublasSGEMM" public : MLton.Pointer.t * MLton.Pointer.t * MLton.Pointer.t * int * int *
