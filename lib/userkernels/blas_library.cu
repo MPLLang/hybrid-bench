@@ -103,8 +103,8 @@ void freeCudaMemory(void *p) {
 
 extern "C"
 int reduction_managed(int * A, int lo, int hi){
-  struct timespec t0, t1;
-  clock_gettime(CLOCK_MONOTONIC, &t0);
+  // struct timespec t0, t1;
+  // clock_gettime(CLOCK_MONOTONIC, &t0);
 
   int * result;
   cudaMalloc(&result, 1*sizeof(int));
@@ -122,8 +122,8 @@ int reduction_managed(int * A, int lo, int hi){
   cudaMemcpy(&h_result, result, 1*sizeof(int), cudaMemcpyDeviceToHost);
   cudaFree(result);
 
-  clock_gettime(CLOCK_MONOTONIC, &t1);
-  report_elapsed("sum_reduction", &t1, &t0);
+  // clock_gettime(CLOCK_MONOTONIC, &t1);
+  // report_elapsed("sum_reduction", &t1, &t0);
 
   return h_result;
 }
