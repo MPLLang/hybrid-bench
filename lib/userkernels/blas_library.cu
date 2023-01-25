@@ -47,6 +47,18 @@ void set_flags(bool *flags, int numFlags, bool desired) {
 }
 
 
+/* This function performs a prime sieve, using primes as seed values for the
+ * sieve, setting the flag of each composite number to false.
+ *
+ *   foreach p in primes:
+ *     foreach m in multiples(p) where m < len(flags):
+ *       flags[m] := false
+ *
+ * REQUIRES:
+ *   - flags all initially TRUE
+ *   - len(primes) = numPrimes
+ *   - len(flags) = numFlags
+ */
 __global__
 void prime_sieve(int* primes, int numPrimes, bool* flags, int numFlags) {
 
