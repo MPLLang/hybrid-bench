@@ -38,6 +38,57 @@ void tc(){
 }
 
 
+__global__
+void set_flags(bool *flags, int numFlags, bool desired) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = blockDim.x * gridDim.x;
+  for (int i = tid; i < numFlags; i += stride)
+    flags[i] = desired;
+}
+
+
+__global__
+void prime_sieve(int* primes, int numPrimes, bool* flags, int numFlags) {
+
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = blockDim.x * gridDim.x;
+
+  for (int i = 0; i < numPrimes; i++) {
+    int p = primes[i];
+    int numMultiples = (numFlags-1) / p - 1;
+    for (int j = tid; j < numMultiples; j += stride) {
+      flags[(j + 2) * p] = false; // mark as not prime
+    }
+  }
+}
+
+extern "C"
+bool* do_prime_sieve(int* primes, int numPrimes, int numFlags) {
+  bool *flagsOnDevice;
+  cudaMallocManaged(&flagsOnDevice, numFlags * sizeof(bool));
+
+  int *primesOnDevice;
+  cudaMalloc(&primesOnDevice, numPrimes * sizeof(int));
+  cudaMemcpy(primesOnDevice, primes, numPrimes * sizeof(int), cudaMemcpyHostToDevice);
+
+  int GRID = (numFlags+(SIZE-1))/SIZE;
+  if(GRID == 0) {
+    GRID = 1;
+  }
+  set_flags<<<GRID, SIZE>>>(flagsOnDevice, numFlags, true);
+  cudaDeviceSynchronize();
+
+  /* seems okay to use same GRID here because parallelism of prime_sieve
+   * kernel at the moment is only approximately ~ numFlags. Need to improve
+   * this.
+   */
+  prime_sieve<<<GRID, SIZE>>>(primesOnDevice, numPrimes, flagsOnDevice, numFlags);
+  cudaDeviceSynchronize();
+
+  return flagsOnDevice;
+}
+
+
 __global__ void sum_reduction(int *v, int *v_r, int n) {
 	// Allocate shared memory
 	__shared__ int partial_sum[SHMEM_SIZE];
