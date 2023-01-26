@@ -26,7 +26,7 @@ def main (primes: []i64) (numFlags: i64) : []bool =
   let offset pi = if pi == 0 then 0 else offsets[pi-1]
 
   let spreadPrimeIndices =
-    map (\pi -> primes[pi]) (replicated_iota (map numMultiples primes))
+    replicated_iota (map numMultiples primes)
 
   let updatePosition i pi =
     let p = primes[pi]

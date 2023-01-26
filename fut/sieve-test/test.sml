@@ -1,13 +1,23 @@
 val rawFutSieve =
-  _import "futSieve" public : Int64.int * Int64.int array * Int64.int * bool array -> unit;
+  _import "futSieve" public : Int64.int * Int64.int array * Int64.int * Word8.word array -> unit;
 
 fun doSieveOnGpu n sqrtPrimes =
   let
     val numFlags = n + 1
-    val flags: bool array = ForkJoin.alloc numFlags
-    fun isMarked i = Array.sub (flags, i)
+    val flags: Word8.word array = ForkJoin.alloc numFlags
+    fun isMarked i =
+      Array.sub (flags, i) = 0w1
   in
     rawFutSieve (Array.length sqrtPrimes, sqrtPrimes, numFlags, flags);
+
+    (* if n < 100 then
+      print
+        ("flags(" ^ Int.toString n ^ "): "
+         ^ Seq.toString (fn 0w0 => "_" | _ => "x") (ArraySlice.full flags)
+         ^ "\n")
+    else
+      (); *)
+
     isMarked
   end
 
@@ -37,6 +47,10 @@ fun doSieveOnCpu n sqrtPrimes =
   end
 
 
+fun doSieveOnGpuIfBigEnough n sqrtPrimes =
+  if n >= 1000000 then doSieveOnGpu n sqrtPrimes else doSieveOnCpu n sqrtPrimes
+
+
 fun primes siever n =
   if n < 2 then
     ForkJoin.alloc 0
@@ -50,6 +64,13 @@ fun primes siever n =
         (* for every i in 2 <= i <= n, filter those that are still marked *)
         SeqBasis.filter 4096 (2, n + 1) (fn i => i) isMarked
     in
+      (* if Array.length result < 100 then
+        print
+          ("primes(" ^ Int.toString n ^ "): "
+           ^ Seq.toString Int.toString (ArraySlice.full result) ^ "\n")
+      else
+        (); *)
+
       result
     end
 
@@ -63,7 +84,7 @@ val siever =
   case impl of
     "cpu" => doSieveOnCpu
   | "gpu" => doSieveOnGpu
-  (* | "hybrid" =>  *)
+  | "hybrid" => doSieveOnGpuIfBigEnough
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val result = Benchmark.run ("primes " ^ impl) (fn _ => primes siever n)
