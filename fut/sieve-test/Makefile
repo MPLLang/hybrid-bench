@@ -4,7 +4,6 @@ MLTONFLAGS = \
 	-default-type int64 \
 	-default-type word64 \
 	-cc-opt '-I/opt/nvidia/cuda/include/' \
-	-verbose 2 \
 	-link-opt '-rdynamic -L/opt/nvidia/cuda/lib64/ -lcuda -lnvrtc -lcublas -lcudart -lstdc++'
 
 MPL=mpl
