@@ -45,6 +45,19 @@ fun doSieveOnGpuIfBiggerThan threshold ctx n sqrtPrimes =
   if n >= threshold then doSieveOnGpu ctx n sqrtPrimes
   else doSieveOnCpu ctx n sqrtPrimes
 
+
+fun trace n prefix f =
+  if n < 10000 then
+    f ()
+  else
+    let
+      val (result, tm) = Util.getTime f
+    in
+      print (prefix ^ " " ^ Time.fmt 4 tm ^ " (n = " ^ Int.toString n ^ ")\n");
+      result
+    end
+
+
 functor Primes
   (type ctx
    val impl: string
@@ -64,10 +77,9 @@ struct
           let
             (* all primes up to sqrt(n) *)
             val sqrtPrimes = loop (Real.floor (Real.Math.sqrt (Real.fromInt n)))
-            val isMarked = siever ctx n sqrtPrimes
-            val result =
-              (* for every i in 2 <= i <= n, filter those that are still marked *)
-              SeqBasis.filter 4096 (2, n + 1) (fn i => i) isMarked
+            val isMarked = trace n "sieve:  " (fn _ => siever ctx n sqrtPrimes)
+            val result = trace n "filter: " (fn _ =>
+              SeqBasis.filter 4096 (2, n + 1) (fn i => i) isMarked)
           in
             result
           end
@@ -88,6 +100,7 @@ struct
     end
 
 end
+
 
 val n = CommandLineArgs.parseInt "n" (100 * 1000 * 1000)
 val impl = CommandLineArgs.parseString "impl" "cpu"
@@ -127,3 +140,4 @@ val bench =
 
 val result = bench n
 val _ = print ("result " ^ Util.summarizeArray 8 Int.toString result ^ "\n")
+val _ = print ("num primes " ^ Int.toString (Array.length result) ^ "\n")
