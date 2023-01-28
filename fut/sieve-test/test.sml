@@ -40,14 +40,18 @@ fun doSieveOnCpu _ n sqrtPrimes =
     isMarked
   end
 
+val gpuLock = SpinLock.new ()
 
-fun doSieveOnGpuIfBiggerThan threshold ctx n sqrtPrimes =
-  if n >= threshold then doSieveOnGpu ctx n sqrtPrimes
-  else doSieveOnCpu ctx n sqrtPrimes
-
+fun trySieveOnGpuIfBiggerThan threshold ctx n sqrtPrimes =
+  if n >= threshold andalso SpinLock.trylock gpuLock then
+    let val result = doSieveOnGpu ctx n sqrtPrimes
+    in SpinLock.unlock gpuLock; result
+    end
+  else
+    doSieveOnCpu ctx n sqrtPrimes
 
 fun trace n prefix f =
-  if n < 10000 then
+  if true (*n < 10000*) then
     f ()
   else
     let
@@ -65,7 +69,7 @@ functor Primes
    val siever: ctx -> int -> int array -> (int -> bool)
    val finish: ctx -> unit):
 sig
-  val runBenchmark: int -> int array
+  val runBenchmark: {simultaneous: int, n: int} -> int array array
 end =
 struct
   fun primes ctx n =
@@ -90,10 +94,11 @@ struct
     end
 
 
-  fun runBenchmark n =
+  fun runBenchmark {simultaneous, n} =
     let
       val ctx = init ()
-      val result = Benchmark.run ("primes " ^ impl) (fn _ => primes ctx n)
+      val result = Benchmark.run ("primes " ^ impl) (fn _ =>
+        SeqBasis.tabulate 1 (0, simultaneous) (fn _ => primes ctx n))
       val _ = finish ctx
     in
       result
@@ -102,10 +107,12 @@ struct
 end
 
 
+val simultaneous = CommandLineArgs.parseInt "simultaneous" 1
 val n = CommandLineArgs.parseInt "n" (100 * 1000 * 1000)
 val impl = CommandLineArgs.parseString "impl" "cpu"
 val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 1000000
 
+val _ = print ("simultaneous " ^ Int.toString simultaneous ^ "\n")
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
 
@@ -128,7 +135,7 @@ structure PrimesHybrid =
     (val impl = "hybrid"
      type ctx = futCtx
      val init = futInit
-     val siever = doSieveOnGpuIfBiggerThan gpuThresh
+     val siever = trySieveOnGpuIfBiggerThan gpuThresh
      val finish = futFinish)
 
 val bench =
@@ -138,6 +145,7 @@ val bench =
   | "hybrid" => PrimesHybrid.runBenchmark
   | _ => Util.die ("unknown -impl " ^ impl)
 
-val result = bench n
-val _ = print ("result " ^ Util.summarizeArray 8 Int.toString result ^ "\n")
-val _ = print ("num primes " ^ Int.toString (Array.length result) ^ "\n")
+val result = bench {simultaneous = simultaneous, n = n}
+val result0 = Array.sub (result, 0)
+val _ = print ("result " ^ Util.summarizeArray 8 Int.toString result0 ^ "\n")
+val _ = print ("num primes " ^ Int.toString (Array.length result0) ^ "\n")
