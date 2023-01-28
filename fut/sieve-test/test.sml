@@ -12,15 +12,6 @@ fun doSieveOnGpu ctx n sqrtPrimes =
       Array.sub (flags, i) = 0w1
   in
     rawFutSieve (ctx, Array.length sqrtPrimes, sqrtPrimes, numFlags, flags);
-
-    (* if n < 100 then
-      print
-        ("flags(" ^ Int.toString n ^ "): "
-         ^ Seq.toString (fn 0w0 => "_" | _ => "x") (ArraySlice.full flags)
-         ^ "\n")
-    else
-      (); *)
-
     isMarked
   end
 
@@ -50,25 +41,22 @@ fun doSieveOnCpu _ n sqrtPrimes =
   end
 
 
-fun doSieveOnGpuIfBigEnough ctx n sqrtPrimes =
-  if n >= 1000000 then doSieveOnGpu ctx n sqrtPrimes
+fun doSieveOnGpuIfBiggerThan threshold ctx n sqrtPrimes =
+  if n >= threshold then doSieveOnGpu ctx n sqrtPrimes
   else doSieveOnCpu ctx n sqrtPrimes
-
-structure X = struct end
 
 functor Primes
   (type ctx
+   val impl: string
    val init: unit -> ctx
    val siever: ctx -> int -> int array -> (int -> bool)
    val finish: ctx -> unit):
 sig
-  val primes: int -> int array
+  val runBenchmark: int -> int array
 end =
 struct
-  fun primes n =
+  fun primes ctx n =
     let
-      val ctx = init ()
-
       fun loop n =
         if n < 2 then
           ForkJoin.alloc 0
@@ -81,54 +69,61 @@ struct
               (* for every i in 2 <= i <= n, filter those that are still marked *)
               SeqBasis.filter 4096 (2, n + 1) (fn i => i) isMarked
           in
-            (* if Array.length result < 100 then
-              print
-                ("primes(" ^ Int.toString n ^ "): "
-                ^ Seq.toString Int.toString (ArraySlice.full result) ^ "\n")
-            else
-              (); *)
-
             result
           end
 
       val result = loop n
     in
-      finish ctx;
       result
     end
+
+
+  fun runBenchmark n =
+    let
+      val ctx = init ()
+      val result = Benchmark.run ("primes " ^ impl) (fn _ => primes ctx n)
+      val _ = finish ctx
+    in
+      result
+    end
+
 end
 
 val n = CommandLineArgs.parseInt "n" (100 * 1000 * 1000)
 val impl = CommandLineArgs.parseString "impl" "cpu"
+val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 1000000
 
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
 
 structure PrimesCPU =
   Primes
-    (type ctx = unit
+    (val impl = "cpu"
+     type ctx = unit
      fun init () = ()
      val siever = doSieveOnCpu
      fun finish () = ())
 structure PrimesGPU =
   Primes
-    (type ctx = futCtx
+    (val impl = "gpu"
+     type ctx = futCtx
      val init = futInit
      val siever = doSieveOnGpu
      val finish = futFinish)
 structure PrimesHybrid =
   Primes
-    (type ctx = futCtx
+    (val impl = "hybrid"
+     type ctx = futCtx
      val init = futInit
-     val siever = doSieveOnGpuIfBigEnough
+     val siever = doSieveOnGpuIfBiggerThan gpuThresh
      val finish = futFinish)
 
-val primes =
+val bench =
   case impl of
-    "cpu" => PrimesCPU.primes
-  | "gpu" => PrimesGPU.primes
-  | "hybrid" => PrimesHybrid.primes
+    "cpu" => PrimesCPU.runBenchmark
+  | "gpu" => PrimesGPU.runBenchmark
+  | "hybrid" => PrimesHybrid.runBenchmark
   | _ => Util.die ("unknown -impl " ^ impl)
 
-val result = Benchmark.run ("primes " ^ impl) (fn _ => primes n)
+val result = bench n
 val _ = print ("result " ^ Util.summarizeArray 8 Int.toString result ^ "\n")
