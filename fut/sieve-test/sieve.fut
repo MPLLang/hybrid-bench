@@ -1,5 +1,5 @@
 
-def main (primes: []i64) (numFlags: i64) : []bool =
+entry sieve (primes: []i64) (numFlags: i64) : []bool =
   -- Each prime p has to perform `numMultiples p` updates across the output
   -- flags. So, first step is to compute, for each prime, its "starting
   -- position" in the update sequence. This is its offset.
@@ -24,3 +24,16 @@ def main (primes: []i64) (numFlags: i64) : []bool =
     map2 updatePosition (indices spreadPrimeIndices) spreadPrimeIndices
 
   in spread numFlags true updatePositions (map (\_ -> false) updatePositions)
+
+
+entry primes (n: i64) : ([]i64, i64) =
+  if n < 2 then
+    ([], 0)
+  else
+  let (ps, _) =
+    loop (primesSoFar, bound) = ([2], 2) while bound < n do
+      let newBound = i64.min (bound*bound) n
+      let flags = sieve primesSoFar (newBound+1)
+      let newPrimes = filter (\i -> flags[i]) (2...newBound)
+      in (newPrimes, newBound)
+  in (ps, length ps)
