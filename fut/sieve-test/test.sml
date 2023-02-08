@@ -112,41 +112,82 @@ fun primesOnCpuBenchmark {simultaneous: int, n: int} : int array array =
   end
 
 
+val hiccupMicros = CommandLineArgs.parseInt "hiccup-us" 10
+val gpuAttempts = CommandLineArgs.parseInt "gpu-attempts" 1000
+val gpuStratName = CommandLineArgs.parseString "gpu-strat" "greedy"
+val _ = print ("gpu-attempts " ^ Int.toString gpuAttempts ^ "\n")
+val _ = print ("hiccup-us " ^ Int.toString hiccupMicros ^ "\n")
+val _ = print ("gpu-strat " ^ gpuStratName ^ "\n")
+
+datatype gpu_strategy = GreedyGpu | AlwaysAboveThresh
+
+val gpuStrat =
+  case gpuStratName of
+    "greedy" => GreedyGpu
+  | "always-above-thresh" => AlwaysAboveThresh
+  | _ => Util.die ("unknown -gpu-strat " ^ gpuStratName ^ "; valid values are: greedy, always-above-thresh")
+
 fun primesHybridBenchmark gpuThreshold {simultaneous: int, n: int} :
   int array array =
   let
     val gpuLock = SpinLock.new ()
 
-    fun hybridSieve ctx n sqrtPrimes =
-      if n >= gpuThreshold andalso SpinLock.trylock gpuLock then
-        let val result = doSieveOnGpu ctx n sqrtPrimes
-        in SpinLock.unlock gpuLock; result
+    fun preferTrylock attempts =
+      if attempts <= 0 then
+        false
+      else if SpinLock.trylock gpuLock then
+        true
+      else
+        ( OS.Process.sleep (Time.fromMicroseconds (LargeInt.fromInt hiccupMicros))
+        ; preferTrylock (attempts-1)
+        )
+
+    fun tryClaimGpu () = preferTrylock gpuAttempts
+
+    fun tryGpuGreedy n f =
+      if n >= gpuThreshold andalso tryClaimGpu () then
+        let val result = f ()
+        in SpinLock.unlock gpuLock; SOME result
         end
       else
-        doSieveOnCpu ctx n sqrtPrimes
+        NONE
 
+    fun tryGpuAlwaysAboveThresh n f =
+      if n >= gpuThreshold then
+        SOME (f ())
+      else
+        NONE
+
+    fun tryGpu n f =
+      case gpuStrat of
+        GreedyGpu => tryGpuGreedy n f
+      | AlwaysAboveThresh => tryGpuAlwaysAboveThresh n f
+
+    fun hybridSieve ctx n sqrtPrimes =
+      case tryGpu n (fn _ => doSieveOnGpu ctx n sqrtPrimes) of
+        NONE => doSieveOnCpu ctx n sqrtPrimes
+      | SOME x => x
 
     fun hybridPrimes ctx n =
       let
         fun loop n =
           if n < 2 then
             ForkJoin.alloc 0
-          else if n >= gpuThreshold andalso SpinLock.trylock gpuLock then
-            let val result = doPrimesOnGpu ctx n
-            in SpinLock.unlock gpuLock; result
-            end
           else
-            let
-              (* all primes up to sqrt(n) *)
-              val sqrtPrimes = loop (Real.floor
-                (Real.Math.sqrt (Real.fromInt n)))
-              val isMarked = trace n "sieve:  " (fn _ =>
-                hybridSieve ctx n sqrtPrimes)
-              val result = trace n "filter: " (fn _ =>
-                SeqBasis.filter 4096 (2, n + 1) (fn i => i) isMarked)
-            in
-              result
-            end
+          case tryGpu n (fn _ => doPrimesOnGpu ctx n) of
+            SOME x => x
+          | NONE =>
+              let
+                (* all primes up to sqrt(n) *)
+                val sqrtPrimes = loop (Real.floor
+                  (Real.Math.sqrt (Real.fromInt n)))
+                val isMarked = trace n "sieve:  " (fn _ =>
+                  hybridSieve ctx n sqrtPrimes)
+                val result = trace n "filter: " (fn _ =>
+                  SeqBasis.filter 4096 (2, n + 1) (fn i => i) isMarked)
+              in
+                result
+              end
 
         val result = loop n
       in
@@ -162,9 +203,9 @@ fun primesHybridBenchmark gpuThreshold {simultaneous: int, n: int} :
   end
 
 
-val simultaneous = CommandLineArgs.parseInt "simultaneous" 1000
-val n = CommandLineArgs.parseInt "n" (1000 * 1000)
-val impl = CommandLineArgs.parseString "impl" "cpu"
+val simultaneous = CommandLineArgs.parseInt "simultaneous" 20
+val n = CommandLineArgs.parseInt "n" (10 * 1000 * 1000)
+val impl = CommandLineArgs.parseString "impl" "hybrid"
 val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 1000000
 
 val _ = print ("simultaneous " ^ Int.toString simultaneous ^ "\n")
