@@ -5,6 +5,7 @@ val futFinish = _import "futFinish" public : fut_ctx -> unit;
 
 
 type sieve_package = MLton.Pointer.t
+type primes_package = MLton.Pointer.t
 
 val rawFutSieveSpawn =
   _import "futSieveSpawn" public : fut_ctx * Int64.int * Int64.int array * Int64.int -> sieve_package;
@@ -16,11 +17,17 @@ val rawFutSieveFinish =
   _import "futSieveFinish" public : sieve_package * Word8.word array -> unit;
 
 
-(* val rawFutPrimes = _ import "futPrimes" public : fut_ctx * Int64.int * Int64.int ref -> fut_i64_1d;
+val rawFutPrimesSpawn =
+  _import "futPrimesSpawn" public : fut_ctx * Int64.int -> primes_package;
 
+val rawFutPrimesPoll =
+  _import "futPrimesPoll" public : sieve_package -> Word8.word;
 
-val rawFutReadValuesAndFree =
-  _import "futReadValuesAndFree" public : fut_ctx * fut_i64_1d * Int64.int array -> unit; *)
+val rawFutPrimesOutputSize =
+  _import "futPrimesOutputSize" public : sieve_package -> Int64.int;
+
+val rawFutPrimesFinish =
+  _import "futPrimesFinish" public : sieve_package * Int64.int array -> unit;
 
 (* fun doPrimesOnGpu ctx n =
   let
@@ -32,6 +39,26 @@ val rawFutReadValuesAndFree =
     rawFutReadValuesAndFree (ctx, futResult, output);
     output
   end *)
+
+
+fun makePrimesOnGpuTask ctx n =
+  let
+    fun spawn () = rawFutPrimesSpawn (ctx, n)
+
+    fun poll pack =
+      (0w1 = rawFutPrimesPoll pack)
+
+    fun finish pack =
+      let
+        val outputSize = rawFutPrimesOutputSize pack
+        val output = ForkJoin.alloc outputSize
+      in
+        rawFutPrimesFinish (pack, output);
+        output
+      end
+  in
+    ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+  end
 
 
 fun makeSieveOnGpuTask ctx n sqrtPrimes =
@@ -172,10 +199,10 @@ fun primesHybridBenchmark gpuThreshold {simultaneous: int, n: int} :
                   result
                 end
             in
-              (* if n >= gpuThreshold then
-                ForkJoin.choice {gpu = fn _ => doPrimesOnGpu ctx n, cpu = doCpu}
-              else *)
-              doCpu ()
+              if n >= gpuThreshold then
+                ForkJoin.choice {gpu = makePrimesOnGpuTask ctx n, cpu = doCpu}
+              else
+                doCpu ()
             end
 
         val result = loop n

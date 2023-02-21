@@ -74,11 +74,11 @@ void* asyncSieveFunc(void* rawArg) {
     pack->input_arr,
     pack->outputLen);
 
-  timer_report_tick(&t, "futhark_entry_sieve");
+  // timer_report_tick(&t, "futhark_entry_sieve");
 
   futhark_context_sync(pack->futStuff->ctx);
 
-  timer_report_tick(&t, "futhark_context_sync");
+  timer_report_tick(&t, "done");
 
   pack->finished = true;
   return NULL;
@@ -92,8 +92,8 @@ futSieveSpawn(
   int64_t* input,
   int64_t outputLen)
 {
-  struct timer_t t;
-  timer_begin(&t, "futSieveSpawn");
+  // struct timer_t t;
+  // timer_begin(&t, "futSieveSpawn");
 
   struct futhark_context *ctx = futStuff->ctx;
 
@@ -104,14 +104,14 @@ futSieveSpawn(
   pack->outputLen = outputLen;
   pack->finished = false;
 
-  timer_report_tick(&t, "initialize pack");
+  // timer_report_tick(&t, "initialize pack");
 
   if (0 != pthread_create(&(pack->friend), NULL, &asyncSieveFunc, pack)) {
-    printf("ERROR: glue.c: pthread_create failed\n");
+    printf("ERROR: glue.c: futSieveSpawn: pthread_create failed\n");
     exit(1);
   }
 
-  timer_report_tick(&t, "spawn friend");
+  // timer_report_tick(&t, "spawn friend");
   return pack;
 }
 
@@ -125,58 +125,116 @@ void futSieveFinish(
   struct sievePackage *pack,
   bool* output)
 {
-  struct timer_t t;
-  timer_begin(&t, "futSieveFinish");
+  // struct timer_t t;
+  // timer_begin(&t, "futSieveFinish");
 
   if (0 != pthread_join(pack->friend, NULL)) {
     printf("ERROR: glue.c: pthread_join failed\n");
     exit(1);
   }
 
-  timer_report_tick(&t, "pthread_join");
+  // timer_report_tick(&t, "pthread_join");
 
   futhark_values_bool_1d(pack->futStuff->ctx, pack->output_arr, output);
   futhark_free_i64_1d(pack->futStuff->ctx, pack->input_arr);
   futhark_free_bool_1d(pack->futStuff->ctx, pack->output_arr);
   free(pack);
 
-  timer_report_tick(&t, "cleanup");
+  // timer_report_tick(&t, "cleanup");
 }
 
 // ==========================================================================
 // primes boilerplate
 
+struct primesPackage {
+  struct futStuff *futStuff;
 
-void* futPrimes(
-  struct futStuff * futStuff,
-  int64_t n,
-  int64_t* outputLen)
-{
-  struct futhark_context_config *cfg = futStuff->cfg;
-  struct futhark_context *ctx = futStuff->ctx;
-
+  int64_t n;
   struct futhark_i64_1d *output_arr;
   int64_t output_size;
-  futhark_entry_primes(ctx, &output_arr, &output_size, n);
-  futhark_context_sync(ctx);
 
-  // printf("futPrimes n=%ld |output|=%ld\n", n, output_size);
+  bool finished;
+  pthread_t friend;
+};
 
-  *outputLen = output_size;
-  return output_arr;
+
+void* asyncPrimesFunc(void* rawArg) {
+  struct primesPackage *pack = (struct primesPackage *)rawArg;
+
+  struct timer_t t;
+  timer_begin(&t, "asyncPrimesFunc");
+
+  futhark_entry_primes(
+    pack->futStuff->ctx,
+    &(pack->output_arr),
+    &(pack->output_size),
+    pack->n
+  );
+
+  futhark_context_sync(pack->futStuff->ctx);
+
+  timer_report_tick(&t, "done");
+
+  pack->finished = true;
+  return NULL;
 }
 
 
-// ==========================================================================
-// other utility
-
-
-void futReadValuesAndFree(
+struct primesPackage *
+futPrimesSpawn(
   struct futStuff * futStuff,
-  struct futhark_i64_1d *values,
-  int64_t *output)
+  int64_t n)
 {
-  struct futhark_context *ctx = futStuff->ctx;
-  futhark_values_i64_1d(ctx, values, output);
-  futhark_free_i64_1d(ctx, values);
+  // struct timer_t t;
+  // timer_begin(&t, "futPrimesSpawn");
+
+  struct primesPackage *pack = malloc(sizeof(struct primesPackage));
+  pack->futStuff = futStuff;
+  pack->n = n;
+  pack->output_arr = NULL;
+  pack->output_size = 0;
+  pack->finished = false;
+
+  if (0 != pthread_create(&(pack->friend), NULL, &asyncPrimesFunc, pack)) {
+    printf("ERROR: glue.c: futPrimesSpawn: pthread_create failed\n");
+    exit(1);
+  }
+
+  // timer_report_tick(&t, "done");
+
+  return pack;
+}
+
+
+uint8_t futPrimesPoll(struct primesPackage *pack) {
+  return pack->finished ? 1 : 0;
+}
+
+
+int64_t futPrimesOutputSize(struct primesPackage *pack) {
+  // struct timer_t t;
+  // timer_begin(&t, "futPrimesOutputSize");
+
+  if (0 != pthread_join(pack->friend, NULL)) {
+    printf("ERROR: glue.c: futPrimesOutputSize: pthread_join failed\n");
+    exit(1);
+  }
+
+  // timer_report_tick(&t, "done");
+  return pack->output_size;
+}
+
+
+void futPrimesFinish(
+  struct sievePackage *pack,
+  int64_t* output)
+{
+  // struct timer_t t;
+  // timer_begin(&t, "futPrimesFinish");
+
+  futhark_values_i64_1d(pack->futStuff->ctx, pack->output_arr, output);
+  futhark_free_i64_1d(pack->futStuff->ctx, pack->output_arr);
+  free(pack);
+
+  // timer_report_tick(&t, "done");
 }
