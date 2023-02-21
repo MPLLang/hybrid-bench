@@ -2,14 +2,27 @@ type fut_ctx = MLton.Pointer.t
 type fut_i64_1d = MLton.Pointer.t
 val futInit = _import "futInit" public : unit -> fut_ctx;
 val futFinish = _import "futFinish" public : fut_ctx -> unit;
-val rawFutSieve =
-  _import "futSieve" public : fut_ctx * Int64.int * Int64.int array * Int64.int * Word8.word array -> unit;
-val rawFutPrimes =
-  _import "futPrimes" public : fut_ctx * Int64.int * Int64.int ref -> fut_i64_1d;
-val rawFutReadValuesAndFree =
-  _import "futReadValuesAndFree" public : fut_ctx * fut_i64_1d * Int64.int array -> unit;
 
-fun doPrimesOnGpu ctx n =
+
+type sieve_package = MLton.Pointer.t
+
+val rawFutSieveSpawn =
+  _import "futSieveSpawn" public : fut_ctx * Int64.int * Int64.int array * Int64.int -> sieve_package;
+
+val rawFutSievePoll =
+  _import "futSievePoll" public : sieve_package -> Word8.word;
+
+val rawFutSieveFinish =
+  _import "futSieveFinish" public : sieve_package * Word8.word array -> unit;
+
+
+(* val rawFutPrimes = _ import "futPrimes" public : fut_ctx * Int64.int * Int64.int ref -> fut_i64_1d;
+
+
+val rawFutReadValuesAndFree =
+  _import "futReadValuesAndFree" public : fut_ctx * fut_i64_1d * Int64.int array -> unit; *)
+
+(* fun doPrimesOnGpu ctx n =
   let
     val size = ref (0 : Int64.int)
     val futResult = rawFutPrimes (ctx, n, size)
@@ -18,17 +31,30 @@ fun doPrimesOnGpu ctx n =
   in
     rawFutReadValuesAndFree (ctx, futResult, output);
     output
-  end
+  end *)
 
-fun doSieveOnGpu ctx n sqrtPrimes =
+
+fun makeSieveOnGpuTask ctx n sqrtPrimes =
   let
     val numFlags = n + 1
-    val flags: Word8.word array = ForkJoin.alloc numFlags
-    fun isMarked i =
-      Array.sub (flags, i) = 0w1
+
+    fun spawn () =
+      rawFutSieveSpawn (ctx, Array.length sqrtPrimes, sqrtPrimes, numFlags)
+
+    fun poll pack =
+      (0w1 = rawFutSievePoll pack)
+
+    fun finish pack =
+      let
+        val flags: Word8.word array = ForkJoin.alloc numFlags
+        fun isMarked i =
+          Array.sub (flags, i) = 0w1
+      in
+        rawFutSieveFinish (pack, flags);
+        isMarked
+      end
   in
-    rawFutSieve (ctx, Array.length sqrtPrimes, sqrtPrimes, numFlags, flags);
-    isMarked
+    ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
   end
 
 
@@ -69,7 +95,7 @@ fun trace n prefix f =
     end
 
 
-fun primesOnGpuBenchmark {simultaneous: int, n: int} : int array array =
+(* fun primesOnGpuBenchmark {simultaneous: int, n: int} : int array array =
   let
     val ctx = futInit ()
     val result = Benchmark.run ("primes gpu") (fn _ =>
@@ -77,7 +103,7 @@ fun primesOnGpuBenchmark {simultaneous: int, n: int} : int array array =
     val _ = futFinish ctx
   in
     result
-  end
+  end *)
 
 
 fun primesOnCpuBenchmark {simultaneous: int, n: int} : int array array =
@@ -112,24 +138,6 @@ fun primesOnCpuBenchmark {simultaneous: int, n: int} : int array array =
   end
 
 
-val hiccupMicros = CommandLineArgs.parseInt "hiccup-us" 10
-val gpuAttempts = CommandLineArgs.parseInt "gpu-attempts" 1000
-val gpuStratName = CommandLineArgs.parseString "gpu-strat" "greedy"
-val _ = print ("gpu-attempts " ^ Int.toString gpuAttempts ^ "\n")
-val _ = print ("hiccup-us " ^ Int.toString hiccupMicros ^ "\n")
-val _ = print ("gpu-strat " ^ gpuStratName ^ "\n")
-
-datatype gpu_strategy = GreedyGpu | AlwaysAboveThresh
-
-val gpuStrat =
-  case gpuStratName of
-    "greedy" => GreedyGpu
-  | "always-above-thresh" => AlwaysAboveThresh
-  | _ =>
-      Util.die
-        ("unknown -gpu-strat " ^ gpuStratName
-         ^ "; valid values are: greedy, always-above-thresh")
-
 fun primesHybridBenchmark gpuThreshold {simultaneous: int, n: int} :
   int array array =
   let
@@ -138,7 +146,7 @@ fun primesHybridBenchmark gpuThreshold {simultaneous: int, n: int} :
       if n >= gpuThreshold then
         ForkJoin.choice
           { cpu = fn _ => doSieveOnCpu ctx n sqrtPrimes
-          , gpu = fn _ => doSieveOnGpu ctx n sqrtPrimes
+          , gpu = makeSieveOnGpuTask ctx n sqrtPrimes
           }
       else
         doSieveOnCpu ctx n sqrtPrimes
@@ -164,10 +172,10 @@ fun primesHybridBenchmark gpuThreshold {simultaneous: int, n: int} :
                   result
                 end
             in
-              if n >= gpuThreshold then
+              (* if n >= gpuThreshold then
                 ForkJoin.choice {gpu = fn _ => doPrimesOnGpu ctx n, cpu = doCpu}
-              else
-                doCpu ()
+              else *)
+              doCpu ()
             end
 
         val result = loop n
@@ -197,7 +205,7 @@ val _ = print ("gpu-thresh " ^ Int.toString gpuThresh ^ "\n")
 val bench =
   case impl of
     "cpu" => primesOnCpuBenchmark
-  | "gpu" => primesOnGpuBenchmark
+  (* | "gpu" => primesOnGpuBenchmark *)
   | "hybrid" => primesHybridBenchmark gpuThresh
   | _ => Util.die ("unknown -impl " ^ impl)
 

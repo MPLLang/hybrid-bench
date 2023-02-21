@@ -1,5 +1,11 @@
 #include "sieve.h"
 #include "timer.h"
+#include <pthread.h>
+
+
+// ==========================================================================
+// context boilerplate
+
 
 struct futStuff {
   struct futhark_context_config *cfg;
@@ -40,39 +46,105 @@ void futFinish(struct futStuff * futStuff) {
   free(futStuff);
 }
 
-void futSieve(
+
+// ==========================================================================
+// sieve boilerplate
+
+
+struct sievePackage {
+  struct futStuff *futStuff;
+  struct futhark_i64_1d *input_arr;
+  struct futhark_bool_1d *output_arr;
+  int64_t outputLen;
+  bool finished;
+  pthread_t friend;
+};
+
+
+// run in separate pthread
+void* asyncSieveFunc(void* rawArg) {
+  struct timer_t t;
+  timer_begin(&t, "asyncSieveFunc");
+
+  struct sievePackage *pack = (struct sievePackage *)rawArg;
+
+  futhark_entry_sieve(
+    pack->futStuff->ctx,
+    &(pack->output_arr),
+    pack->input_arr,
+    pack->outputLen);
+
+  timer_report_tick(&t, "futhark_entry_sieve");
+
+  futhark_context_sync(pack->futStuff->ctx);
+
+  timer_report_tick(&t, "futhark_context_sync");
+
+  pack->finished = true;
+  return NULL;
+}
+
+
+struct sievePackage *
+futSieveSpawn(
   struct futStuff * futStuff,
   int64_t inputLen,
   int64_t* input,
-  int64_t outputLen,
-  bool* output)
+  int64_t outputLen)
 {
-  struct futhark_context_config *cfg = futStuff->cfg;
+  struct timer_t t;
+  timer_begin(&t, "futSieveSpawn");
+
   struct futhark_context *ctx = futStuff->ctx;
 
-  struct timer_t t;
-  timer_begin(&t, "futSieve");
+  struct sievePackage *pack = malloc(sizeof(struct sievePackage));
+  pack->futStuff = futStuff;
+  pack->input_arr = futhark_new_i64_1d(ctx, input, inputLen);
+  pack->output_arr = NULL;
+  pack->outputLen = outputLen;
+  pack->finished = false;
 
-  struct futhark_i64_1d *input_arr = futhark_new_i64_1d(ctx, input, inputLen);
-  // timer_report_tick(&t, "futhark_new_i64_1d");
+  timer_report_tick(&t, "initialize pack");
 
-  struct futhark_bool_1d *output_arr;
+  if (0 != pthread_create(&(pack->friend), NULL, &asyncSieveFunc, pack)) {
+    printf("ERROR: glue.c: pthread_create failed\n");
+    exit(1);
+  }
 
-  futhark_entry_sieve(ctx, &output_arr, input_arr, outputLen);
-  // timer_report_tick(&t, "futhark_entry_main");
-
-  futhark_context_sync(ctx);
-  // timer_report_tick(&t, "futhark_context_sync");
-
-  futhark_values_bool_1d(ctx, output_arr, output);
-  // timer_report_tick(&t, "futhark_values_bool_1d");
-
-  futhark_free_i64_1d(ctx, input_arr);
-  // timer_report_tick(&t, "futhark_free_i64_1d");
-
-  futhark_free_bool_1d(ctx, output_arr);
-  // timer_report_tick(&t, "futhark_free_bool_1d");
+  timer_report_tick(&t, "spawn friend");
+  return pack;
 }
+
+
+uint8_t futSievePoll(struct sievePackage *pack) {
+  return pack->finished ? 1 : 0;
+}
+
+
+void futSieveFinish(
+  struct sievePackage *pack,
+  bool* output)
+{
+  struct timer_t t;
+  timer_begin(&t, "futSieveFinish");
+
+  if (0 != pthread_join(pack->friend, NULL)) {
+    printf("ERROR: glue.c: pthread_join failed\n");
+    exit(1);
+  }
+
+  timer_report_tick(&t, "pthread_join");
+
+  futhark_values_bool_1d(pack->futStuff->ctx, pack->output_arr, output);
+  futhark_free_i64_1d(pack->futStuff->ctx, pack->input_arr);
+  futhark_free_bool_1d(pack->futStuff->ctx, pack->output_arr);
+  free(pack);
+
+  timer_report_tick(&t, "cleanup");
+}
+
+// ==========================================================================
+// primes boilerplate
 
 
 void* futPrimes(
@@ -93,6 +165,10 @@ void* futPrimes(
   *outputLen = output_size;
   return output_arr;
 }
+
+
+// ==========================================================================
+// other utility
 
 
 void futReadValuesAndFree(
