@@ -168,6 +168,14 @@ let render_image objs width height cam : image [height][width] =
     colour_to_pixel (trace_ray objs width height cam (height-j) i)
   in tabulate_2d height width pixel
 
+let render_image_pixels objs width height cam start len : [len]pixel =
+  let pixel i =
+    let i' = start+i
+    let x = i' % width
+    let y = height - (i / width)
+    in colour_to_pixel (trace_ray objs width height cam y x)
+  in tabulate len pixel
+
 type~ scene = { look_from: pos
               , look_at: pos
               , fov: f32
@@ -245,3 +253,6 @@ entry prepare_scene h w (scene: scene) : prepared_scene =
 
 entry render h w ({objs, cam}: prepared_scene) =
   render_image objs w h cam
+
+entry render_pixels h w start len ({objs, cam}: prepared_scene) =
+  render_image_pixels objs w h cam start len
