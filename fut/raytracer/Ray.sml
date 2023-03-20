@@ -360,6 +360,7 @@ struct
         ) before Array.app (onPixel o pixel_to_rgb) pixels
     end
 
+
   fun render ctx objs width height cam : image =
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
@@ -373,13 +374,31 @@ struct
             (trace_ray objs width height cam j i))
         end
 
-      val _ = ForkJoin.choice
-        { cpu = fn () => ForkJoin.parfor 256 (0, height * width) writePixel
-        , gpu = FutRay.render ctx height width (ArraySlice.full pixels)
-        }
+      fun loop lo hi =
+        if hi - lo <= 100 then
+          Util.for (lo, hi) writePixel
+        else
+          let val mid = lo + (hi - lo) div 2
+          in ForkJoin.par (fn _ => loop lo mid, fn _ => loopChoose mid hi); ()
+          end
+
+      and loopChoose lo hi =
+        if hi - lo < 100 then
+          loop lo hi
+        else
+          let
+            fun doCpu () = loop lo hi
+
+            val doGpu = FutRay.render ctx height width (ArraySlice.slice
+              (pixels, lo, SOME (hi - lo)))
+          in
+            ForkJoin.choice {cpu = doCpu, gpu = doGpu}
+          end
     in
+      loop 0 (height * width);
       {width = width, height = height, pixels = pixels}
     end
+
 
   type scene =
     {camLookFrom: pos, camLookAt: pos, camFov: real, spheres: sphere list}

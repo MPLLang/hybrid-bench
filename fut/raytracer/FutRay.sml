@@ -18,7 +18,7 @@ struct
 
   val render_finish = _import "render_finish" public : MLton.Pointer.t -> unit;
 
-  fun render ctx height width output =
+  fun render ctx height width output : (MLton.Pointer.t, unit) ForkJoin.gpu_task =
     let
       val (data, start, len) = ArraySlice.base output
 
