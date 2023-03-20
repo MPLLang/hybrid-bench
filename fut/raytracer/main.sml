@@ -11,6 +11,8 @@ val scene =
   | "irreg" => Ray.irreg
   | s => raise Fail ("No such scene: " ^ s)
 
+val ctx = FutRay.init ()
+
 val _ = print ("h " ^ Int.toString height ^ "\n")
 val _ = print ("w " ^ Int.toString width ^ "\n")
 val _ = print ("output " ^ (if output = "" then "(none)" else output) ^ "\n")
@@ -22,7 +24,9 @@ val ((objs, cam), tm1) = Util.getTime (fn _ =>
 val _ = print ("Scene BVH construction in " ^ Time.fmt 4 tm1 ^ "s\n")
 
 val result = Benchmark.run "rendering" (fn _ =>
-  Ray.render objs width height cam)
+  Ray.render ctx objs width height cam)
+
+val _ = FutRay.cleanup ctx
 
 val writeImage = if dop6 then Ray.image2ppm6 else Ray.image2ppm
 

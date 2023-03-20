@@ -307,15 +307,28 @@ struct
       ray_colour objs ray 0
     end
 
-  type pixel = int * int * int
+  type pixel = Int32.int
 
-  fun colour_to_pixel {x = r, y = g, z = b} =
+  fun colour_to_pixel {x = r, y = g, z = b} : pixel =
     let
-      val ir = trunc (255.99 * r)
-      val ig = trunc (255.99 * g)
-      val ib = trunc (255.99 * b)
+      val ir = Word32.fromInt (trunc (255.99 * r))
+      val ig = Word32.fromInt (trunc (255.99 * g))
+      val ib = Word32.fromInt (trunc (255.99 * b))
+
+      val x = Word32.orb
+        (Word32.orb (Word32.<< (ir, 0w16), Word32.<< (ig, 0w8)), ib)
     in
-      (ir, ig, ib)
+      Int32.fromInt (Word32.toIntX x)
+    end
+
+  fun pixel_to_rgb (p: pixel) =
+    let
+      val p = Word32.fromInt (Int32.toInt p)
+      val r = Word32.andb (0wxFF, Word32.>> (p, 0w16))
+      val g = Word32.andb (0wxFF, Word32.>> (p, 0w8))
+      val b = Word32.andb (0wxFF, p)
+    in
+      (Word32.toInt r, Word32.toInt g, Word32.toInt b)
     end
 
   type image = {pixels: pixel Array.array, height: int, width: int}
@@ -332,7 +345,7 @@ struct
         ( out
         , "P3\n" ^ Int.toString width ^ " " ^ Int.toString height ^ "\n"
           ^ "255\n"
-        ) before Array.app onPixel pixels
+        ) before Array.app (onPixel o pixel_to_rgb) pixels
     end
 
   fun image2ppm6 out ({pixels, height, width}: image) =
@@ -344,12 +357,12 @@ struct
         ( out
         , "P6\n" ^ Int.toString width ^ " " ^ Int.toString height ^ "\n"
           ^ "255\n"
-        ) before Array.app onPixel pixels
+        ) before Array.app (onPixel o pixel_to_rgb) pixels
     end
 
-  fun render objs width height cam : image =
+  fun render ctx objs width height cam : image =
     let
-      val pixels = ForkJoin.alloc (height * width)
+      val pixels: Int32.int array = ForkJoin.alloc (height * width)
 
       fun writePixel l =
         let
@@ -360,7 +373,10 @@ struct
             (trace_ray objs width height cam j i))
         end
 
-      val _ = ForkJoin.parfor 256 (0, height * width) writePixel
+      val _ = ForkJoin.choice
+        { cpu = fn () => ForkJoin.parfor 256 (0, height * width) writePixel
+        , gpu = FutRay.render ctx height width (ArraySlice.full pixels)
+        }
     in
       {width = width, height = height, pixels = pixels}
     end
