@@ -4,11 +4,12 @@ val height = CLA.parseInt "h" 200
 val width = CLA.parseInt "w" 200
 val output = CLA.parseString "output" ""
 val dop6 = CLA.parseFlag "ppm6"
+val impl = CLA.parseString "impl" "hybrid"
 val scene_name = CLA.parseString "s" "rgbbox"
 val scene =
   case scene_name of
     "rgbbox" => Ray.rgbbox
-  | "irreg" => Ray.irreg
+  | "irreg" => raise Fail ("irreg scene not implemented yet")
   | s => raise Fail ("No such scene: " ^ s)
 
 val ctx = FutRay.init ()
@@ -25,8 +26,15 @@ val _ = print ("Scene BVH construction in " ^ Time.fmt 4 tm1 ^ "s\n")
 
 val prepared_scene = FutRay.prepare_rgbbox_scene (ctx, height, width)
 
-val result = Benchmark.run "rendering" (fn _ =>
-  Ray.render ctx prepared_scene objs width height cam)
+val bench =
+  case impl of
+    "cpu" => (fn () => Ray.render_cpu objs width height cam)
+  | "gpu" => (fn () => Ray.render_gpu ctx prepared_scene width height)
+  | "hybrid" =>
+      (fn () => Ray.render_hybrid ctx prepared_scene objs width height cam)
+  | _ => raise Fail ("unknown -impl: " ^ impl)
+
+val result = Benchmark.run ("rendering (" ^ impl ^ ")") bench
 
 val _ = FutRay.prepare_rgbbox_scene_free (ctx, prepared_scene)
 val _ = FutRay.cleanup ctx

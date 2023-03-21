@@ -361,15 +361,16 @@ struct
     end
 
 
-  val renderGpuSplit = CommandLineArgs.parseReal "render-gpu-split" 0.5
+  val renderHybridGpuSplit =
+    CommandLineArgs.parseReal "render-hybrid-gpu-split" 0.5
   val _ = print
-    ("render-gpu-split " ^ Real.toString renderGpuSplit
+    ("render-hybrid-gpu-split " ^ Real.toString renderHybridGpuSplit
      ^ " (fraction given to gpu choice points)\n")
 
   fun calculateMid lo hi =
-    lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - renderGpuSplit))
+    lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - renderHybridGpuSplit))
 
-  fun render ctx fut_prepared_scene objs width height cam : image =
+  fun render_hybrid ctx fut_prepared_scene objs width height cam : image =
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
 
@@ -404,6 +405,36 @@ struct
           end
     in
       loop 0 (height * width);
+      {width = width, height = height, pixels = pixels}
+    end
+
+
+  fun render_cpu objs width height cam : image =
+    let
+      val pixels: Int32.int array = ForkJoin.alloc (height * width)
+
+      fun writePixel l =
+        let
+          val i = l mod width
+          val j = height - l div width
+        in
+          Array.update (pixels, l, colour_to_pixel
+            (trace_ray objs width height cam j i))
+        end
+    in
+      ForkJoin.parfor 256 (0, width * height) writePixel;
+      {width = width, height = height, pixels = pixels}
+    end
+
+
+  fun render_gpu ctx fut_prepared_scene width height : image =
+    let
+      val pixels: Int32.int array = ForkJoin.alloc (height * width)
+      fun doCpu () =
+        raise Fail "Whoops! Hack failed. This shouldn't happen..."
+      val doGpu = FutRay.render ctx fut_prepared_scene (ArraySlice.full pixels)
+    in
+      ForkJoin.choice {cpu = doCpu, gpu = doGpu};
       {width = width, height = height, pixels = pixels}
     end
 

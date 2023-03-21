@@ -50,7 +50,8 @@ void fut_cleanup(struct fut_context *fut_context)
 // ==========================================================================
 // prepare scene boilerplate
 
-struct prepare_scene_pack {
+struct prepare_scene_pack
+{
   int64_t height;
   int64_t width;
   struct futhark_opaque_scene *scene;
@@ -90,8 +91,8 @@ void *prepare_rgbbox_scene(
 }
 
 void prepare_rgbbox_scene_free(
-  struct fut_context *fut_context,
-  struct prepare_scene_pack *pack)
+    struct fut_context *fut_context,
+    struct prepare_scene_pack *pack)
 {
   futhark_free_opaque_prepared_scene(fut_context->ctx, pack->prepared_scene);
   futhark_free_opaque_scene(fut_context->ctx, pack->scene);
@@ -122,21 +123,6 @@ void *render_threadfunc(void *rawArg)
   struct render_pack *pack = (struct render_pack *)rawArg;
   struct futhark_context *ctx = pack->fut_context->ctx;
 
-  // futhark_entry_rgbbox(ctx, &pack->scene);
-  // futhark_context_sync(ctx);
-
-  // timer_report_tick(&t, "make scene");
-
-  // futhark_entry_prepare_scene(
-  //     ctx,
-  //     &pack->prepared_scene,
-  //     pack->height,
-  //     pack->width,
-  //     pack->scene);
-  // futhark_context_sync(ctx);
-
-  // timer_report_tick(&t, "prepare scene");
-
   struct futhark_i32_1d *img;
 
   futhark_entry_render_pixels(
@@ -148,16 +134,10 @@ void *render_threadfunc(void *rawArg)
       pack->len,
       pack->prepared_scene->prepared_scene);
   futhark_context_sync(ctx);
-
-  timer_report_tick(&t, "render");
-
   futhark_values_i32_1d(ctx, img, pack->output);
-
-  timer_report_tick(&t, "move result to cpu");
-
   futhark_free_i32_1d(ctx, img);
 
-  timer_report_tick(&t, "free");
+  timer_report_tick(&t, "render+move+free");
 
   pack->finished = true;
   return NULL;
