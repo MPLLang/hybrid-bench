@@ -23,9 +23,12 @@ val ((objs, cam), tm1) = Util.getTime (fn _ =>
   Ray.from_scene width height scene)
 val _ = print ("Scene BVH construction in " ^ Time.fmt 4 tm1 ^ "s\n")
 
-val result = Benchmark.run "rendering" (fn _ =>
-  Ray.render ctx objs width height cam)
+val prepared_scene = FutRay.prepare_rgbbox_scene (ctx, height, width)
 
+val result = Benchmark.run "rendering" (fn _ =>
+  Ray.render ctx prepared_scene objs width height cam)
+
+val _ = FutRay.prepare_rgbbox_scene_free (ctx, prepared_scene)
 val _ = FutRay.cleanup ctx
 
 val writeImage = if dop6 then Ray.image2ppm6 else Ray.image2ppm

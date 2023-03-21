@@ -361,7 +361,7 @@ struct
     end
 
 
-  fun render ctx objs width height cam : image =
+  fun render ctx fut_prepared_scene objs width height cam : image =
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
 
@@ -389,7 +389,7 @@ struct
           let
             fun doCpu () = loop lo hi
 
-            val doGpu = FutRay.render ctx height width (ArraySlice.slice
+            val doGpu = FutRay.render ctx fut_prepared_scene (ArraySlice.slice
               (pixels, lo, SOME (hi - lo)))
           in
             ForkJoin.choice {cpu = doCpu, gpu = doGpu}

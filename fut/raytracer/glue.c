@@ -48,7 +48,58 @@ void fut_cleanup(struct fut_context *fut_context)
 }
 
 // ==========================================================================
-// render boilerplate
+// prepare scene boilerplate
+
+struct prepare_scene_pack {
+  int64_t height;
+  int64_t width;
+  struct futhark_opaque_scene *scene;
+  struct futhark_opaque_prepared_scene *prepared_scene;
+};
+
+void *prepare_rgbbox_scene(
+    struct fut_context *fut_context,
+    int64_t height,
+    int64_t width)
+{
+  struct prepare_scene_pack *pack = malloc(sizeof(struct prepare_scene_pack));
+  pack->height = height;
+  pack->width = width;
+
+  struct timer_t t;
+  timer_begin(&t, "prepare_rgbbox_scene");
+
+  struct futhark_context *ctx = fut_context->ctx;
+
+  futhark_entry_rgbbox(ctx, &pack->scene);
+  futhark_context_sync(ctx);
+
+  timer_report_tick(&t, "make scene");
+
+  futhark_entry_prepare_scene(
+      ctx,
+      &pack->prepared_scene,
+      height,
+      width,
+      pack->scene);
+  futhark_context_sync(ctx);
+
+  timer_report_tick(&t, "prepare scene");
+
+  return pack;
+}
+
+void prepare_rgbbox_scene_free(
+  struct fut_context *fut_context,
+  struct prepare_scene_pack *pack)
+{
+  futhark_free_opaque_prepared_scene(fut_context->ctx, pack->prepared_scene);
+  futhark_free_opaque_scene(fut_context->ctx, pack->scene);
+  free(pack);
+}
+
+// ==========================================================================
+// prepare scene and render boilerplate
 
 struct render_pack
 {
@@ -56,11 +107,7 @@ struct render_pack
   bool finished;
   pthread_t friend;
 
-  struct futhark_opaque_scene *scene;
-  struct futhark_opaque_prepared_scene *prepared_scene;
-  struct futhark_i32_1d *img;
-  int64_t height;
-  int64_t width;
+  struct prepare_scene_pack *prepared_scene;
   int64_t start;
   int64_t len;
 
@@ -75,40 +122,40 @@ void *render_threadfunc(void *rawArg)
   struct render_pack *pack = (struct render_pack *)rawArg;
   struct futhark_context *ctx = pack->fut_context->ctx;
 
-  futhark_entry_rgbbox(ctx, &pack->scene);
-  futhark_context_sync(ctx);
+  // futhark_entry_rgbbox(ctx, &pack->scene);
+  // futhark_context_sync(ctx);
 
-  timer_report_tick(&t, "make scene");
+  // timer_report_tick(&t, "make scene");
 
-  futhark_entry_prepare_scene(
-      ctx,
-      &pack->prepared_scene,
-      pack->height,
-      pack->width,
-      pack->scene);
-  futhark_context_sync(ctx);
+  // futhark_entry_prepare_scene(
+  //     ctx,
+  //     &pack->prepared_scene,
+  //     pack->height,
+  //     pack->width,
+  //     pack->scene);
+  // futhark_context_sync(ctx);
 
-  timer_report_tick(&t, "prepare scene");
+  // timer_report_tick(&t, "prepare scene");
+
+  struct futhark_i32_1d *img;
 
   futhark_entry_render_pixels(
       ctx,
-      &pack->img,
-      pack->height,
-      pack->width,
+      &img,
+      pack->prepared_scene->height,
+      pack->prepared_scene->width,
       pack->start,
       pack->len,
-      pack->prepared_scene);
+      pack->prepared_scene->prepared_scene);
   futhark_context_sync(ctx);
 
   timer_report_tick(&t, "render");
 
-  futhark_values_i32_1d(ctx, pack->img, pack->output);
+  futhark_values_i32_1d(ctx, img, pack->output);
 
   timer_report_tick(&t, "move result to cpu");
 
-  futhark_free_i32_1d(ctx, pack->img);
-  futhark_free_opaque_prepared_scene(ctx, pack->prepared_scene);
-  futhark_free_opaque_scene(ctx, pack->scene);
+  futhark_free_i32_1d(ctx, img);
 
   timer_report_tick(&t, "free");
 
@@ -119,27 +166,22 @@ void *render_threadfunc(void *rawArg)
 struct render_pack *
 render_spawn(
     struct fut_context *fut_context,
-    int64_t height,
-    int64_t width,
+    struct prepare_scene_pack *prepared_scene,
     int64_t start,
     int64_t len,
     int32_t *output)
 {
   struct render_pack *pack = malloc(sizeof(struct render_pack));
   pack->fut_context = fut_context;
-  pack->height = height;
-  pack->width = width;
+  pack->prepared_scene = prepared_scene;
   pack->start = start;
   pack->len = len;
   pack->finished = false;
-  pack->scene = NULL;
-  pack->prepared_scene = NULL;
-  pack->img = NULL;
   pack->output = output + start;
 
   if (0 != pthread_create(&(pack->friend), NULL, &render_threadfunc, pack))
   {
-    printf("ERROR: glue.c: futSieveSpawn: pthread_create failed\n");
+    printf("ERROR: glue.c: render_spawn: pthread_create failed\n");
     exit(1);
   }
 
