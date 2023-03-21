@@ -361,6 +361,14 @@ struct
     end
 
 
+  val renderGpuSplit = CommandLineArgs.parseReal "render-gpu-split" 0.5
+  val _ = print
+    ("render-gpu-split " ^ Real.toString renderGpuSplit
+     ^ " (fraction given to gpu choice points)\n")
+
+  fun calculateMid lo hi =
+    lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - renderGpuSplit))
+
   fun render ctx fut_prepared_scene objs width height cam : image =
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
@@ -378,7 +386,7 @@ struct
         if hi - lo <= 100 then
           Util.for (lo, hi) writePixel
         else
-          let val mid = lo + (hi - lo) div 2
+          let val mid = calculateMid lo hi
           in ForkJoin.par (fn _ => loop lo mid, fn _ => loopChoose mid hi); ()
           end
 
