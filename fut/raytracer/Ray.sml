@@ -384,7 +384,7 @@ struct
         end
 
       fun loop lo hi =
-        if hi - lo <= 100 then
+        if hi - lo <= 1000 then
           Util.for (lo, hi) writePixel
         else
           let val mid = calculateMid lo hi
@@ -392,8 +392,8 @@ struct
           end
 
       and loopChoose lo hi =
-        if hi - lo < 100 then
-          loop lo hi
+        if hi - lo < 10000 then
+          ForkJoin.parfor 1000 (lo, hi) writePixel
         else
           let
             fun doCpu () = loop lo hi
@@ -422,7 +422,7 @@ struct
             (trace_ray objs width height cam j i))
         end
     in
-      ForkJoin.parfor 256 (0, width * height) writePixel;
+      ForkJoin.parfor 1000 (0, width * height) writePixel;
       {width = width, height = height, pixels = pixels}
     end
 
