@@ -383,26 +383,20 @@ struct
             (trace_ray objs width height cam j i))
         end
 
+      fun gpuTask lo hi =
+        FutRay.render ctx fut_prepared_scene (ArraySlice.slice
+          (pixels, lo, SOME (hi - lo)))
+
       fun loop lo hi =
-        if hi - lo <= 1000 then
-          Util.for (lo, hi) writePixel
+        if hi - lo <= 2000 then
+          ForkJoin.parfor 100 (lo, hi) writePixel
         else
           let val mid = calculateMid lo hi
           in ForkJoin.par (fn _ => loop lo mid, fn _ => loopChoose mid hi); ()
           end
 
       and loopChoose lo hi =
-        if hi - lo < 10000 then
-          ForkJoin.parfor 1000 (lo, hi) writePixel
-        else
-          let
-            fun doCpu () = loop lo hi
-
-            val doGpu = FutRay.render ctx fut_prepared_scene (ArraySlice.slice
-              (pixels, lo, SOME (hi - lo)))
-          in
-            ForkJoin.choice {cpu = doCpu, gpu = doGpu}
-          end
+        ForkJoin.choice {cpu = fn _ => loop lo hi, gpu = gpuTask lo hi}
     in
       loop 0 (height * width);
       {width = width, height = height, pixels = pixels}
