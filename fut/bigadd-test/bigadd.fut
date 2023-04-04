@@ -1,38 +1,34 @@
-def nth_ (x: [n]i8) (i: i64) : i8 =
-let (ps)
-    length [n] 'a (xs: [n]a) = n
-    if i < length x then
-        x[i]
-    else
-        (0w0: i8)
-in
-    ps
+def nth_ (x: []u8) (i: i64) : u8 =
+	if i < length x then
+		x[i]
+	else
+		0u8
 
-def propagate (x: i8) (y: i8) =
-let(carries)
-    if y = 0w127 then
+def propagate (x: u8) (y: u8) =
+    if y == 127u8 then
         x
     else   
         y
-in
-    carries
 
-def f (carry: i8) (sum: i8) =
-    let res = ((carry >> 0w7) + sum) & 0w7F
+def f (carry: u8) (sum: u8) =
+    let res = ((carry >> 7u8) + sum) & 0x7Fu8
     in 
         res
 
-def add (x: [n]i8) (y: [m]i8) =
-    let length [n] 'a (xs: [n]a) = n
-    let maxlen = if n > m then n else m
-    let sums = tabulate maxlen+1 (\i -> nth_ x i + nth_ y i)
-    let carries = scan propagate 0w0 sums
+def exscan [n] 'a f zero (x: [n]a) : [n]a =
+	let o = scan f zero x
+	in 
+		tabulate (n) (\i -> if i == 0 then zero else o[i-1]) 
 
-    --not sure how to do force and pass a function to zip
-    let res = zip f (carries, sums)
-    -- res should be an array here
+
+entry add (x: []u8) (y: []u8) : ([]u8, i64) =
+    let maxlen = i64.max (length x) (length y)
+    let sums = tabulate (maxlen+1) (\i -> nth_ x i + nth_ y i)
+    let carries = exscan propagate 0u8 sums
+
+    let res = map2 f carries sums
     in
-        if null res or last res > 0w0 then
-            res
+        if (null res) || (last res) > 0u8 then
+            (res, length res)
         else
-            init res 
+            (init res, length res - 1) 
