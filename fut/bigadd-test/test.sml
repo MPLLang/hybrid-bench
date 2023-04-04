@@ -60,7 +60,6 @@ fun makeBigAddOnGpuTask input1 input2 =
         val output = ForkJoin.alloc outputSize
       in
         rawFutBigAddFinish (pack, output);
-        print(Int.toString (outputSize));
         Seq.take (ArraySlice.full output) outputSize
       end
   in
@@ -109,7 +108,8 @@ val bench =
   | "hybrid" => bigAddHybridBenchmark 
   | _ => Util.die ("unknown -impl " ^ impl)
 
-val result = Benchmark.run "bignum" (fn () => bench input1 input2)
+val result = Benchmark.run "bignum" (fn () => SeqBasis.tabulate 1 (0, simultaneous ) (fn _ => bench input1 input2))
+val result = Array.sub (result, 0)
 val _ = print ("result " ^ Util.summarizeArraySlice 8 Word8.toString result ^ "\n") 
 val _ = print ("result length " ^ Int.toString (Seq.length result) ^ "\n")
 (* val result = bench {simultaneous = simultaneous, n = n}
