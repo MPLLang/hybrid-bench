@@ -1,4 +1,4 @@
-#include "futsort/merge_sort.h"
+#include "futsort/sort.h"
 #include "timer.h"
 #include <pthread.h>
 
@@ -75,13 +75,16 @@ void *sort_threadfunc(void *rawArg)
   struct futhark_i64_1d *output;
 
   input = futhark_new_i64_1d(ctx, pack->input + pack->start, pack->len);
-  futhark_entry_merge_sort(ctx, &output, input);
+  timer_report_tick(&t, "copy input      ");
+
+  futhark_entry_sort(ctx, &output, input);
   futhark_context_sync(ctx);
+  timer_report_tick(&t, "sort            ");
+
   futhark_values_i64_1d(ctx, output, pack->output);
   futhark_free_i64_1d(ctx, input);
   futhark_free_i64_1d(ctx, output);
-
-  timer_report_tick(&t, "sort+move+free");
+  timer_report_tick(&t, "copy+free output");
 
   pack->finished = true;
   return NULL;

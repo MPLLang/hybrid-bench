@@ -11,7 +11,7 @@ MLTONFLAGS = \
 MPL=/home/ec2-user/proj/mpl/hybrid-sched/build/bin/mpl
 
 main.mpl: phony futsort
-	$(MPL) $(MLTONFLAGS) -output main.mpl main.mlb ../common/timer.c futsort/merge_sort.c glue.c
+	$(MPL) $(MLTONFLAGS) -output main.mpl main.mlb ../common/timer.c futsort/sort.c glue.c
 
 futsort: phony
 	$(MAKE) -C futsort
