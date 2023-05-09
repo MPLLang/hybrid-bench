@@ -7,7 +7,7 @@ val _ = print ("impl " ^ impl ^ "\n")
 
 val _ = print ("generating " ^ Int.toString n ^ " random integers\n")
 fun elem i =
-  Int64.fromLarge (Word64.toLargeInt (Word64.mod
+  Int32.fromLarge (Word64.toLargeInt (Word64.mod
     (Util.hash64 (Word64.fromInt i), Word64.fromInt n)))
 val input = Seq.tabulate elem n
 
@@ -24,6 +24,7 @@ val result = Benchmark.run ("sort " ^ impl) bench
 
 val _ = FutSort.cleanup ctx
 
-val _ = print ("input " ^ Util.summarizeArraySlice 8 Int.toString input ^ "\n")
 val _ = print
-  ("result " ^ Util.summarizeArraySlice 8 Int.toString result ^ "\n")
+  ("input " ^ Util.summarizeArraySlice 8 Int32.toString input ^ "\n")
+val _ = print
+  ("result " ^ Util.summarizeArraySlice 8 Int32.toString result ^ "\n")

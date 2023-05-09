@@ -56,11 +56,11 @@ struct sort_pack
   bool finished;
   pthread_t friend;
 
-  int64_t *input;
+  int32_t *input;
   int64_t start;
   int64_t len;
   
-  int64_t *output;
+  int32_t *output;
 };
 
 void *sort_threadfunc(void *rawArg)
@@ -71,20 +71,20 @@ void *sort_threadfunc(void *rawArg)
   struct sort_pack *pack = (struct sort_pack *)rawArg;
   struct futhark_context *ctx = pack->fut_context->ctx;
 
-  struct futhark_i64_1d *input;
-  struct futhark_i64_1d *output;
+  struct futhark_i32_1d *input;
+  struct futhark_i32_1d *output;
 
-  input = futhark_new_i64_1d(ctx, pack->input + pack->start, pack->len);
-  timer_report_tick(&t, "copy input      ");
+  input = futhark_new_i32_1d(ctx, pack->input + pack->start, pack->len);
+  // timer_report_tick(&t, "copy input      ");
 
   futhark_entry_sort(ctx, &output, input);
   futhark_context_sync(ctx);
-  timer_report_tick(&t, "sort            ");
+  // timer_report_tick(&t, "sort            ");
 
-  futhark_values_i64_1d(ctx, output, pack->output);
-  futhark_free_i64_1d(ctx, input);
-  futhark_free_i64_1d(ctx, output);
-  timer_report_tick(&t, "copy+free output");
+  futhark_values_i32_1d(ctx, output, pack->output);
+  futhark_free_i32_1d(ctx, input);
+  futhark_free_i32_1d(ctx, output);
+  timer_report_tick(&t, "sort");
 
   pack->finished = true;
   return NULL;
@@ -93,10 +93,10 @@ void *sort_threadfunc(void *rawArg)
 struct sort_pack *
 sort_spawn(
     struct fut_context *fut_context,
-    int64_t *input,
+    int32_t *input,
     int64_t start,
     int64_t len,
-    int64_t *output)
+    int32_t *output)
 {
   struct sort_pack *pack = malloc(sizeof(struct sort_pack));
   pack->fut_context = fut_context;

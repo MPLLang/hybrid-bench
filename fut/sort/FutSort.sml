@@ -15,13 +15,13 @@ struct
   type sort_package = MLton.Pointer.t
 
   val sort_spawn =
-    _import "sort_spawn" public : fut_context * i64 array * i64 * i64 * i64 array -> sort_package;
+    _import "sort_spawn" public : fut_context * i32 array * i64 * i64 * i32 array -> sort_package;
 
   val sort_poll = _import "sort_poll" public : sort_package -> Word8.word;
 
   val sort_finish = _import "sort_finish" public : sort_package -> unit;
 
-  fun sort ctx seq : (sort_package, i64 Seq.t) ForkJoin.gpu_task =
+  fun sort ctx seq : (sort_package, i32 Seq.t) ForkJoin.gpu_task =
     let
       val (data, start, len) = ArraySlice.base seq
       val output = ForkJoin.alloc len
