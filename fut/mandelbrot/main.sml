@@ -214,5 +214,8 @@ val _ =
       ; dump (Int.toString w ^ " " ^ Int.toString h ^ "\n")
       ; app (app dump1) results
       ; TextIO.closeOut file
+      ; print
+          ("output written to " ^ outfile ^ "\n"
+           ^ "(note: checkerboard pattern shows GPU work)\n")
       )
     end

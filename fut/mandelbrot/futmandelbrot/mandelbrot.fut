@@ -41,6 +41,14 @@ def mark x y =
   if (zr * zr) + (zi * zi) > divergeThresh then 0u8 else 1u8
 
 
+
+def addPattern (y: i64) (byte: u8) =
+  if y % 2 == 0 then
+    0xAA | byte
+  else
+    0x55 | byte
+
+
 def packByte y (xlo, xhi) =
   let (byte, _) =
     loop (byte, x) = (0u8, xlo)
@@ -61,4 +69,7 @@ entry mandelbrot ylo yhi blo bhi =
   flatten (tabulate_2d numRows numBytes (\y b ->
     let xlo = blo + b * 8
     let xhi = i64.min (xlo + 8) w
-    in packByte (ylo + y) (xlo, xhi)))
+    let byte = packByte (ylo + y) (xlo, xhi)
+    let byte = addPattern y byte
+    in
+    byte))
