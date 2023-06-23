@@ -27,7 +27,7 @@ fun dMMOnCpuBenchmark a b output =
 
 
 fun dMMHybridBenchmark a b output = 
-  ForkJoin.choice {gpu = makedMMOnGpuTask a b, cpu = (fn () => dMMOnCpuBenchmark a b) }
+  ForkJoin.choice {gpu = makedMMOnGpuTask a b output, cpu = (fn () => dMMOnCpuBenchmark a b output) }
 
 
 structure TreeMatrix:
