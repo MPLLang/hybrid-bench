@@ -245,16 +245,24 @@ int reduction(int * A, int lo, int hi){
 
 
 extern "C"
-void * cublasSGEMM(void* A, void* B, void* C, int m, int n, int k){
+void * cublasSGEMM(void* a, void* b, void* c, int m, int n, int k){
     
+    float * A, *B, *C; 
+    cudaMalloc(&A, m*k*sizeof(float));
+    cudaMalloc(&B, k*n*sizeof(float));
+    cudaMalloc(&C, m*n*sizeof(float));
+
+    cudaMemcpy(A, a, m*k*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(B, b, k*n*sizeof(float), cudaMemcpyHostToDevice);
     cublasHandle_t handle;
     cublasCreate(&handle);
     float alpha = 1.0;
     float beta = 0.0;
     cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, (float*) B, n, (float*) A, k, &beta, (float*) C, n);
     // cublasDestroy(handle);
+    cudaMemcpy(c, C, m*n*sizeof(float), cudaMemcpyDeviceToHost);
 
-    return C;
+    return c;
 }
 
 extern "C"

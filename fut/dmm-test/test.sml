@@ -18,41 +18,6 @@ fun generate n seed =
       n
   end
 
-fun makedMMOnGpuTask input1 input2 =
-  let
-    (* partition the matrix using slices *)
-    val (a1, i1, n) = ArraySlice.base input1
-    val _ = if i1 = 0 then () else raise Fail "uh oh"
-    (* partition the matrix using slices *)
-    val (a2, i2, _) = ArraySlice.base input2
-    val _ = if i2 = 0 then () else raise Fail "uh oh"
-    
-    (* output is the size n because we are partitioning into sqrt n * sqrt n submatrices *)
-    val outputSize = n
-    val output = ForkJoin.alloc outputSize
-
-    fun spawn () = cublasSGEMM(a1, a2, output, sqrt n, sqrt n, sqrt n)
-
-    (* what to do here? *)
-    fun poll pack = (0w1 = rawFutBigAddPoll pack)
-
-    fun finish pack = 
-        Seq.take (ArraySlice.full output) outputSize
-  in
-    ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
-  end
-
-fun dMMOnCpuBenchmark a b = 
-  let
-    (* Need MPL implementation of DMM *)
-    val res = dMM.dmm (a, b) 
-  in
-    res
-  end
-
-fun dMMHybridBenchmark a b = 
-  ForkJoin.choice {gpu = makedMMOnGpuTask a b, cpu = (fn () => dMMOnCpuBenchmark a b) }
-
 fun trace n prefix f =
   if true (*n < 10000*) then
     f ()
