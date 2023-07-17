@@ -5,6 +5,9 @@
 // ==========================================================================
 // context boilerplate
 
+
+/* TODO: this stuff can probably go away entirely */
+
 struct futStuff {
   struct futhark_context_config *cfg;
   struct futhark_context *ctx;
@@ -47,16 +50,23 @@ void futFinish(struct futStuff * futStuff) {
 // ==========================================================================
 // bigAdd boilerplate
 
+
+/* TODO: inputs and outputs for leaf DMM, dimension info, etc. */
 struct bigAddPackage {
-  struct futStuff *futStuff;
+  struct futStuff *futStuff;  /* won't need this */
+
+  /* need to be specialized for DMM */
   struct futhark_u8_1d * a;
   struct futhark_u8_1d * b;
   struct futhark_u8_1d * output;
   int64_t outputLen;
+
+  /* these should stay */
   bool finished;
   pthread_t friend;
 };
 
+/* TODO: call cublas */
 void* asyncBigAddFunc(void* rawArg) {
   struct timer_t t;
   timer_begin(&t, "ayscBigAddFunc");
@@ -71,11 +81,16 @@ void* asyncBigAddFunc(void* rawArg) {
 
   futhark_context_sync(pack->futStuff->ctx);
   timer_report_tick(&t, "done");
-  pack->finished = true;
+  pack->finished = true; /* VERY IMPORTANT! */
   return NULL;
 }
 
 
+/* TODO: build the package, but otherwise shouldn't need to change much. 
+ *
+ * (NOTE: futhark_new_... is essentially a memcpy, these need to be replaced
+ *  with stuff for cublas)
+ */
 struct bigAddPackage * 
 futBigAddSpawn(
   struct futStuff * futStuff,
@@ -100,6 +115,7 @@ futBigAddSpawn(
   return pack;
 }
 
+/* TODO: probably doesn't need to change */
 uint8_t futBigAddPoll(struct bigAddPackage *pack) {
   return pack->finished ? 1 : 0;
 }
@@ -117,6 +133,9 @@ int64_t futBigAddOutputSize(struct bigAddPackage *pack) {
   return pack->outputLen;
 }
 
+/* TODO: memcpy from GPU back to pack->output
+ *
+ * (NOTE: futhark_values is equivalent of this memcpy. needs to be replaced) */
 void futBigAddFinish(
   struct bigAddPackage * pack,
   uint8_t * output)
