@@ -142,37 +142,79 @@ struct
       x
     end
 
-  fun compute_frame (t: f32) (width: int) (height: int) : Word32.word array =
+
+  fun pixelFunc t width height j i =
     let
       val fov = f32.pi / 3.0
-      fun f j i =
+      val dir_x = (f32.fromInt i + 0.5) - f32.fromInt width / 2.0
+      val dir_y = ~(f32.fromInt j + 0.5) + f32.fromInt height / 2.0
+      val dir_z = ~(f32.fromInt height) / (2.0 * f32.tan (fov / 2.0))
+      val (is_hit, hit) = sphere_trace t (vec3f (0.0, 0.0, 3.0), vec3.normalise
+        (vec3f (dir_x, dir_y, dir_z)))
+    in
+      if is_hit then
         let
-          val dir_x = (f32.fromInt i + 0.5) - f32.fromInt width / 2.0
-          val dir_y = ~(f32.fromInt j + 0.5) + f32.fromInt height / 2.0
-          val dir_z = ~(f32.fromInt height) / (2.0 * f32.tan (fov / 2.0))
-          val (is_hit, hit) =
-            sphere_trace t (vec3f (0.0, 0.0, 3.0), vec3.normalise
-              (vec3f (dir_x, dir_y, dir_z)))
+          val noise_level = (sphere_radius - vec3.norm hit) / noise_amplitude
+          val light_dir = vec3.normalise (vec3.sub
+            (vec3f (10.0, 10.0, 10.0), hit))
+          val light_intensity = f32.max 0.4 (vec3.dot
+            (light_dir, distance_field_normal t hit))
+          val {x, y, z} = vec3.scale light_intensity (palette_fire
+            ((noise_level - 0.2) * 2.0))
         in
-          if is_hit then
-            let
-              val noise_level =
-                (sphere_radius - vec3.norm hit) / noise_amplitude
-              val light_dir = vec3.normalise (vec3.sub
-                (vec3f (10.0, 10.0, 10.0), hit))
-              val light_intensity = f32.max 0.4 (vec3.dot
-                (light_dir, distance_field_normal t hit))
-              val {x, y, z} = vec3.scale light_intensity (palette_fire
-                ((noise_level - 0.2) * 2.0))
-            in
-              rgb x y z
-            end
-          else
-            rgb 0.2 0.7 0.8
+          rgb x y z
         end
+      else
+        rgb 0.2 0.7 0.8
+    end
+
+
+  fun compute_frame (t: f32) (width: int) (height: int) : Word32.word array =
+    let
+      fun f j i =
+        pixelFunc t width height j i
     in
       SeqBasis.tabulate 10 (0, width * height) (fn k =>
         f (k div width) (k mod width))
+    end
+
+
+  val renderHybridGpuSplit =
+    CommandLineArgs.parseReal "render-hybrid-gpu-split" 0.5
+  val _ = print
+    ("render-hybrid-gpu-split " ^ Real.toString renderHybridGpuSplit
+     ^ " (fraction given to gpu choice points)\n")
+
+  fun calculateMid lo hi =
+    lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - renderHybridGpuSplit))
+
+
+  fun compute_frame_hybrid ctx t width height =
+    (* compute_frame t width height *)
+    let
+      val output = ForkJoin.alloc (width * height)
+
+      fun writePixel k =
+        Array.update
+          (output, k, pixelFunc t width height (k div width) (k mod width))
+
+      fun gpuTask lo hi =
+        FutTinyKaboom.render_pixels ctx width height t (ArraySlice.slice
+          (output, lo, SOME (hi - lo)))
+
+      fun loop lo hi =
+        if hi - lo <= 5000 then
+          ForkJoin.parfor 100 (lo, hi) writePixel
+        else
+          let val mid = calculateMid lo hi
+          in ForkJoin.par (fn _ => loop lo mid, fn _ => loopChoose mid hi); ()
+          end
+
+      and loopChoose lo hi =
+        ForkJoin.choice {cpu = fn _ => loop lo hi, gpu = gpuTask lo hi}
+    in
+      loopChoose 0 (width * height);
+      output
     end
 
 
@@ -189,11 +231,18 @@ struct
     Array.tabulate (frames, fn frame =>
       { width = width
       , height = height
-      , data = ArraySlice.full (ForkJoin.choice
-          { cpu = fn _ => raise Fail "Uh oh! Should be impossible!"
-          , gpu = FutTinyKaboom.compute_frame ctx width height
-              (f32.fromInt frame / f32.fromInt fps)
-          })
+      , data =
+          let
+            val output = ArraySlice.full (ForkJoin.alloc (width * height))
+          in
+            ForkJoin.choice
+              { cpu = fn _ => raise Fail "Uh oh! Should be impossible!"
+              , gpu =
+                  FutTinyKaboom.render_pixels ctx width height
+                    (f32.fromInt frame / f32.fromInt fps) output
+              };
+            output
+          end
       })
 
 
@@ -201,12 +250,9 @@ struct
     SeqBasis.tabulate 1 (0, frames) (fn frame =>
       { width = width
       , height = height
-      , data = ArraySlice.full (ForkJoin.choice
-          { cpu = fn _ =>
-              compute_frame (f32.fromInt frame / f32.fromInt fps) width height
-          , gpu = FutTinyKaboom.compute_frame ctx width height
-              (f32.fromInt frame / f32.fromInt fps)
-          })
+      , data = ArraySlice.full
+          (compute_frame_hybrid ctx (f32.fromInt frame / f32.fromInt fps) width
+             height)
       })
 
 end

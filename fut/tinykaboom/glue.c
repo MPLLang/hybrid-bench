@@ -48,9 +48,9 @@ void fut_cleanup(struct fut_context *fut_context)
 }
 
 // ==========================================================================
-// compute_frame boilerplate
+// render_pixels boilerplate
 
-struct compute_frame_pack
+struct render_pixels_pack
 {
   struct fut_context *fut_context;
   bool finished;
@@ -59,28 +59,32 @@ struct compute_frame_pack
   int64_t width;
   int64_t height;
   float t;
+  int64_t lo;
+  int64_t hi;
   uint32_t *output;
 };
 
 
-void *compute_frame_threadfunc(void *rawArg)
+void *render_pixels_threadfunc(void *rawArg)
 {
   struct timer_t t;
-  timer_begin(&t, "compute_frame_threadfunc");
+  timer_begin(&t, "render_pixels_threadfunc");
 
-  struct compute_frame_pack *pack = (struct compute_frame_pack *)rawArg;
+  struct render_pixels_pack *pack = (struct render_pixels_pack *)rawArg;
   struct futhark_context *ctx = pack->fut_context->ctx;
 
   struct futhark_u32_1d *img;
 
-  futhark_entry_compute_frame(
+  futhark_entry_render_pixels(
       ctx,
       &img,
       pack->width,
       pack->height,
-      pack->t);
+      pack->t,
+      pack->lo,
+      pack->hi);
   futhark_context_sync(ctx);
-  futhark_values_u32_1d(ctx, img, pack->output);
+  futhark_values_u32_1d(ctx, img, pack->output + pack->lo);
   futhark_free_u32_1d(ctx, img);
 
   timer_report_tick(&t, "render+move+free");
@@ -90,26 +94,30 @@ void *compute_frame_threadfunc(void *rawArg)
 }
 
 
-struct compute_frame_pack *
-compute_frame_spawn(
+struct render_pixels_pack *
+render_pixels_spawn(
     struct fut_context *fut_context,
     int64_t width,
     int64_t height,
     float t,
+    int64_t lo,
+    int64_t hi,
     uint32_t *output)
 {
-  struct compute_frame_pack *pack = malloc(sizeof(struct compute_frame_pack));
+  struct render_pixels_pack *pack = malloc(sizeof(struct render_pixels_pack));
   pack->fut_context = fut_context;
   pack->width = width;
   pack->height = height;
   pack->t = t;
+  pack->lo = lo;
+  pack->hi = hi;
   pack->output = output;
 
   pack->finished = false;
 
-  if (0 != pthread_create(&(pack->friend), NULL, &compute_frame_threadfunc, pack))
+  if (0 != pthread_create(&(pack->friend), NULL, &render_pixels_threadfunc, pack))
   {
-    printf("ERROR: glue.c: compute_frame_spawn: pthread_create failed\n");
+    printf("ERROR: glue.c: render_pixels_spawn: pthread_create failed\n");
     exit(1);
   }
 
@@ -117,13 +125,13 @@ compute_frame_spawn(
 }
 
 
-uint8_t compute_frame_poll(struct compute_frame_pack *pack)
+uint8_t render_pixels_poll(struct render_pixels_pack *pack)
 {
   return pack->finished ? 1 : 0;
 }
 
 
-void compute_frame_finish(struct compute_frame_pack *pack)
+void render_pixels_finish(struct render_pixels_pack *pack)
 {
   if (0 != pthread_join(pack->friend, NULL))
   {

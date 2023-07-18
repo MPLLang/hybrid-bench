@@ -87,7 +87,27 @@ def distance_field_normal t pos =
   let nz = signed_distance t (pos vec3.+ vec3f(0, 0, eps)) - d
   in vec3.normalise (vec3f(nx, ny, nz))
 
-entry compute_frame (width: i64) (height: i64) (t: f32): []argb.colour =
+-- entry compute_frame (width: i64) (height: i64) (t: f32): []argb.colour =
+--   let fov = f32.pi/3
+--   let f j i =
+--     let dir_x = (f32.i64 i + 0.5) - f32.i64 width/2
+--     let dir_y = -(f32.i64 j + 0.5) + f32.i64 height/2
+--     let dir_z = -(f32.i64 height)/(2*f32.tan(fov/2))
+--     let (is_hit, hit) =
+--       sphere_trace t (vec3f(0, 0, 3),
+--                       vec3.normalise (vec3f(dir_x, dir_y, dir_z)))
+--     in if is_hit
+--        then let noise_level = (sphere_radius - vec3.norm hit)/noise_amplitude
+--             let light_dir = vec3.normalise (vec3f(10, 10, 10) vec3.- hit)
+--             let light_intensity = f32.max 0.4 (light_dir `vec3.dot` distance_field_normal t hit)
+--             let {x, y, z} =
+--               light_intensity `vec3.scale` palette_fire((noise_level - 0.2)*2)
+--             in argb.from_rgba x y z 1
+--        else argb.from_rgba 0.2 0.7 0.8 1
+--   in flatten (tabulate_2d height width f)
+
+
+entry render_pixels (width: i64) (height: i64) (t: f32) (lo: i64) (hi: i64) : []argb.colour =
   let fov = f32.pi/3
   let f j i =
     let dir_x = (f32.i64 i + 0.5) - f32.i64 width/2
@@ -104,4 +124,5 @@ entry compute_frame (width: i64) (height: i64) (t: f32): []argb.colour =
               light_intensity `vec3.scale` palette_fire((noise_level - 0.2)*2)
             in argb.from_rgba x y z 1
        else argb.from_rgba 0.2 0.7 0.8 1
-  in flatten (tabulate_2d height width f)
+  in
+    tabulate (hi-lo) (\k -> f ((lo+k) / width) ((lo+k) % width))
