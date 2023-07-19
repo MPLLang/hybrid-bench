@@ -103,18 +103,34 @@ struct
 
   fun sphere_trace t (orig: vec3, dir: vec3) : (bool * vec3) =
     let
-      fun check (i, hit) = (i = 1337, hit)
+
+      fun loop (i, pos) =
+        if i >= 64 then
+          (false, pos)
+        else
+          let
+            val d = signed_distance t pos
+          in
+            if d < 0.0 then
+              (true, pos)
+            else
+              loop (i + 1, vec3.add
+                (pos, vec3.scale (f32.max (d * 0.1) 0.1) dir))
+          end
+
+    (* fun check (i, hit) = (i = 1337, hit) *)
     in
       if (vec3.dot (orig, orig)) - sq (vec3.dot (orig, dir)) > sq sphere_radius then
         (false, orig)
       else
-        check (loop (0, orig) (fn (i, _) => i < 64) (fn (i, pos) =>
-          let
-            val d = signed_distance t pos
-          in
-            if d < 0.0 then (1337, pos)
-            else (i + 1, vec3.add (pos, vec3.scale (f32.max (d * 0.1) 0.1) dir))
-          end))
+        loop (0, orig)
+    (* check (loop (0, orig) (fn (i, _) => i < 64) (fn (i, pos) =>
+      let
+        val d = signed_distance t pos
+      in
+        if d < 0.0 then (1337, pos)
+        else (i + 1, vec3.add (pos, vec3.scale (f32.max (d * 0.1) 0.1) dir))
+      end)) *)
     end
 
   fun distance_field_normal t pos =

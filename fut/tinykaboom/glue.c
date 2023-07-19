@@ -67,8 +67,8 @@ struct render_pixels_pack
 
 void *render_pixels_threadfunc(void *rawArg)
 {
-  struct timer_t t;
-  timer_begin(&t, "render_pixels_threadfunc");
+  // struct timer_t t;
+  // timer_begin(&t, "render_pixels_threadfunc");
 
   struct render_pixels_pack *pack = (struct render_pixels_pack *)rawArg;
   struct futhark_context *ctx = pack->fut_context->ctx;
@@ -87,7 +87,7 @@ void *render_pixels_threadfunc(void *rawArg)
   futhark_values_u32_1d(ctx, img, pack->output + pack->lo);
   futhark_free_u32_1d(ctx, img);
 
-  timer_report_tick(&t, "render+move+free");
+  // timer_report_tick(&t, "render+move+free");
 
   pack->finished = true;
   return NULL;
