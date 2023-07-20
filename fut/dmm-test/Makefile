@@ -12,8 +12,8 @@ MPL=~/mpl/build/bin/./mpl
 test.mpl: phony blas_library.o
 	$(MPL) $(MLTONFLAGS) -output test.mpl test.mlb ../common/timer.c 
 
-blas_library: blas_library.cu
-	nvcc -lcublas -c -o blas_library.o blas_library.cu -O3 -llapack -lblas
+blas_library: glue.cu
+	nvcc -lcublas -c -o blas_library.o glue.cu -O3 -llapack -lblas
 
 clean: 
 	rm test.mpl

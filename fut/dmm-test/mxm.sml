@@ -1,19 +1,25 @@
-val cublasSGEMM =
-  _import "cublasSGEMM" public : MLton.Pointer.t * MLton.Pointer.t * MLton.Pointer.t * int * int * int -> unit;
+type dmm_package = MLton.Pointer.t
+
+val rawdMMSpawn =
+  _import "dMMSpawn" public : MLton.Pointer.t * MLton.Pointer.t * Int64.int -> dmm_package;
+
+val rawdMMPoll =
+  _import "dMMPoll" public : dmm_package -> Word8.word;
+
+val rawdMMFinish =
+  _import "dMMFinish" public : dmm_package * MLton.Pointer.t -> unit;
 
 
 fun makedMMOnGpuTask input1 input2 output =
   let
-    val a1 = input1.flatten
-    val a2 = input2.flatten
+    (* val a1 = input1.flatten 
+    val a2 = input2.flatten *)
 
-    fun spawn () = cublasSGEMM(a1, a2, output, input1.sidelength, input1.sidelength, input2.sidelength)
+    fun spawn () = rawdMMSpawn(input1, input2, input1.sidelength)
 
-    (* what to do here? *)
-    fun poll pack = (0w1 = rawFutBigAddPoll pack)
+    fun poll pack = (0w1 = rawdMMPoll pack)
 
-    fun finish pack = 
-        Seq.take (ArraySlice.full output) outputSize
+    fun finish pack = rawdMMFinish(pack output)
   in
     ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
   end
