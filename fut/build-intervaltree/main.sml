@@ -31,18 +31,22 @@ fun randSeg seed =
     val space = max_size - p
     val hi = p + 1 + space div 100
   in
-    (p, randRange p hi (seed + 1))
+    (Int32.fromInt p, Int32.fromInt (randRange p hi (seed + 1)))
   end
 
 (* fun query seed =
   IntervalMap.stab tree (randRange 1 max_size seed) *)
 
 fun query tree seed =
-  IntervalMap.size (IntervalMap.report_all tree (randRange 1 max_size seed))
+  IntervalMap.size (IntervalMap.report_all tree (Int32.fromInt
+    (randRange 1 max_size seed)))
 
 
 fun makeIntervalMap (segs: IntervalMap.interval Seq.t) =
   let
+
+    fun getSeg i =
+      Seq.nth segs (Int32.toInt i)
 
     fun doitSorted idxs =
       if Seq.length idxs = 0 then
@@ -50,7 +54,7 @@ fun makeIntervalMap (segs: IntervalMap.interval Seq.t) =
       else
         let
           val half = Seq.length idxs div 2
-          val (x, y) = Seq.nth segs (Seq.nth idxs half)
+          val (x, y) = getSeg (Seq.nth idxs half)
           val l = Seq.take idxs half
           val r = Seq.drop idxs (half + 1)
 
@@ -68,10 +72,10 @@ fun makeIntervalMap (segs: IntervalMap.interval Seq.t) =
       else
         let
           (* pivot... just hack it, assume input is random/shuffled already *)
-          val (x, y) = Seq.nth segs (Seq.nth idxs (Seq.length idxs div 2))
+          val (x, y) = getSeg (Seq.nth idxs (Seq.length idxs div 2))
 
-          val l = Seq.filter (fn i => #1 (Seq.nth segs i) < x) idxs
-          val r = Seq.filter (fn i => #1 (Seq.nth segs i) > x) idxs
+          val l = Seq.filter (fn i => #1 (getSeg i) < x) idxs
+          val r = Seq.filter (fn i => #1 (getSeg i) > x) idxs
 
           val (l', r') =
             if Seq.length idxs <= 500 then (doitWithSort l, doitWithSort r)
@@ -83,13 +87,13 @@ fun makeIntervalMap (segs: IntervalMap.interval Seq.t) =
     and doitWithSort idxs =
       let
         fun cmp (i, j) =
-          Int.compare (#1 (Seq.nth segs i), #1 (Seq.nth segs j))
+          Int32.compare (#1 (getSeg i), #1 (getSeg j))
         val idxs' = Mergesort.sort cmp idxs
       in
         doitSorted idxs'
       end
   in
-    doitUnsorted (Seq.tabulate (fn i => i) (Seq.length segs))
+    doitUnsorted (Seq.tabulate (fn i => Int32.fromInt i) (Seq.length segs))
   end
 
 
