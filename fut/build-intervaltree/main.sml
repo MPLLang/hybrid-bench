@@ -1,10 +1,22 @@
 structure CLA = CommandLineArgs
 
-val q = CLA.parseInt "q" 100
-val n = CLA.parseInt "n" 1000000
+val n = CLA.parseInt "n" 5000000
+val impl = CLA.parseString "impl" "hybrid"
 
 val _ = print ("n " ^ Int.toString n ^ "\n")
-val _ = print ("q " ^ Int.toString q ^ "\n")
+val _ = print ("impl " ^ impl ^ "\n")
+
+
+fun cmpWith vals (i, j) =
+  Int32.compare (Seq.nth vals (Int32.toInt i), Seq.nth vals (Int32.toInt j))
+
+
+val sorter =
+  case impl of
+    "hybrid" => (fn c => fn v => fn i => HybridSort.sortChoose c v i)
+  | "cpu" => (fn c => fn v => fn i => Mergesort.sort (cmpWith v) i)
+  | _ => Util.die ("unknown impl '" ^ impl ^ "'")
+
 
 val max_size = 1000000000
 (* val gap_size = 100 *)
@@ -42,7 +54,11 @@ fun query tree seed =
     (randRange 1 max_size seed)))
 
 
-fun makeIntervalMap (segs: IntervalMap.interval Seq.t) =
+val segs = Seq.tabulate (fn i => randSeg (2 * i)) n
+val segs_xs = Seq.map #1 segs
+val futctx = FutSort.init segs_xs
+
+fun makeIntervalMap () =
   let
 
     fun getSeg i =
@@ -86,9 +102,13 @@ fun makeIntervalMap (segs: IntervalMap.interval Seq.t) =
 
     and doitWithSort idxs =
       let
-        fun cmp (i, j) =
+        (* fun cmp (i, j) =
           Int32.compare (#1 (getSeg i), #1 (getSeg j))
-        val idxs' = Mergesort.sort cmp idxs
+        val idxs' = Mergesort.sort cmp idxs *)
+
+        (* val idxs' = HybridSort.sort futctx segs_xs idxs *)
+
+        val idxs' = sorter futctx segs_xs idxs
       in
         doitSorted idxs'
       end
@@ -97,12 +117,13 @@ fun makeIntervalMap (segs: IntervalMap.interval Seq.t) =
   end
 
 
-fun bench () =
-  makeIntervalMap (Seq.tabulate (fn i => randSeg (2 * i)) n)
+fun bench () = makeIntervalMap ()
 (* IntervalMap.interval_map (Seq.tabulate (fn i => randSeg (2 * i)) n) n *)
 
 val tree = Benchmark.run "generating intervals..." bench
-val result = ArraySlice.full (SeqBasis.tabulate 1 (0, 10) (fn i =>
+
+val q = 10
+val result = ArraySlice.full (SeqBasis.tabulate 1 (0, q) (fn i =>
   query tree (2 * n + i)))
 
 val numHits = Seq.reduce op+ 0 result
@@ -113,3 +134,5 @@ val _ = print ("hits " ^ Int.toString numHits ^ "\n")
 val _ = print ("min " ^ Int.toString minHits ^ "\n")
 val _ = print ("avg " ^ Int.toString avgHits ^ "\n")
 val _ = print ("max " ^ Int.toString maxHits ^ "\n")
+
+val _ = FutSort.cleanup futctx
