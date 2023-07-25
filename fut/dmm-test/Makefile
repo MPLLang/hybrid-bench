@@ -6,15 +6,14 @@ MLTONFLAGS = \
 	-cc-opt '-I/opt/nvidia/cuda/include/ -I../common/' \
 	-link-opt '-rdynamic -L/opt/nvidia/cuda/lib64/ -lcuda -lnvrtc -lcublas -lcudart -lstdc++'
 
-# MPL=/home/ec2-user/mpl-hybrid-sched/build/bin/mpl
-MPL=~/mpl/build/bin/./mpl
+MPL=/home/ec2-user/mpl-hybrid-sched/build/bin/mpl
+# MPL=~/mpl/build/bin/./mpl
 
 test.mpl: phony blas_library.o
-	$(MPL) $(MLTONFLAGS) -output test.mpl test.mlb ../common/timer.c 
+	$(MPL) $(MLTONFLAGS) -output test.mpl test.mlb ../common/timer.c blas_library.o
 
-blas_library: glue.cu
-	nvcc -lcublas -c -o blas_library.o glue.cu -O3 -llapack -lblas
-
+blas_library.o: glue.cu
+	nvcc -I../common/ -lcublas -c -o blas_library.o glue.cu -O3 -llapack -lblas -lpthread
 clean: 
 	rm test.mpl
 

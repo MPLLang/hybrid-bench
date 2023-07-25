@@ -1,53 +1,15 @@
 type dmm_package = MLton.Pointer.t
 
 val rawdMMSpawn =
-  _import "dMMSpawn" public : MLton.Pointer.t * MLton.Pointer.t * Int64.int -> dmm_package;
+  _import "dMMSpawn" public : real array * real array * Int64.int -> dmm_package;
 
 val rawdMMPoll =
   _import "dMMPoll" public : dmm_package -> Word8.word;
 
 val rawdMMFinish =
-  _import "dMMFinish" public : dmm_package * MLton.Pointer.t -> unit;
+  _import "dMMFinish" public : dmm_package * real array -> unit;
 
-
-fun makedMMOnGpuTask input1 input2 output =
-  let
-    (* val a1 = input1.flatten 
-    val a2 = input2.flatten *)
-
-    fun spawn () = rawdMMSpawn(input1, input2, input1.sidelength)
-
-    fun poll pack = (0w1 = rawdMMPoll pack)
-
-    fun finish pack = rawdMMFinish(pack output)
-  in
-    ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
-  end
-
-fun dMMOnCpuBenchmark a b output = 
-  let
-    val res =  flatmultiply a.sidelength (a, b, output) 
-  in
-    res
-  end
-
-
-fun dMMHybridBenchmark a b output = 
-  ForkJoin.choice {gpu = makedMMOnGpuTask a b output, cpu = (fn () => dMMOnCpuBenchmark a b output) }
-
-
-structure TreeMatrix:
-sig
-  (* square matrices of sidelength 2^n matrices only! *)
-  datatype matrix =
-    Node of int * matrix * matrix * matrix * matrix
-  | Leaf of int * real Array.array
-
-  val tabulate: int -> (int * int -> real) -> matrix
-  val flatten: matrix -> real array
-  val sidelength: matrix -> int
-  val multiply: matrix * matrix -> matrix
-end =
+structure TreeMatrix =
 struct
 
   val par = ForkJoin.par
@@ -156,10 +118,31 @@ struct
       loopi 0 (n * n)
     end
 
+  fun dMMOnCpuBenchmark a b output n = 
+    let
+      val res =  flatmultiply n (a, b, output) 
+    in
+      res
+    end
+
+  fun makedMMOnGpuTask input1 input2 output n =
+    let
+      fun spawn () = rawdMMSpawn(input1, input2, n)
+
+      fun poll pack = (0w1 = rawdMMPoll pack)
+
+      fun finish pack = rawdMMFinish(pack, output)
+    in
+      ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+    end
+
+  fun dMMHybridBenchmark a b output n = 
+    ForkJoin.choice {gpu = makedMMOnGpuTask a b output n, cpu = (fn () => dMMOnCpuBenchmark a b output n) }
+
   fun multiply' (a, b, c) =
     case (a, b, c) of
       (* (Leaf (n, s), Leaf (_, t), Leaf (_, c)) => flatmultiply n (s, t, c) *)
-      (Leaf (n, s), Leaf (_, t), Leaf (_, c)) => dMMHybridBenchmark s t c
+      (Leaf (n, s), Leaf (_, t), Leaf (_, c)) => dMMHybridBenchmark s t c n
     | (Node (n, a11, a12, a21, a22),
        Node (_, b11, b12, b21, b22),
        Node (_, c11, c12, c21, c22)) =>
