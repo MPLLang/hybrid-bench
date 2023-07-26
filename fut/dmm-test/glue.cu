@@ -119,18 +119,32 @@ void* asyncdMMFunc(void* rawArg) {
 
   struct dMMPackage *pack = (struct dMMPackage *)rawArg;
 
-  // futhark_entry_add(pack->futStuff->ctx,
-  //   &(pack->output),
-  //   &(pack->outputLen), 
-  //   pack->a, 
-  //   pack->b);
+  float *device_a;
+  float *device_b;
+  float *device_output;
+  uint64_t n = pack->inputLen;
+
+  cudaMalloc(&device_a, n*n*sizeof(float));
+  cudaMemcpy(device_a, (float*)pack->a, n*n*sizeof(float), cudaMemcpyHostToDevice);
+
+
+  cudaMalloc(&device_b,  n*n*sizeof(float));
+  cudaMemcpy(device_b, (float*)pack->b,  n*n*sizeof(float), cudaMemcpyHostToDevice);
+  
+  cudaMalloc(&(device_output),  n*n*sizeof(float));
+
   float alpha = 1.0;
   float beta = 0.0;
   cublasHandle_t handle;
   cublasCreate(&handle);  
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, pack->inputLen, pack->inputLen, pack->inputLen, &alpha, (float*) pack->b, pack->inputLen, (float*) pack->a, pack->inputLen, &beta, (float*) pack->output, pack->inputLen);
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, device_a, n, device_b, n, &beta, device_output, n);
   cublasDestroy(handle);
-  // futhark_context_sync(pack->futStuff->ctx);
+
+  cudaMemcpy(pack->output, device_output, pack->inputLen*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaFree(device_a);
+  cudaFree(device_b);
+  cudaFree(device_output);
+
   timer_report_tick(&t, "done");
   pack->finished = true; /* VERY IMPORTANT! */
   return NULL;
@@ -144,21 +158,19 @@ void* asyncdMMFunc(void* rawArg) {
  */
 extern "C" struct dMMPackage * 
 dMMSpawn(
-  void * a,
-  void * b,
+  float * a,
+  float * b,
+  float * output,
   int64_t inputLen)
 {
   // struct futhark_context *ctx = futStuff->ctx;
   struct dMMPackage *pack = (dMMPackage*)malloc(sizeof(struct dMMPackage));
   // pack->futStuff = futStuff;
   // pack->a = futhark_new_u8_1d(ctx, a, inputLen);
-  cudaMalloc(&(pack->a), inputLen*inputLen*sizeof(float));
-  cudaMemcpy(pack->a, (float*)a, inputLen*inputLen*sizeof(float), cudaMemcpyHostToDevice);
-  // pack->b = futhark_new_u8_1d(ctx, b, inputLen);
-  cudaMalloc(&(pack->b),  inputLen*inputLen*sizeof(float));
-  cudaMemcpy(pack->b, (float*)b,  inputLen*inputLen*sizeof(float), cudaMemcpyHostToDevice);
-  // pack->outputLen = 0;
-  cudaMalloc(&(pack->output),  inputLen*inputLen*sizeof(float));
+
+  pack->a = a;
+  pack->b = b;
+  pack->output = output;
   pack->inputLen = inputLen;
   pack->finished = false;
 
@@ -192,22 +204,12 @@ extern "C" uint8_t dMMPoll(struct dMMPackage *pack) {
  *
  * (NOTE: futhark_values is equivalent of this memcpy. needs to be replaced) */
 extern "C" void dMMFinish(
-  struct dMMPackage * pack,
-  void * output)
+  struct dMMPackage * pack)
 {
   if (0 != pthread_join(pack->friends, NULL)) {
     printf("ERROR: glue.c: pthread_join failed\n");
     exit(1);
   }
 
-  cudaMemcpy(output, pack->output, pack->inputLen*sizeof(float), cudaMemcpyDeviceToHost);
-  cudaFree(pack->a);
-  cudaFree(pack->b);
-  cudaFree(pack->output);
-  // futhark_values_u8_1d(pack->futStuff->ctx, pack->output, output);
-  // futhark_free_u8_1d(pack->futStuff->ctx, pack->a);
-  // futhark_free_u8_1d(pack->futStuff->ctx, pack->b);
-  // futhark_free_u8_1d(pack->futStuff->ctx, pack->output);
   free(pack);
-
 }

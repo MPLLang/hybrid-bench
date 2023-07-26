@@ -1,12 +1,11 @@
 type dmm_package = MLton.Pointer.t
 
 val rawdMMSpawn =
-  _import "dMMSpawn" public : Real32.real array * Real32.real array * Int64.int -> dmm_package;
+  _import "dMMSpawn" public : Real32.real array * Real32.real array * Real32.real array * Int64.int -> dmm_package;
 
 val rawdMMPoll = _import "dMMPoll" public : dmm_package -> Word8.word;
 
-val rawdMMFinish =
-  _import "dMMFinish" public : dmm_package * Real32.real array -> unit;
+val rawdMMFinish = _import "dMMFinish" public : dmm_package -> unit;
 
 structure HybridTreeMatrix =
 struct
@@ -135,14 +134,14 @@ struct
 
   fun makedMMOnGpuTask input1 input2 output n =
     let
-      fun spawn () = rawdMMSpawn (input1, input2, n)
+      val tmp = ForkJoin.alloc (n * n)
+
+      fun spawn () = rawdMMSpawn (input1, input2, tmp, n)
 
       fun poll pack =
         (0w1 = rawdMMPoll pack)
 
-      val tmp = ForkJoin.alloc (n * n)
-
-      fun finish pack = rawdMMFinish (pack, tmp)
+      fun finish pack = rawdMMFinish pack
 
       fun cleanup () =
         ForkJoin.parfor 5000 (0, n * n) (fn i =>
