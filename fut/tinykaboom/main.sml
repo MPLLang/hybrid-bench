@@ -1,9 +1,9 @@
 structure CLA = CommandLineArgs
 
-val fps = CLA.parseInt "fps" 20
-val width = CLA.parseInt "width" 200
-val height = CLA.parseInt "height" 200
-val frames = CLA.parseInt "frames" (10 * fps)
+val fps = CLA.parseInt "fps" 1
+val width = CLA.parseInt "width" 500
+val height = CLA.parseInt "height" 500
+val frames = CLA.parseInt "frames" 5
 val outfile = CLA.parseString "outfile" ""
 val impl = CLA.parseString "impl" "cpu"
 (* val frame = CLA.parseInt "frame" 100 *)

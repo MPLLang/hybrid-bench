@@ -201,6 +201,8 @@ struct
     ("render-hybrid-gpu-split " ^ Real.toString renderHybridGpuSplit
      ^ " (fraction given to gpu choice points)\n")
 
+  val gpuThresh = CommandLineArgs.parseInt "gpu-min-thresh" 5000
+
   fun calculateMid lo hi =
     lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - renderHybridGpuSplit))
 
@@ -219,15 +221,18 @@ struct
           (output, lo, SOME (hi - lo)))
 
       fun loop lo hi =
-        if hi - lo <= 5000 then
-          ForkJoin.parfor 100 (lo, hi) writePixel
+        if hi - lo <= 100 then
+          Util.for (lo, hi) writePixel
         else
           let val mid = calculateMid lo hi
           in ForkJoin.par (fn _ => loop lo mid, fn _ => loopChoose mid hi); ()
           end
 
       and loopChoose lo hi =
-        ForkJoin.choice {cpu = fn _ => loop lo hi, gpu = gpuTask lo hi}
+        if hi - lo >= gpuThresh then
+          ForkJoin.choice {cpu = fn _ => loop lo hi, gpu = gpuTask lo hi}
+        else
+          ForkJoin.parfor 100 (lo, hi) writePixel
     in
       loopChoose 0 (width * height);
       output
