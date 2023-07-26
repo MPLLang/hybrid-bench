@@ -134,21 +134,14 @@ struct
 
   fun makedMMOnGpuTask input1 input2 output n =
     let
-      val tmp = ForkJoin.alloc (n * n)
-
-      fun spawn () = rawdMMSpawn (input1, input2, tmp, n)
+      fun spawn () = rawdMMSpawn (input1, input2, output, n)
 
       fun poll pack =
         (0w1 = rawdMMPoll pack)
 
       fun finish pack = rawdMMFinish pack
-
-      fun cleanup () =
-        ForkJoin.parfor 5000 (0, n * n) (fn i =>
-          Array.update (output, i, Array.sub (output, i) + Array.sub (tmp, i)))
     in
-      ForkJoin.gpuWithCleanup
-        {spawn = spawn, poll = poll, finish = finish, cleanup = cleanup}
+      ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
     end
 
   fun dMMHybridBenchmark a b output n =

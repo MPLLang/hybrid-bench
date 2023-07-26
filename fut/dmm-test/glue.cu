@@ -122,30 +122,34 @@ void* asyncdMMFunc(void* rawArg) {
   float *device_a;
   float *device_b;
   float *device_output;
+
   uint64_t n = pack->inputLen;
+  uint64_t bytes = n*n*sizeof(float);
 
-  cudaMalloc(&device_a, n*n*sizeof(float));
-  cudaMemcpy(device_a, (float*)pack->a, n*n*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMalloc(&device_a, bytes);
+  cudaMemcpy(device_a, pack->a, bytes, cudaMemcpyHostToDevice);
 
-
-  cudaMalloc(&device_b,  n*n*sizeof(float));
-  cudaMemcpy(device_b, (float*)pack->b,  n*n*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMalloc(&device_b, bytes);
+  cudaMemcpy(device_b, pack->b, bytes, cudaMemcpyHostToDevice);
   
-  cudaMalloc(&(device_output),  n*n*sizeof(float));
+  cudaMalloc(&(device_output), bytes);
+  cudaMemcpy(device_output, pack->output, bytes, cudaMemcpyHostToDevice);
+  timer_report_tick(&t, "--- memcpy to gpu");
 
   float alpha = 1.0;
-  float beta = 0.0;
+  float beta = 1.0;
   cublasHandle_t handle;
   cublasCreate(&handle);  
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, device_a, n, device_b, n, &beta, device_output, n);
   cublasDestroy(handle);
+  timer_report_tick(&t, "      cublasSgemm");
 
-  cudaMemcpy(pack->output, device_output, pack->inputLen*sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(pack->output, device_output, bytes, cudaMemcpyDeviceToHost);
   cudaFree(device_a);
   cudaFree(device_b);
   cudaFree(device_output);
+  timer_report_tick(&t, "  memcpy from gpu");
 
-  timer_report_tick(&t, "done");
   pack->finished = true; /* VERY IMPORTANT! */
   return NULL;
 }
