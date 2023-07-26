@@ -267,6 +267,9 @@ struct
           fun block (m1, m2, m3, m4, c) =
             (hybrid_multiply' (m1, m2, c); hybrid_multiply' (m3, m4, c))
 
+          (* TODO: more efficient call to GPU possible here. Bundle up both
+           * calls as a single GPU task.
+           *)
           fun blockChoose (m1, m2, m3, m4, c) =
             ( hybrid_multiplyChoose (m1, m2, c)
             ; hybrid_multiplyChoose (m3, m4, c)
@@ -300,11 +303,11 @@ struct
                 val n = sidelength a
                 val aFlat = sequentialFlatten a
                 val bFlat = sequentialFlatten b
-                val tmp = ForkJoin.alloc (n * n)
+                val cFlat = sequentialFlatten c
               in
-                makedMMOnGpuTaskLeafWithCleanup aFlat bFlat tmp n (fn () =>
-                  modify c (fn (row, col, v) =>
-                    v + Array.sub (tmp, row * n + col)))
+                makedMMOnGpuTaskLeafWithCleanup aFlat bFlat cFlat n (fn () =>
+                  modify c (fn (row, col, _) =>
+                    Array.sub (cFlat, row * n + col)))
               end
           }
 
@@ -348,7 +351,7 @@ struct
       val n = sidelength a
       val aFlat = sequentialFlatten a
       val bFlat = sequentialFlatten b
-      val output = ForkJoin.alloc (n * n)
+      val output = Array.tabulate (n * n, fn _ => 0.0)
     in
       dMMHybridBenchmarkLeaf aFlat bFlat output n;
       tabulate n (fn (row, col) => Array.sub (output, row * n + col))
