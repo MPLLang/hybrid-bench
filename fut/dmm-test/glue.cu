@@ -1,4 +1,4 @@
-// #include "timer.h"
+#include <time.h>
 #include <stdio.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -51,6 +51,49 @@
 // }
 
 // ==========================================================================
+// timer stuff
+
+struct my_timer_t {
+  const char *name;
+  struct timespec start;
+  struct timespec most_recent_tick;
+};
+
+static void timespec_subtract(struct timespec *x, struct timespec *y) {
+  if (x->tv_nsec < y->tv_nsec) {
+    x->tv_sec -= 1;
+    x->tv_nsec += 1000000000L;
+  }
+  x->tv_sec -= y->tv_sec;
+  x->tv_nsec -= y->tv_nsec;
+}
+
+static void report_elapsed(
+  const char *name, 
+  const char *msg, 
+  struct timespec *x, 
+  struct timespec *y)
+{
+  struct timespec diff = *x;
+  timespec_subtract(&diff, y);
+  double secs = (double)diff.tv_sec + ((double)diff.tv_nsec / 1000000000.0);
+  printf("tick: %s: %s: elapsed: %lf\n", name, msg, secs);
+}
+
+void timer_begin(struct my_timer_t *t, const char *name) {
+  t->name = name;
+  clock_gettime(CLOCK_MONOTONIC, &(t->start));
+  t->most_recent_tick = t->start;
+}
+
+void timer_report_tick(struct my_timer_t *t, const char *msg) {
+  struct timespec prev = t->most_recent_tick;
+  clock_gettime(CLOCK_MONOTONIC, &(t->most_recent_tick));
+  report_elapsed(t->name, msg, &(t->most_recent_tick), &prev);
+}
+
+
+// ==========================================================================
 // dMM boilerplate
 
 
@@ -71,8 +114,8 @@ struct dMMPackage {
 
 /* TODO: call cublas */
 void* asyncdMMFunc(void* rawArg) {
-  // struct timer_t t;
-  // timer_begin(&t, "asyncdMMFunc");
+  struct my_timer_t t;
+  timer_begin(&t, "asyncdMMFunc");
 
   struct dMMPackage *pack = (struct dMMPackage *)rawArg;
 
@@ -88,7 +131,7 @@ void* asyncdMMFunc(void* rawArg) {
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, pack->inputLen, pack->inputLen, pack->inputLen, &alpha, (float*) pack->b, pack->inputLen, (float*) pack->a, pack->inputLen, &beta, (float*) pack->output, pack->inputLen);
   cublasDestroy(handle);
   // futhark_context_sync(pack->futStuff->ctx);
-  // timer_report_tick(&t, "done");
+  timer_report_tick(&t, "done");
   pack->finished = true; /* VERY IMPORTANT! */
   return NULL;
 }
