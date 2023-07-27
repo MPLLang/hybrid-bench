@@ -53,7 +53,7 @@ struct
     _import "freeFloatsOnGpu" public : MLton.Pointer.t -> unit;
 
   val leafSize = CommandLineArgs.parseInt "leaf-size" 256
-  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 4096
+  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 2048
 
   exception MatrixFormat
 
@@ -157,6 +157,44 @@ struct
   fun makeCopy src =
     let val dst = allocate {width = width src, height = height src}
     in copy {src = src, dst = dst}; dst
+    end
+
+
+  fun modify s f =
+    let
+      val t = top s
+      val l = left s
+
+      fun doit slice =
+        if width slice * height slice <= 10000 then
+          let
+            fun blockRow j =
+              let
+                val bigRow = j + top slice
+                val thisRow = bigRow - t
+                val arr = data slice
+                val start = rowskip slice * bigRow + left slice
+              in
+                Util.for (0, width slice) (fn i =>
+                  Array.update (arr, start + i, f
+                    { row = thisRow
+                    , col = left slice + i - l
+                    , v = Array.sub (arr, start + i)
+                    }))
+              end
+          in
+            Util.for (0, height slice) blockRow
+          end
+        else
+          let
+            val (b11, b12, b21, b22) = blocks slice
+          in
+            par4 (fn _ => doit b11, fn _ => doit b12, fn _ => doit b21, fn _ =>
+              doit b22);
+            ()
+          end
+    in
+      doit s
     end
 
 
@@ -270,7 +308,12 @@ struct
         val n = width a
         val device_a = memcpyFloatsToGpu (data a, Array.length (data a))
         val device_b = memcpyFloatsToGpu (data b, Array.length (data b))
-        val c = tabulate {width = n, height = n} (fn _ => 0.0)
+
+        val c = allocate {width = n, height = n}
+        val cData = data c
+        val _ = ForkJoin.parfor 5000 (0, n * n) (fn i =>
+          Array.update (cData, i, 0.0))
+
         val _ = syncGpu ()
       in
         ForkJoin.choice
@@ -374,32 +417,50 @@ struct
           , gpu =
               let
                 fun spawn () =
-                  rawFancyTwoSpawn
-                    ( (*data a*) da
-                    , top a1
-                    , left a1
-                    , top a2
-                    , left a2
-                    , rowskip a1
-                    , (*data b*) db
-                    , top b1
-                    , left b1
-                    , top b2
-                    , left b2
-                    , rowskip b1
-                    , data c
-                    , top c
-                    , left c
-                    , rowskip c
-                    , n
-                    )
+                  let
+                    val tmp = ForkJoin.alloc (n * n)
+                    val pkg = rawFancyTwoSpawn
+                      ( (*data a*) da
+                      , top a1
+                      , left a1
+                      , top a2
+                      , left a2
+                      , rowskip a1
+                      , (*data b*) db
+                      , top b1
+                      , left b1
+                      , top b2
+                      , left b2
+                      , rowskip b1
 
-                fun poll pkg =
+                      (* TODO: get rid of unused parameters, the 0s here *)
+                      , (*data c*) tmp
+                      , (*top c*) 0
+                      , (*left c*) 0
+                      , (*rowskip c*) 0
+                      , n
+                      )
+                  in
+                    (pkg, tmp)
+                  end
+
+                fun poll (pkg, _) =
                   (rawFancyTwoPoll pkg = 0w1)
 
-                fun finish pkg = rawFancyTwoFinish pkg
+                fun finish (pkg, tmp) =
+                  (rawFancyTwoFinish pkg; tmp)
+
+                fun cleanup tmp =
+                  modify c (fn {row, col, v} =>
+                    v + Array.sub (tmp, row * n + col))
+
               in
-                ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+                ForkJoin.gpuWithCleanup
+                  { spawn = spawn
+                  , poll = poll
+                  , finish = finish
+                  , cleanup = cleanup
+                  }
               end
           }
       end

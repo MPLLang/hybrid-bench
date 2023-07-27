@@ -12,7 +12,7 @@ More optimizations possible:
   - (DONE) in doBlockChoose, we should have a single GPU task that implements
     both multiplications back-to-back. This avoids one round-trip of the output
     data between CPU and GPU.
-  - in the GPU task, initialize don't do C <- AB + C,
+  - (DONE) in the GPU task, initialize don't do C <- AB + C,
     instead just do C <- AB, return the output C to MPL, and then let MPL
     use CPU to do the merging. This avoids sending C, and avoids all those
     nasty row-wise cuda memcpys.

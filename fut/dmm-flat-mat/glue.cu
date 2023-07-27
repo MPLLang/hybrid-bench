@@ -439,13 +439,13 @@ void* fancy_two_dmm_func(void* rawArg) {
 
   float *device_c;
   cudaMalloc(&device_c, bytes);
-  for (int64_t j = 0; j < n; j++) {
-    float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
-    cudaMemcpyAsync(device_c + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
-  }
+  // for (int64_t j = 0; j < n; j++) {
+  //   float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
+  //   cudaMemcpyAsync(device_c + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
+  // }
 
-  cudaDeviceSynchronize();
-  timer_report_tick(&t, "----- memcpy C to gpu");
+  // cudaDeviceSynchronize();
+  // timer_report_tick(&t, "----- memcpy C to gpu");
 
   float *tmp_a;
   float *tmp_b;
@@ -460,10 +460,10 @@ void* fancy_two_dmm_func(void* rawArg) {
   copy_square_block<<<GRID, SIZE>>>(tmp_a, n, pack->a, pack->aTop1, pack->aLeft1, pack->aRowskip);
   copy_square_block<<<GRID, SIZE>>>(tmp_b, n, pack->b, pack->bTop1, pack->bLeft1, pack->bRowskip);
   cudaDeviceSynchronize();
-  timer_report_tick(&t, "  memcpy A1,B1 on gpu");
+  timer_report_tick(&t, "- memcpy A1,B1 on gpu");
 
   float alpha = 1.0;
-  float beta = 1.0;
+  float beta = 0.0;
   cublasHandle_t handle;
   cublasCreate(&handle);  
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, tmp_a, n, tmp_b, n, &beta, device_c, n);
@@ -482,18 +482,13 @@ void* fancy_two_dmm_func(void* rawArg) {
   cublasDestroy(handle);
   timer_report_tick(&t, "   cublasSgemm(A2,B2)");
 
+  // for (int64_t j = 0; j < n; j++) {
+  //   float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
+  //   cudaMemcpyAsync(host_start, device_c + j*n, rowbytes, cudaMemcpyDeviceToHost);
+  // }
+  // cudaDeviceSynchronize();
 
-  // float *tmp_c = (float*)malloc(bytes);
-  // cudaMemcpy(tmp_c, device_c, bytes, cudaMemcpyDeviceToHost);
-
-  for (int64_t j = 0; j < n; j++) {
-    float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
-    // memcpy(host_start, tmp_c + j*n, rowbytes);
-    cudaMemcpyAsync(host_start, device_c + j*n, rowbytes, cudaMemcpyDeviceToHost);
-  }
-  // free(tmp_c);
-  cudaDeviceSynchronize();
-
+  cudaMemcpy(pack->c, device_c, bytes, cudaMemcpyDeviceToHost);
   cudaFree(tmp_a);
   cudaFree(tmp_b);
   cudaFree(device_c);

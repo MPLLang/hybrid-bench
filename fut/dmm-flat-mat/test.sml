@@ -1,4 +1,4 @@
-val n = CommandLineArgs.parseInt "n" 8192
+val n = CommandLineArgs.parseInt "n" 16384
 val impl = CommandLineArgs.parseString "impl" "hybrid"
 
 val input1 = MatReal32.tabulate {width = n, height = n} (fn _ => 1.0)
