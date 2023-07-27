@@ -6,12 +6,16 @@ struct
 
   type dmm_package = MLton.Pointer.t
 
+  (* ====================== *)
+
   val rawSpawn =
     _import "dMMSpawn" public : r32 array * r32 array * r32 array * i64 -> dmm_package;
 
   val rawPoll = _import "dMMPoll" public : dmm_package -> Word8.word;
 
   val rawFinish = _import "dMMFinish" public : dmm_package -> unit;
+
+  (* ====================== *)
 
   val rawFancySpawn =
     _import "fancy_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
@@ -20,6 +24,19 @@ struct
     _import "fancy_dmm_poll" public : dmm_package -> Word8.word;
 
   val rawFancyFinish = _import "fancy_dmm_finish" public : dmm_package -> unit;
+
+  (* ====================== *)
+
+  val rawFancyTwoSpawn =
+    _import "fancy_two_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
+
+  val rawFancyTwoPoll =
+    _import "fancy_two_dmm_poll" public : dmm_package -> Word8.word;
+
+  val rawFancyTwoFinish =
+    _import "fancy_two_dmm_finish" public : dmm_package -> unit;
+
+  (* ====================== *)
 
   val memcpy_floats =
     _import "memcpy_floats" public : r32 array * i64 * r32 array * i64 * i64 -> unit;
@@ -327,13 +344,11 @@ struct
           )
 
         fun doBlockChoose (m1, m2, m3, m4, c) =
-          ( hybrid_multiply_inplace_choose (m1, da) (m2, db) c
-          ; hybrid_multiply_inplace_choose (m3, da) (m4, db) c
-          )
+          hybrid_multiply_inplace_two_choose (m1, m3, da) (m2, m4, db) c
       in
         par4
           ( fn _ => doBlock (a11, b11, a12, b21, c11)
-          , fn _ => doBlock (a11, b12, a12, b22, c12)
+          , fn _ => doBlockChoose (a11, b12, a12, b22, c12)
           , fn _ => doBlockChoose (a21, b11, a22, b21, c21)
           , fn _ => doBlockChoose (a21, b12, a22, b22, c22)
           );
@@ -341,28 +356,37 @@ struct
       end
 
 
-  and hybrid_multiply_inplace_choose (a, da) (b, db) c =
-    if width a < gpuThresh then
-      hybrid_multiply_inplace (a, da) (b, db) c
+  and hybrid_multiply_inplace_two_choose (a1, a2, da) (b1, b2, db) c =
+    if width a1 < gpuThresh then
+      ( hybrid_multiply_inplace (a1, da) (b1, db) c
+      ; hybrid_multiply_inplace (a2, da) (b2, db) c
+      )
 
     else
       let
-        val n = width a
+        val n = width a1
       in
         ForkJoin.choice
-          { cpu = fn () => hybrid_multiply_inplace (a, da) (b, db) c
+          { cpu = fn () =>
+              ( hybrid_multiply_inplace (a1, da) (b1, db) c
+              ; hybrid_multiply_inplace (a2, da) (b2, db) c
+              )
           , gpu =
               let
                 fun spawn () =
-                  rawFancySpawn
+                  rawFancyTwoSpawn
                     ( (*data a*) da
-                    , top a
-                    , left a
-                    , rowskip a
+                    , top a1
+                    , left a1
+                    , top a2
+                    , left a2
+                    , rowskip a1
                     , (*data b*) db
-                    , top b
-                    , left b
-                    , rowskip b
+                    , top b1
+                    , left b1
+                    , top b2
+                    , left b2
+                    , rowskip b1
                     , data c
                     , top c
                     , left c
@@ -371,14 +395,56 @@ struct
                     )
 
                 fun poll pkg =
-                  (rawFancyPoll pkg = 0w1)
+                  (rawFancyTwoPoll pkg = 0w1)
 
-                fun finish pkg = rawFancyFinish pkg
+                fun finish pkg = rawFancyTwoFinish pkg
               in
                 ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
               end
           }
       end
+
+
+  (*
+    and hybrid_multiply_inplace_choose (a, da) (b, db) c =
+      if width a < gpuThresh then
+        hybrid_multiply_inplace (a, da) (b, db) c
+  
+      else
+        let
+          val n = width a
+        in
+          ForkJoin.choice
+            { cpu = fn () => hybrid_multiply_inplace (a, da) (b, db) c
+            , gpu =
+                let
+                  fun spawn () =
+                    rawFancySpawn
+                      ( (*data a*) da
+                      , top a
+                      , left a
+                      , rowskip a
+                      , (*data b*) db
+                      , top b
+                      , left b
+                      , rowskip b
+                      , data c
+                      , top c
+                      , left c
+                      , rowskip c
+                      , n
+                      )
+  
+                  fun poll pkg =
+                    (rawFancyPoll pkg = 0w1)
+  
+                  fun finish pkg = rawFancyFinish pkg
+                in
+                  ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+                end
+            }
+        end
+  *)
 
 
   and hybrid_multiply (a, b) =
