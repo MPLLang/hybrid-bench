@@ -444,6 +444,7 @@ void* fancy_two_dmm_func(void* rawArg) {
     cudaMemcpyAsync(device_c + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
   }
 
+  cudaDeviceSynchronize();
   timer_report_tick(&t, "----- memcpy C to gpu");
 
   float *tmp_a;
