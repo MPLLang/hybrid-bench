@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 #include <pthread.h>
+#define SIZE 256
 
 // ==========================================================================
 // timer stuff
@@ -160,20 +161,45 @@ extern "C" void dMMFinish(
   free(pack);
 }
 
+// ==========================================================================
+
+extern "C"
+void * memcpyFloatsToGpu(float *data, int64_t len) {
+  struct my_timer_t t;
+  timer_begin(&t, "memcpyFloatsToGpu");
+
+  float *p;
+  cudaMalloc(&p, len*sizeof(float));
+  cudaMemcpyAsync(p, data, len*sizeof(float), cudaMemcpyHostToDevice);
+
+  timer_report_tick(&t, "done");
+  return p;
+}
+
+extern "C"
+void synchronizeGpu() {
+  cudaDeviceSynchronize();
+}
+
+extern "C"
+void freeFloatsOnGpu(void *devicePtr) {
+  cudaFree(devicePtr);
+}
+
 
 // ==========================================================================
 
 
 struct fancy_dmm_package {
-  float * a;
+  float * a;  // on device
   int64_t aTop;
   int64_t aLeft;
   int64_t aRowskip;
-  float * b;
+  float * b;  // on device
   int64_t bTop;
   int64_t bLeft;
   int64_t bRowskip;
-  float * c;
+  float * c;  // on host
   int64_t cTop;
   int64_t cLeft;
   int64_t cRowskip;
@@ -185,6 +211,30 @@ struct fancy_dmm_package {
 };
 
 
+// copy into dst[0..n*n)
+__global__
+void copy_square_block(
+  float *dst,
+  uint64_t n,
+  float *src,
+  uint64_t top,
+  uint64_t left,
+  uint64_t rowskip)
+{
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = blockDim.x * gridDim.x;
+
+  int total = n*n;
+  for (int i = tid; i < total; i += stride) {
+    int row = i/n;
+    int col = i%n;
+    int srcIdx = (top + row) * rowskip + left + col;
+    dst[i] = src[srcIdx];
+  }
+}
+
+
+extern "C"
 void* fancy_dmm_func(void* rawArg) {
   struct my_timer_t t;
   timer_begin(&t, "fancy_dmm_func");
@@ -199,11 +249,13 @@ void* fancy_dmm_func(void* rawArg) {
   float *device_a;
   // float *tmp_a = (float*)malloc(bytes);
   cudaMalloc(&device_a, bytes);
+  /*
   for (int64_t j = 0; j < n; j++) {
     float *host_start = pack->a + (pack->aTop + j) * pack->aRowskip + pack->aLeft;
-    cudaMemcpyAsync(device_a + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
+    cudaMemcpyAsync(device_a + j*n, host_start, rowbytes, cudaMemcpyDeviceToDevice);
     // memcpy(tmp_a + j*n, host_start, rowbytes);
   }
+  */
   // cudaMemcpy(device_a, tmp_a, bytes, cudaMemcpyHostToDevice);
   // free(tmp_a);
 
@@ -211,11 +263,13 @@ void* fancy_dmm_func(void* rawArg) {
   float *device_b;
   // float *tmp_b = (float*)malloc(bytes);
   cudaMalloc(&device_b, bytes);
+  /*
   for (int64_t j = 0; j < n; j++) {
     float *host_start = pack->b + (pack->bTop + j) * pack->bRowskip + pack->bLeft;
-    cudaMemcpyAsync(device_b + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
+    cudaMemcpyAsync(device_b + j*n, host_start, rowbytes, cudaMemcpyDeviceToDevice);
     // memcpy(tmp_b + j*n, host_start, rowbytes);
   }
+  */
   // cudaMemcpy(device_b, tmp_b, bytes, cudaMemcpyHostToDevice);
   // free(tmp_b);
 
@@ -230,9 +284,18 @@ void* fancy_dmm_func(void* rawArg) {
   }
   // cudaMemcpy(device_c, tmp_c, bytes, cudaMemcpyHostToDevice);
   // free(tmp_c);
+
+  int GRID = ((n*n)+(SIZE-1))/SIZE;
+  if(GRID == 0) {
+    GRID = 1;
+  }
+  copy_square_block<<<GRID, SIZE>>>(device_a, n, pack->a, pack->aTop, pack->aLeft, pack->aRowskip);
+  // cudaDeviceSynchronize();
+
+  copy_square_block<<<GRID, SIZE>>>(device_b, n, pack->b, pack->bTop, pack->bLeft, pack->bRowskip);
   cudaDeviceSynchronize();
 
-  // timer_report_tick(&t, "--- memcpy to gpu");
+  timer_report_tick(&t, "--- memcpy to gpu");
 
   float alpha = 1.0;
   float beta = 1.0;
@@ -240,7 +303,7 @@ void* fancy_dmm_func(void* rawArg) {
   cublasCreate(&handle);  
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, device_a, n, device_b, n, &beta, device_c, n);
   cublasDestroy(handle);
-  // timer_report_tick(&t, "      cublasSgemm");
+  timer_report_tick(&t, "      cublasSgemm");
 
 
   // float *tmp_c = (float*)malloc(bytes);
@@ -249,14 +312,15 @@ void* fancy_dmm_func(void* rawArg) {
   for (int64_t j = 0; j < n; j++) {
     float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
     // memcpy(host_start, tmp_c + j*n, rowbytes);
-    cudaMemcpy(host_start, device_c + j*n, rowbytes, cudaMemcpyDeviceToHost);
+    cudaMemcpyAsync(host_start, device_c + j*n, rowbytes, cudaMemcpyDeviceToHost);
   }
   // free(tmp_c);
+  cudaDeviceSynchronize();
 
   cudaFree(device_a);
   cudaFree(device_b);
   cudaFree(device_c);
-  // timer_report_tick(&t, "  memcpy from gpu");
+  timer_report_tick(&t, "  memcpy from gpu");
 
   pack->finished = true; /* VERY IMPORTANT! */
   return NULL;
@@ -265,15 +329,15 @@ void* fancy_dmm_func(void* rawArg) {
 
 extern "C" struct fancy_dmm_package * 
 fancy_dmm_spawn(
-  float * a,
+  float * a,     // on device
   int64_t aTop,
   int64_t aLeft,
   int64_t aRowskip,
-  float * b,
+  float * b,     // on device
   int64_t bTop,
   int64_t bLeft,
   int64_t bRowskip,
-  float * c,
+  float * c,     // on host
   int64_t cTop,
   int64_t cLeft,
   int64_t cRowskip,

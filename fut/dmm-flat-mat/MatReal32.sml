@@ -14,7 +14,7 @@ struct
   val rawFinish = _import "dMMFinish" public : dmm_package -> unit;
 
   val rawFancySpawn =
-    _import "fancy_dmm_spawn" public : r32 array * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
+    _import "fancy_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
 
   val rawFancyPoll =
     _import "fancy_dmm_poll" public : dmm_package -> Word8.word;
@@ -27,8 +27,16 @@ struct
   val cpu_sgemm =
     _import "cpu_sgemm" public : r32 array * r32 array * r32 array * i64 -> unit;
 
+  val memcpyFloatsToGpu =
+    _import "memcpyFloatsToGpu" public : r32 array * i64 -> MLton.Pointer.t;
+
+  val syncGpu = _import "synchronizeGpu" public : unit -> unit;
+
+  val freeFloatsOnGpu =
+    _import "freeFloatsOnGpu" public : MLton.Pointer.t -> unit;
+
   val leafSize = CommandLineArgs.parseInt "leaf-size" 256
-  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 512
+  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 4096
 
   exception MatrixFormat
 
@@ -243,7 +251,10 @@ struct
     else
       let
         val n = width a
+        val device_a = memcpyFloatsToGpu (data a, Array.length (data a))
+        val device_b = memcpyFloatsToGpu (data b, Array.length (data b))
         val c = tabulate {width = n, height = n} (fn _ => 0.0)
+        val _ = syncGpu ()
       in
         ForkJoin.choice
           { cpu = fn () => Util.die "uh oh! gpu_multiply failed"
@@ -251,11 +262,11 @@ struct
               let
                 fun spawn () =
                   rawFancySpawn
-                    ( data a
+                    ( (*data a*) device_a
                     , top a
                     , left a
                     , rowskip a
-                    , data b
+                    , (*data b*) device_b
                     , top b
                     , left b
                     , rowskip b
@@ -274,6 +285,9 @@ struct
                 ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
               end
           };
+
+        freeFloatsOnGpu device_a;
+        freeFloatsOnGpu device_b;
         c
       end
 
@@ -281,7 +295,7 @@ struct
   (* ====================================================================== *)
 
 
-  fun hybrid_multiply_inplace (a, b, c) =
+  fun hybrid_multiply_inplace (a, da) (b, db) c =
     if
       not
         (isSquare a andalso isSquare b andalso isSquare c
@@ -308,18 +322,18 @@ struct
         val (c11, c12, c21, c22) = blocks c
 
         fun doBlock (m1, m2, m3, m4, c) =
-          ( hybrid_multiply_inplace (m1, m2, c)
-          ; hybrid_multiply_inplace (m3, m4, c)
+          ( hybrid_multiply_inplace (m1, da) (m2, db) c
+          ; hybrid_multiply_inplace (m3, da) (m4, db) c
           )
 
         fun doBlockChoose (m1, m2, m3, m4, c) =
-          ( hybrid_multiply_inplace_choose (m1, m2, c)
-          ; hybrid_multiply_inplace_choose (m3, m4, c)
+          ( hybrid_multiply_inplace_choose (m1, da) (m2, db) c
+          ; hybrid_multiply_inplace_choose (m3, da) (m4, db) c
           )
       in
         par4
           ( fn _ => doBlock (a11, b11, a12, b21, c11)
-          , fn _ => doBlockChoose (a11, b12, a12, b22, c12)
+          , fn _ => doBlock (a11, b12, a12, b22, c12)
           , fn _ => doBlockChoose (a21, b11, a22, b21, c21)
           , fn _ => doBlockChoose (a21, b12, a22, b22, c22)
           );
@@ -327,34 +341,25 @@ struct
       end
 
 
-  and hybrid_multiply_inplace_choose (a, b, c) =
-    if
-      not
-        (isSquare a andalso isSquare b andalso isSquare c
-         andalso width a = width b andalso width a = width c)
-    then
-      raise MatrixFormat
-
-    else if
-      width a < gpuThresh
-    then
-      hybrid_multiply_inplace (a, b, c)
+  and hybrid_multiply_inplace_choose (a, da) (b, db) c =
+    if width a < gpuThresh then
+      hybrid_multiply_inplace (a, da) (b, db) c
 
     else
       let
         val n = width a
       in
         ForkJoin.choice
-          { cpu = fn () => hybrid_multiply_inplace (a, b, c)
+          { cpu = fn () => hybrid_multiply_inplace (a, da) (b, db) c
           , gpu =
               let
                 fun spawn () =
                   rawFancySpawn
-                    ( data a
+                    ( (*data a*) da
                     , top a
                     , left a
                     , rowskip a
-                    , data b
+                    , (*data b*) db
                     , top b
                     , left b
                     , rowskip b
@@ -381,10 +386,26 @@ struct
       raise MatrixFormat
     else
       let
+        val device_a = memcpyFloatsToGpu (data a, Array.length (data a))
+        val device_b = memcpyFloatsToGpu (data b, Array.length (data b))
         val n = width a
-        val c = tabulate {width = n, height = n} (fn _ => 0.0)
+
+        (* val c = tabulate {width = n, height = n} (fn _ => 0.0) *)
+
+        val c = allocate {width = n, height = n}
+        val cData = data c
+        val _ = ForkJoin.parfor 5000 (0, n * n) (fn i =>
+          Array.update (cData, i, 0.0))
+
+        val _ = syncGpu ()
+
+        val (_, tm) = Util.getTime (fn () =>
+          hybrid_multiply_inplace (a, device_a) (b, device_b) c)
+
       in
-        hybrid_multiply_inplace (a, b, c);
+        print ("hybrid_multiply_inplace time: " ^ Time.fmt 4 tm ^ "\n");
+        freeFloatsOnGpu device_a;
+        freeFloatsOnGpu device_b;
         c
       end
 
