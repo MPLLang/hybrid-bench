@@ -32,16 +32,21 @@ struct
 
   val sort_finish = _import "sort_finish" public : sort_package -> unit;
 
-  fun sort ctx seq : (sort_package, i32 Seq.t) ForkJoin.gpu_task =
+  fun sort ctx seq : (sort_package * i32 array, i32 Seq.t) ForkJoin.gpu_task =
     let
-      val (data, start, len) = ArraySlice.base seq
-      val output = ForkJoin.alloc len
-
       fun spawn () =
-        sort_spawn (ctx, data, start, len, output)
-      fun poll pkg =
+        let
+          val (data, start, len) = ArraySlice.base seq
+          val output = ForkJoin.alloc len
+          val pkg = sort_spawn (ctx, data, start, len, output)
+        in
+          (pkg, output)
+        end
+
+      fun poll (pkg, output) =
         (sort_poll pkg = 0w1)
-      fun finish pkg =
+
+      fun finish (pkg, output) =
         (sort_finish pkg; ArraySlice.full output)
     in
       ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}

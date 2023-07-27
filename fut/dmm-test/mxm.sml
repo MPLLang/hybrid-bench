@@ -118,7 +118,7 @@ struct
           fun blockRow i =
             memcpy_floats (result, (row + i) * rowskip + col, s, 0, n)
         in
-          Util.for (0, n) blockRow
+          ForkJoin.parfor (Int.max (1, 5000 div leafSize)) (0, n) blockRow
         end
 
     | Node (n, m11, m12, m21, m22) =>
@@ -293,21 +293,34 @@ struct
         ForkJoin.choice
           { cpu = fn () => hybrid_multiply' (a, b, c)
           , gpu =
-              (* TODO: right now, this work happens NO MATTER WHAT, even if
-               * the GPU is not used. To fix that, need to update the GPU task
-               * primitive.
-               *
-               * TODO TODO: DOUBLE CHECK THIS FOR OTHER BENCHMARKS
-               *)
               let
-                val n = sidelength a
-                val aFlat = sequentialFlatten a
-                val bFlat = sequentialFlatten b
-                val cFlat = sequentialFlatten c
-              in
-                makedMMOnGpuTaskLeafWithCleanup aFlat bFlat cFlat n (fn () =>
+                fun spawn () =
+                  let
+                    val n = sidelength a
+                    val aFlat = sequentialFlatten a
+                    val bFlat = sequentialFlatten b
+                    val cFlat = sequentialFlatten c
+                    val pkg = rawdMMSpawn (aFlat, bFlat, cFlat, n)
+                  in
+                    (pkg, cFlat, n)
+                  end
+
+                fun poll (pkg, _, _) =
+                  (0w1 = rawdMMPoll pkg)
+
+                fun finish (pkg, cFlat, n) =
+                  (rawdMMFinish pkg; (cFlat, n))
+
+                fun cleanup (cFlat, n) =
                   modify c (fn (row, col, _) =>
-                    Array.sub (cFlat, row * n + col)))
+                    Array.sub (cFlat, row * n + col))
+              in
+                ForkJoin.gpuWithCleanup
+                  { spawn = spawn
+                  , poll = poll
+                  , finish = finish
+                  , cleanup = cleanup
+                  }
               end
           }
 

@@ -2,6 +2,7 @@ INSTALL OPENBLAS
   openblas v0.3.23
   make USE_THREAD=0 USE_LOCKING=1
   make PREFIX=/path/to/folder/ install
+  export LD_LIBRARY_PATH=/path/to/folder/:$LD_LIBRARY_PATH
 
 might need to run with collection disabled
   @mpl procs max-cc-depth 0 collection-type none --
