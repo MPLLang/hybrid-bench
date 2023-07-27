@@ -13,13 +13,22 @@ struct
 
   val rawFinish = _import "dMMFinish" public : dmm_package -> unit;
 
+  val rawFancySpawn =
+    _import "fancy_dmm_spawn" public : r32 array * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
+
+  val rawFancyPoll =
+    _import "fancy_dmm_poll" public : dmm_package -> Word8.word;
+
+  val rawFancyFinish = _import "fancy_dmm_finish" public : dmm_package -> unit;
+
   val memcpy_floats =
     _import "memcpy_floats" public : r32 array * i64 * r32 array * i64 * i64 -> unit;
 
   val cpu_sgemm =
     _import "cpu_sgemm" public : r32 array * r32 array * r32 array * i64 -> unit;
 
-  val leafSize = CommandLineArgs.parseInt "leaf-size" 512
+  val leafSize = CommandLineArgs.parseInt "leaf-size" 256
+  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 512
 
   exception MatrixFormat
 
@@ -68,6 +77,7 @@ struct
   fun left (Slice {left = l, ...}) = l
   fun mat (Slice {mat = m, ...}) = m
   fun data (Slice {mat = Mat {data = d, ...}, ...}) = d
+  fun rowskip (Slice {mat = Mat {width = w, ...}, ...}) = w
 
 
   fun isSquare x =
@@ -233,8 +243,6 @@ struct
     else
       let
         val n = width a
-        val tmpA = makeCopy a
-        val tmpB = makeCopy b
         val c = tabulate {width = n, height = n} (fn _ => 0.0)
       in
         ForkJoin.choice
@@ -242,12 +250,26 @@ struct
           , gpu =
               let
                 fun spawn () =
-                  rawSpawn (data tmpA, data tmpB, data c, n)
+                  rawFancySpawn
+                    ( data a
+                    , top a
+                    , left a
+                    , rowskip a
+                    , data b
+                    , top b
+                    , left b
+                    , rowskip b
+                    , data c
+                    , top c
+                    , left c
+                    , rowskip c
+                    , n
+                    )
 
                 fun poll pkg =
-                  (rawPoll pkg = 0w1)
+                  (rawFancyPoll pkg = 0w1)
 
-                fun finish pkg = rawFinish pkg
+                fun finish pkg = rawFancyFinish pkg
               in
                 ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
               end
@@ -297,7 +319,7 @@ struct
       in
         par4
           ( fn _ => doBlock (a11, b11, a12, b21, c11)
-          , fn _ => doBlock (a11, b12, a12, b22, c12)
+          , fn _ => doBlockChoose (a11, b12, a12, b22, c12)
           , fn _ => doBlockChoose (a21, b11, a22, b21, c21)
           , fn _ => doBlockChoose (a21, b12, a22, b22, c22)
           );
@@ -314,7 +336,7 @@ struct
       raise MatrixFormat
 
     else if
-      width a < leafSize
+      width a < gpuThresh
     then
       hybrid_multiply_inplace (a, b, c)
 
@@ -327,30 +349,28 @@ struct
           , gpu =
               let
                 fun spawn () =
-                  let
-                    val tmpA = makeCopy a
-                    val tmpB = makeCopy b
-                    val tmpC = makeCopy c
+                  rawFancySpawn
+                    ( data a
+                    , top a
+                    , left a
+                    , rowskip a
+                    , data b
+                    , top b
+                    , left b
+                    , rowskip b
+                    , data c
+                    , top c
+                    , left c
+                    , rowskip c
+                    , n
+                    )
 
-                    val pkg = rawSpawn (data tmpA, data tmpB, data tmpC, n)
-                  in
-                    (pkg, tmpC)
-                  end
+                fun poll pkg =
+                  (rawFancyPoll pkg = 0w1)
 
-                fun poll (pkg, _) =
-                  (rawPoll pkg = 0w1)
-
-                fun finish (pkg, tmpC) =
-                  (rawFinish pkg; tmpC)
-
-                fun cleanup tmpC = copy {src = tmpC, dst = c}
+                fun finish pkg = rawFancyFinish pkg
               in
-                ForkJoin.gpuWithCleanup
-                  { spawn = spawn
-                  , poll = poll
-                  , finish = finish
-                  , cleanup = cleanup
-                  }
+                ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
               end
           }
       end

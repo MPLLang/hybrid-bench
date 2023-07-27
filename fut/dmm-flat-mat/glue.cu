@@ -6,51 +6,6 @@
 #include <pthread.h>
 
 // ==========================================================================
-// context boilerplate
-
-
-/* TODO: this stuff can probably go away entirely */
-
-// struct futStuff {
-//   struct futhark_context_config *cfg;
-//   struct futhark_context *ctx;
-// };
-
-// void* futInit() {
-//   struct timer_t t;
-//   timer_begin(&t, "futInit");
-
-//   struct futhark_context_config *cfg = futhark_context_config_new();
-//   timer_report_tick(&t, "futhark_context_config_new");
-
-//   struct futhark_context *ctx = futhark_context_new(cfg);
-//   timer_report_tick(&t, "futhark_context_new");
-
-//   struct futStuff *result = malloc(sizeof(struct futStuff));
-//   result->cfg = cfg;
-//   result->ctx = ctx;
-//   return (void *)result;
-// }
-
-// void futFinish(struct futStuff * futStuff) {
-//   struct futhark_context_config *cfg = futStuff->cfg;
-//   struct futhark_context *ctx = futStuff->ctx;
-
-//   struct timer_t t;
-//   timer_begin(&t, "futFinish");
-
-//   futhark_context_free(ctx);
-//   timer_report_tick(&t, "futhark_context_free");
-
-//   futhark_context_config_free(cfg);
-//   timer_report_tick(&t, "futhark_context_config_free");
-
-//   futStuff->ctx = NULL;
-//   futStuff->cfg = NULL;
-//   free(futStuff);
-// }
-
-// ==========================================================================
 // timer stuff
 
 struct my_timer_t {
@@ -186,29 +141,183 @@ dMMSpawn(
   return pack;
 }
 
-/* TODO: probably doesn't need to change */
 extern "C" uint8_t dMMPoll(struct dMMPackage *pack) {
   return pack->finished ? 1 : 0;
 }
 
-// int64_t futBigAddOutputSize(struct bigAddPackage *pack) {
-//   // struct timer_t t;
-//   // timer_begin(&t, "futPrimesOutputSize");
-
-//   if (0 != pthread_join(pack->friend, NULL)) {
-//     printf("ERROR: glue.c: futBigAddOutputSize: pthread_join failed\n");
-//     exit(1);
-//   }
-
-//   // timer_report_tick(&t, "done");
-//   return pack->outputLen;
-// }
 
 /* TODO: memcpy from GPU back to pack->output
  *
  * (NOTE: futhark_values is equivalent of this memcpy. needs to be replaced) */
 extern "C" void dMMFinish(
   struct dMMPackage * pack)
+{
+  if (0 != pthread_join(pack->friends, NULL)) {
+    printf("ERROR: glue.c: pthread_join failed\n");
+    exit(1);
+  }
+
+  free(pack);
+}
+
+
+// ==========================================================================
+
+
+struct fancy_dmm_package {
+  float * a;
+  int64_t aTop;
+  int64_t aLeft;
+  int64_t aRowskip;
+  float * b;
+  int64_t bTop;
+  int64_t bLeft;
+  int64_t bRowskip;
+  float * c;
+  int64_t cTop;
+  int64_t cLeft;
+  int64_t cRowskip;
+  int64_t n;
+
+  /* these should stay */
+  bool finished;
+  pthread_t friends;
+};
+
+
+void* fancy_dmm_func(void* rawArg) {
+  struct my_timer_t t;
+  timer_begin(&t, "fancy_dmm_func");
+
+  struct fancy_dmm_package *pack = (struct fancy_dmm_package *)rawArg;
+
+  uint64_t n = pack->n;
+  uint64_t rowbytes = n*sizeof(float);
+  uint64_t bytes = n*rowbytes;
+
+
+  float *device_a;
+  // float *tmp_a = (float*)malloc(bytes);
+  cudaMalloc(&device_a, bytes);
+  for (int64_t j = 0; j < n; j++) {
+    float *host_start = pack->a + (pack->aTop + j) * pack->aRowskip + pack->aLeft;
+    cudaMemcpyAsync(device_a + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
+    // memcpy(tmp_a + j*n, host_start, rowbytes);
+  }
+  // cudaMemcpy(device_a, tmp_a, bytes, cudaMemcpyHostToDevice);
+  // free(tmp_a);
+
+
+  float *device_b;
+  // float *tmp_b = (float*)malloc(bytes);
+  cudaMalloc(&device_b, bytes);
+  for (int64_t j = 0; j < n; j++) {
+    float *host_start = pack->b + (pack->bTop + j) * pack->bRowskip + pack->bLeft;
+    cudaMemcpyAsync(device_b + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
+    // memcpy(tmp_b + j*n, host_start, rowbytes);
+  }
+  // cudaMemcpy(device_b, tmp_b, bytes, cudaMemcpyHostToDevice);
+  // free(tmp_b);
+
+
+  float *device_c;
+  // float *tmp_c = (float*)malloc(bytes);
+  cudaMalloc(&device_c, bytes);
+  for (int64_t j = 0; j < n; j++) {
+    float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
+    cudaMemcpyAsync(device_c + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
+    // memcpy(tmp_c + j*n, host_start, rowbytes);
+  }
+  // cudaMemcpy(device_c, tmp_c, bytes, cudaMemcpyHostToDevice);
+  // free(tmp_c);
+  cudaDeviceSynchronize();
+
+  // timer_report_tick(&t, "--- memcpy to gpu");
+
+  float alpha = 1.0;
+  float beta = 1.0;
+  cublasHandle_t handle;
+  cublasCreate(&handle);  
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, device_a, n, device_b, n, &beta, device_c, n);
+  cublasDestroy(handle);
+  // timer_report_tick(&t, "      cublasSgemm");
+
+
+  // float *tmp_c = (float*)malloc(bytes);
+  // cudaMemcpy(tmp_c, device_c, bytes, cudaMemcpyDeviceToHost);
+
+  for (int64_t j = 0; j < n; j++) {
+    float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
+    // memcpy(host_start, tmp_c + j*n, rowbytes);
+    cudaMemcpy(host_start, device_c + j*n, rowbytes, cudaMemcpyDeviceToHost);
+  }
+  // free(tmp_c);
+
+  cudaFree(device_a);
+  cudaFree(device_b);
+  cudaFree(device_c);
+  // timer_report_tick(&t, "  memcpy from gpu");
+
+  pack->finished = true; /* VERY IMPORTANT! */
+  return NULL;
+}
+
+
+extern "C" struct fancy_dmm_package * 
+fancy_dmm_spawn(
+  float * a,
+  int64_t aTop,
+  int64_t aLeft,
+  int64_t aRowskip,
+  float * b,
+  int64_t bTop,
+  int64_t bLeft,
+  int64_t bRowskip,
+  float * c,
+  int64_t cTop,
+  int64_t cLeft,
+  int64_t cRowskip,
+  int64_t n)
+{
+  struct fancy_dmm_package *pack = (fancy_dmm_package*)malloc(sizeof(struct fancy_dmm_package));
+
+  pack->a = a;
+  pack->aTop = aTop;
+  pack->aLeft = aLeft;
+  pack->aRowskip = aRowskip;
+
+  pack->b = b;
+  pack->bTop = bTop;
+  pack->bLeft = bLeft;
+  pack->bRowskip = bRowskip;
+
+  pack->c = c;
+  pack->cTop = cTop;
+  pack->cLeft = cLeft;
+  pack->cRowskip = cRowskip;
+
+  pack->n = n;
+
+  pack->finished = false;
+  if (0 != pthread_create(&(pack->friends), NULL, &fancy_dmm_func, pack)) {
+    printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
+    exit(1);
+  }
+
+  return pack;
+}
+
+
+extern "C" uint8_t fancy_dmm_poll(struct fancy_dmm_package *pack) {
+  return pack->finished ? 1 : 0;
+}
+
+
+/* TODO: memcpy from GPU back to pack->output
+ *
+ * (NOTE: futhark_values is equivalent of this memcpy. needs to be replaced) */
+extern "C" void fancy_dmm_finish(
+  struct fancy_dmm_package * pack)
 {
   if (0 != pthread_join(pack->friends, NULL)) {
     printf("ERROR: glue.c: pthread_join failed\n");
