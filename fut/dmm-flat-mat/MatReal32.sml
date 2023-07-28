@@ -55,6 +55,9 @@ struct
   val leafSize = CommandLineArgs.parseInt "leaf-size" 256
   val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 2048
 
+  val _ = print ("leaf-size " ^ Int.toString leafSize ^ "\n")
+  val _ = print ("gpu-thresh " ^ Int.toString gpuThresh ^ "\n")
+
   exception MatrixFormat
 
   (* ====================================================================== *)
@@ -257,11 +260,12 @@ struct
       width a <= leafSize
     then
       let
+        val n = width a
         val tmpA = makeCopy a
         val tmpB = makeCopy b
         val tmpC = makeCopy c
       in
-        cpu_sgemm (data tmpA, data tmpB, data tmpC, width a);
+        cpu_sgemm (data tmpA, data tmpB, data tmpC, n);
         copy {src = tmpC, dst = c}
       end
 
@@ -308,47 +312,47 @@ struct
         val n = width a
         val device_a = memcpyFloatsToGpu (data a, Array.length (data a))
         val device_b = memcpyFloatsToGpu (data b, Array.length (data b))
-
-        val c = allocate {width = n, height = n}
-        val cData = data c
-        val _ = ForkJoin.parfor 5000 (0, n * n) (fn i =>
-          Array.update (cData, i, 0.0))
-
         val _ = syncGpu ()
-      in
-        ForkJoin.choice
+
+        val result = ForkJoin.choice
           { cpu = fn () => Util.die "uh oh! gpu_multiply failed"
           , gpu =
               let
                 fun spawn () =
-                  rawFancySpawn
-                    ( (*data a*) device_a
-                    , top a
-                    , left a
-                    , rowskip a
-                    , (*data b*) device_b
-                    , top b
-                    , left b
-                    , rowskip b
-                    , data c
-                    , top c
-                    , left c
-                    , rowskip c
-                    , n
-                    )
+                  let
+                    val output = allocate {width = n, height = n}
+                    val pkg = rawFancySpawn
+                      ( (*data a*) device_a
+                      , top a
+                      , left a
+                      , rowskip a
+                      , (*data b*) device_b
+                      , top b
+                      , left b
+                      , rowskip b
+                      , (*data c*) data output
+                      , (*top c*) 0
+                      , (*left c*) 0
+                      , (*rowskip c)*) 0
+                      , n
+                      )
+                  in
+                    (pkg, output)
+                  end
 
-                fun poll pkg =
+                fun poll (pkg, _) =
                   (rawFancyPoll pkg = 0w1)
 
-                fun finish pkg = rawFancyFinish pkg
+                fun finish (pkg, output) =
+                  (rawFancyFinish pkg; output)
               in
                 ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
               end
-          };
-
+          }
+      in
         freeFloatsOnGpu device_a;
         freeFloatsOnGpu device_b;
-        c
+        result
       end
 
 
@@ -367,11 +371,12 @@ struct
       width a <= leafSize
     then
       let
+        val n = width a
         val tmpA = makeCopy a
         val tmpB = makeCopy b
         val tmpC = makeCopy c
       in
-        cpu_sgemm (data tmpA, data tmpB, data tmpC, width a);
+        cpu_sgemm (data tmpA, data tmpB, data tmpC, n);
         copy {src = tmpC, dst = c}
       end
 
@@ -513,26 +518,40 @@ struct
       raise MatrixFormat
     else
       let
-        val device_a = memcpyFloatsToGpu (data a, Array.length (data a))
-        val device_b = memcpyFloatsToGpu (data b, Array.length (data b))
         val n = width a
 
-        (* val c = tabulate {width = n, height = n} (fn _ => 0.0) *)
+        val (((da, db), c), tm) = Util.getTime (fn () =>
+          ForkJoin.par
+            ( fn () =>
+                let
+                  val da = memcpyFloatsToGpu (data a, Array.length (data a))
+                  val db = memcpyFloatsToGpu (data b, Array.length (data b))
+                in
+                  syncGpu ();
+                  (da, db)
+                end
 
-        val c = allocate {width = n, height = n}
-        val cData = data c
-        val _ = ForkJoin.parfor 5000 (0, n * n) (fn i =>
-          Array.update (cData, i, 0.0))
+            , fn () =>
+                let
+                  val c = allocate {width = n, height = n}
+                  val cData = data c
+                  val _ = ForkJoin.parfor 5000 (0, n * n) (fn i =>
+                    Array.update (cData, i, 0.0))
+                in
+                  c
+                end
+            ))
 
-        val _ = syncGpu ()
+        val _ = print ("hybrid_multiply: setup time: " ^ Time.fmt 4 tm ^ "\n")
+
 
         val (_, tm) = Util.getTime (fn () =>
-          hybrid_multiply_inplace (a, device_a) (b, device_b) c)
+          hybrid_multiply_inplace (a, da) (b, db) c)
 
       in
         print ("hybrid_multiply_inplace time: " ^ Time.fmt 4 tm ^ "\n");
-        freeFloatsOnGpu device_a;
-        freeFloatsOnGpu device_b;
+        freeFloatsOnGpu da;
+        freeFloatsOnGpu db;
         c
       end
 

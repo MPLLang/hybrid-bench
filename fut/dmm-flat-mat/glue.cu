@@ -4,7 +4,10 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 #include <pthread.h>
+
 #define SIZE 256
+
+#define ENABLE_TIMER_TICKS false
 
 // ==========================================================================
 // timer stuff
@@ -45,7 +48,9 @@ void timer_begin(struct my_timer_t *t, const char *name) {
 void timer_report_tick(struct my_timer_t *t, const char *msg) {
   struct timespec prev = t->most_recent_tick;
   clock_gettime(CLOCK_MONOTONIC, &(t->most_recent_tick));
-  report_elapsed(t->name, msg, &(t->most_recent_tick), &prev);
+  if (ENABLE_TIMER_TICKS) {
+    report_elapsed(t->name, msg, &(t->most_recent_tick), &prev);
+  }
 }
 
 
@@ -251,43 +256,11 @@ void* fancy_dmm_func(void* rawArg) {
 
 
   float *device_a;
-  // float *tmp_a = (float*)malloc(bytes);
-  cudaMalloc(&device_a, bytes);
-  /*
-  for (int64_t j = 0; j < n; j++) {
-    float *host_start = pack->a + (pack->aTop + j) * pack->aRowskip + pack->aLeft;
-    cudaMemcpyAsync(device_a + j*n, host_start, rowbytes, cudaMemcpyDeviceToDevice);
-    // memcpy(tmp_a + j*n, host_start, rowbytes);
-  }
-  */
-  // cudaMemcpy(device_a, tmp_a, bytes, cudaMemcpyHostToDevice);
-  // free(tmp_a);
-
-
   float *device_b;
-  // float *tmp_b = (float*)malloc(bytes);
-  cudaMalloc(&device_b, bytes);
-  /*
-  for (int64_t j = 0; j < n; j++) {
-    float *host_start = pack->b + (pack->bTop + j) * pack->bRowskip + pack->bLeft;
-    cudaMemcpyAsync(device_b + j*n, host_start, rowbytes, cudaMemcpyDeviceToDevice);
-    // memcpy(tmp_b + j*n, host_start, rowbytes);
-  }
-  */
-  // cudaMemcpy(device_b, tmp_b, bytes, cudaMemcpyHostToDevice);
-  // free(tmp_b);
-
-
   float *device_c;
-  // float *tmp_c = (float*)malloc(bytes);
+  cudaMalloc(&device_a, bytes);
+  cudaMalloc(&device_b, bytes);
   cudaMalloc(&device_c, bytes);
-  for (int64_t j = 0; j < n; j++) {
-    float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
-    cudaMemcpyAsync(device_c + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
-    // memcpy(tmp_c + j*n, host_start, rowbytes);
-  }
-  // cudaMemcpy(device_c, tmp_c, bytes, cudaMemcpyHostToDevice);
-  // free(tmp_c);
 
   int GRID = ((n*n)+(SIZE-1))/SIZE;
   if(GRID == 0) {
@@ -302,7 +275,7 @@ void* fancy_dmm_func(void* rawArg) {
   timer_report_tick(&t, "--- memcpy to gpu");
 
   float alpha = 1.0;
-  float beta = 1.0;
+  float beta = 0.0;
   cublasHandle_t handle;
   cublasCreate(&handle);  
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, device_a, n, device_b, n, &beta, device_c, n);
@@ -310,16 +283,7 @@ void* fancy_dmm_func(void* rawArg) {
   timer_report_tick(&t, "      cublasSgemm");
 
 
-  // float *tmp_c = (float*)malloc(bytes);
-  // cudaMemcpy(tmp_c, device_c, bytes, cudaMemcpyDeviceToHost);
-
-  for (int64_t j = 0; j < n; j++) {
-    float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
-    // memcpy(host_start, tmp_c + j*n, rowbytes);
-    cudaMemcpyAsync(host_start, device_c + j*n, rowbytes, cudaMemcpyDeviceToHost);
-  }
-  // free(tmp_c);
-  cudaDeviceSynchronize();
+  cudaMemcpy(pack->c, device_c, bytes, cudaMemcpyDeviceToHost);
 
   cudaFree(device_a);
   cudaFree(device_b);
