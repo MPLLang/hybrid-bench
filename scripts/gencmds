@@ -99,14 +99,25 @@ def add_extra(row):
 
 
 uniques = set()
-def filterunique(row):
+def filter_unique(row):
+  if row is None:
+    return None
   if row['cmd'] in uniques:
     return None
   uniques.add(row['cmd'])
   return row
 
+
+def filter_gpu_procs(row):
+  if row is None:
+    return None
+  if row['impl'] == 'gpu' and row['procs'] != 2:
+    return None
+  return row
+
+
 tests = [
-  add_extra(filterunique(make_row(procs, impl, k)) )
+  add_extra(filter_gpu_procs(filter_unique(make_row(procs, impl, k))))
   for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, primes]
   for procs in [2,4,6,8,12,16,24,30]
   for impl in ["hybrid","cpu","gpu"]
