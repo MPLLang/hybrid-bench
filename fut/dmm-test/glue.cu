@@ -150,7 +150,7 @@ void* asyncdMMFunc(void* rawArg) {
   cudaFree(device_output);
   // timer_report_tick(&t, "  memcpy from gpu");
 
-  pack->finished = true; /* VERY IMPORTANT! */
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST); /* VERY IMPORTANT! */
   return NULL;
 }
 

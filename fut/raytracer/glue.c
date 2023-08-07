@@ -139,7 +139,7 @@ void *render_threadfunc(void *rawArg)
 
   timer_report_tick(&t, "render+move+free");
 
-  pack->finished = true;
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST);
   return NULL;
 }
 

@@ -80,7 +80,7 @@ void *mandelbrot_threadfunc(void *rawArg)
   futhark_free_u8_1d(ctx, output);
   timer_report_tick(&t, "mandelbrot");
 
-  pack->finished = true;
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST);
   return NULL;
 }
 

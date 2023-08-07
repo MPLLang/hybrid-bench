@@ -109,7 +109,7 @@ tests = [
   add_extra(filterunique(make_row(procs, impl, k)) )
   for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, primes]
   for procs in [2,4,6,8,12,16,24,30]
-  for impl in ["cpu","gpu","hybrid"]
+  for impl in ["hybrid","cpu","gpu"]
   for k in [1,2,4,8]
 ]
 tests = [ r for r in tests if r is not None ]

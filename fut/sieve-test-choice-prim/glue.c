@@ -80,7 +80,7 @@ void* asyncSieveFunc(void* rawArg) {
 
   timer_report_tick(&t, "done");
 
-  pack->finished = true;
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST);
   return NULL;
 }
 
@@ -175,7 +175,7 @@ void* asyncPrimesFunc(void* rawArg) {
 
   timer_report_tick(&t, "done");
 
-  pack->finished = true;
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST);
   return NULL;
 }
 

@@ -95,7 +95,7 @@ void *sort_threadfunc(void *rawArg)
   futhark_free_i32_1d(ctx, output);
   timer_report_tick(&t, "sort");
 
-  pack->finished = true;
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST);
   return NULL;
 }
 

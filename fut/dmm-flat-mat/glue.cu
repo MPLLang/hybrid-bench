@@ -37,6 +37,7 @@ static void report_elapsed(
   timespec_subtract(&diff, y);
   double secs = (double)diff.tv_sec + ((double)diff.tv_nsec / 1000000000.0);
   printf("tick: %s: %s: elapsed: %lf\n", name, msg, secs);
+  fflush(stdout);
 }
 
 void timer_begin(struct my_timer_t *t, const char *name) {
@@ -111,7 +112,7 @@ void* asyncdMMFunc(void* rawArg) {
   cudaFree(device_output);
   // timer_report_tick(&t, "  memcpy from gpu");
 
-  pack->finished = true; /* VERY IMPORTANT! */
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST); /* VERY IMPORTANT! */
   return NULL;
 }
 
@@ -290,7 +291,7 @@ void* fancy_dmm_func(void* rawArg) {
   cudaFree(device_c);
   timer_report_tick(&t, "  memcpy from gpu");
 
-  pack->finished = true; /* VERY IMPORTANT! */
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST); /* VERY IMPORTANT! */
   return NULL;
 }
 
@@ -458,7 +459,7 @@ void* fancy_two_dmm_func(void* rawArg) {
   cudaFree(device_c);
   timer_report_tick(&t, "    memcpy C from gpu");
 
-  pack->finished = true; /* VERY IMPORTANT! */
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST); /* VERY IMPORTANT! */
   return NULL;
 }
 

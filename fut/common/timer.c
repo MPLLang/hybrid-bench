@@ -1,6 +1,7 @@
 #pragma once
 #include <time.h>
 #include "timer.h"
+#include <stdio.h>
 
 static void timespec_subtract(struct timespec *x, struct timespec *y) {
   if (x->tv_nsec < y->tv_nsec) {
@@ -21,6 +22,7 @@ static void report_elapsed(
   timespec_subtract(&diff, y);
   double secs = (double)diff.tv_sec + ((double)diff.tv_nsec / 1000000000.0);
   printf("tick: %s: %s: elapsed: %lf\n", name, msg, secs);
+  fflush(stdout);
 }
 
 void timer_begin(struct timer_t *t, const char *name) {
