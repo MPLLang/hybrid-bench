@@ -53,7 +53,7 @@ struct
     _import "freeFloatsOnGpu" public : MLton.Pointer.t -> unit;
 
   val leafSize = CommandLineArgs.parseInt "leaf-size" 256
-  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 2048
+  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 1024
 
   val _ = print ("leaf-size " ^ Int.toString leafSize ^ "\n")
   val _ = print ("gpu-thresh " ^ Int.toString gpuThresh ^ "\n")
@@ -388,7 +388,7 @@ struct
 
         fun doBlock (m1, m2, m3, m4, c) =
           ( hybrid_multiply_inplace (m1, da) (m2, db) c
-          ; hybrid_multiply_inplace (m3, da) (m4, db) c
+          ; hybrid_multiply_inplace_choose (m3, da) (m4, db) c
           )
 
         fun doBlockChoose (m1, m2, m3, m4, c) =
@@ -417,7 +417,7 @@ struct
         ForkJoin.choice
           { cpu = fn () =>
               ( hybrid_multiply_inplace (a1, da) (b1, db) c
-              ; hybrid_multiply_inplace (a2, da) (b2, db) c
+              ; hybrid_multiply_inplace_choose (a2, da) (b2, db) c
               )
           , gpu =
               let
@@ -471,21 +471,22 @@ struct
       end
 
 
-  (*
-    and hybrid_multiply_inplace_choose (a, da) (b, db) c =
-      if width a < gpuThresh then
-        hybrid_multiply_inplace (a, da) (b, db) c
-  
-      else
-        let
-          val n = width a
-        in
-          ForkJoin.choice
-            { cpu = fn () => hybrid_multiply_inplace (a, da) (b, db) c
-            , gpu =
-                let
-                  fun spawn () =
-                    rawFancySpawn
+  and hybrid_multiply_inplace_choose (a, da) (b, db) c =
+    if width a < gpuThresh then
+      hybrid_multiply_inplace (a, da) (b, db) c
+
+    else
+      let
+        val n = width a
+      in
+        ForkJoin.choice
+          { cpu = fn () => hybrid_multiply_inplace (a, da) (b, db) c
+          , gpu =
+              let
+                fun spawn () =
+                  let
+                    val tmp = ForkJoin.alloc (n * n)
+                    val pkg = rawFancySpawn
                       ( (*data a*) da
                       , top a
                       , left a
@@ -494,23 +495,35 @@ struct
                       , top b
                       , left b
                       , rowskip b
-                      , data c
-                      , top c
-                      , left c
-                      , rowskip c
+                      , (*data c*) tmp
+                      , (*top c*) 0
+                      , (*left c*) 0
+                      , (*rowskip c*) 0
                       , n
                       )
-  
-                  fun poll pkg =
-                    (rawFancyPoll pkg = 0w1)
-  
-                  fun finish pkg = rawFancyFinish pkg
-                in
-                  ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
-                end
-            }
-        end
-  *)
+                  in
+                    (pkg, tmp)
+                  end
+
+                fun poll (pkg, _) =
+                  (rawFancyPoll pkg = 0w1)
+
+                fun finish (pkg, tmp) =
+                  (rawFancyFinish pkg; tmp)
+
+                fun cleanup tmp =
+                  modify c (fn {row, col, v} =>
+                    v + Array.sub (tmp, row * n + col))
+              in
+                ForkJoin.gpuWithCleanup
+                  { spawn = spawn
+                  , poll = poll
+                  , finish = finish
+                  , cleanup = cleanup
+                  }
+              end
+          }
+      end
 
 
   and hybrid_multiply (a, b) =

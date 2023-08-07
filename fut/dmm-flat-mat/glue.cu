@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include "cublas_v2.h"
 #include <pthread.h>
+#include <error.h>
 
 #define SIZE 256
 
@@ -74,10 +75,28 @@ struct dMMPackage {
   pthread_t friends;
 };
 
-/* TODO: call cublas */
+
+void set_cpu_affinity(int cpu) {
+  cpu_set_t cpuset;
+  pthread_t thread;
+
+  thread = pthread_self();
+
+  CPU_ZERO(&cpuset);
+  CPU_SET(cpu, &cpuset);
+
+  if (pthread_setaffinity_np(thread, sizeof cpuset, &cpuset) != 0) {
+    printf("ERROR: glue.c: could not set affinity\n");
+    exit(1);
+  }
+}
+
+
 void* asyncdMMFunc(void* rawArg) {
   struct my_timer_t t;
   timer_begin(&t, "asyncdMMFunc");
+
+  // set_cpu_affinity(31);
 
   struct dMMPackage *pack = (struct dMMPackage *)rawArg;
 
@@ -442,6 +461,7 @@ void* fancy_two_dmm_func(void* rawArg) {
   timer_report_tick(&t, "  memcpy A2,B2 on gpu");
 
 
+  beta = 1.0;
   cublasCreate(&handle);  
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, tmp_a, n, tmp_b, n, &beta, device_c, n);
   cublasDestroy(handle);
