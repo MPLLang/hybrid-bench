@@ -10,6 +10,9 @@ MLTONFLAGS = \
 MPL=/home/ec2-user/proj/mpl/hybrid-sched/build/bin/mpl
 
 
+main.mpl.bin: phony blas_library.o
+	$(MPL) $(MLTONFLAGS) -output main.mpl.bin test.mlb ../common/timer.c blas_library.o glue_cpu_blas.c
+
 test.mpl: phony blas_library.o
 	$(MPL) $(MLTONFLAGS) -output test.mpl test.mlb ../common/timer.c blas_library.o glue_cpu_blas.c
 

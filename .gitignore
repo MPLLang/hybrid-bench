@@ -1,3 +1,4 @@
 .*
 objs/*
-.o
+*.o
+main.mpl.bin

@@ -1,0 +1,118 @@
+#!/usr/bin/python3
+import json
+
+
+def cmd(procs, impl, sched_k, args):
+  cmd_template = "/usr/bin/time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 -- -warmup 5 -repeat 20 -impl {} {} {}"
+  sched_param = "" if impl != "hybrid" else "-sched-gpu-payout {}".format(str(sched_k))
+  return cmd_template.format(str(procs), impl, sched_param, args)
+
+
+def interval_tree(procs, impl, sched_k):
+  row = {
+    "tag": "interval-tree",
+    "cwd": "fut/build-intervaltree",
+    "cmd": cmd(procs, impl, sched_k, "-n 5000000"),
+    "procs": procs,
+    "impl": impl
+  }
+  if impl == "hybrid":
+    row["sched_k"] = sched_k
+  return row
+
+
+def dmm(procs, impl, sched_k):
+  row = {
+    "tag": "dmm",
+    "cwd": "fut/dmm-flat-mat",
+    "cmd": cmd(procs, impl, sched_k, "-n 8192"),
+    "procs": procs,
+    "impl": impl
+  }
+  if impl == "hybrid":
+    row["sched_k"] = sched_k
+  return row
+
+
+def mandelbrot(procs, impl, sched_k):
+  row = {
+    "tag": "mandelbrot",
+    "cwd": "fut/mandelbrot",
+    "cmd": cmd(procs, impl, sched_k, ""),
+    "procs": procs,
+    "impl": impl
+  }
+  if impl == "hybrid":
+    row["sched_k"] = sched_k
+  return row
+
+
+def raytracer(procs, impl, sched_k):
+  row = {
+    "tag": "raytracer",
+    "cwd": "fut/raytracer",
+    "cmd": cmd(procs, impl, sched_k, "-h 1000 -w 1000"),
+    "procs": procs,
+    "impl": impl
+  }
+  if impl == "hybrid":
+    row["sched_k"] = sched_k
+  return row
+
+
+def mergesort(procs, impl, sched_k):
+  row = {
+    "tag": "mergesort",
+    "cwd": "fut/sort",
+    "cmd": cmd(procs, impl, sched_k, "-n 10000000"),
+    "procs": procs,
+    "impl": impl
+  }
+  if impl == "hybrid":
+    row["sched_k"] = sched_k
+  return row
+
+
+def primes(procs, impl, sched_k):
+  row = {
+    "tag": "primes",
+    "cwd": "fut/sieve-test-choice-prim",
+    "cmd": cmd(procs, impl, sched_k, "-n 10000000 -simultaneous 20"),
+    "procs": procs,
+    "impl": impl
+  }
+  if impl == "hybrid":
+    row["sched_k"] = sched_k
+  return row
+
+
+# ============================================================================
+
+
+def add_extra(row):
+  if row is None:
+    return row
+  row = row.copy()
+  row['bench'] = 'main'
+  row['config'] = 'mpl'
+  return row
+
+
+uniques = set()
+def filterunique(row):
+  if row['cmd'] in uniques:
+    return None
+  uniques.add(row['cmd'])
+  return row
+
+tests = [
+  add_extra(filterunique(make_row(procs, impl, k)) )
+  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, primes]
+  for procs in [2,4,6,8,12,16,24,30]
+  for impl in ["cpu","gpu","hybrid"]
+  for k in [1,2,4,8]
+]
+tests = [ r for r in tests if r is not None ]
+
+for r in tests:
+  print(json.dumps(r))

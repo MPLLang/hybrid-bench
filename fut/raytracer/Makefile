@@ -10,6 +10,9 @@ MLTONFLAGS = \
 
 MPL=/home/ec2-user/proj/mpl/hybrid-sched/build/bin/mpl
 
+main.mpl.bin: phony futray
+	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb ../common/timer.c futray/ray.c glue.c
+
 main.mpl: phony futray
 	$(MPL) $(MLTONFLAGS) -output main.mpl main.mlb ../common/timer.c futray/ray.c glue.c
 
