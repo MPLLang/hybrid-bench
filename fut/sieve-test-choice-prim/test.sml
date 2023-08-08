@@ -122,15 +122,17 @@ fun trace n prefix f =
     end
 
 
-(* fun primesOnGpuBenchmark {simultaneous: int, n: int} : int array array =
+fun primesOnGpuBenchmark {simultaneous: int, n: int} : int array array =
   let
     val ctx = futInit ()
     val result = Benchmark.run ("primes gpu") (fn _ =>
-      SeqBasis.tabulate 1 (0, simultaneous) (fn _ => doPrimesOnGpu ctx n))
+      Array.tabulate (simultaneous, fn _ =>
+        ForkJoin.choice
+          {cpu = fn () => Util.die "uh oh", gpu = makePrimesOnGpuTask ctx n}))
     val _ = futFinish ctx
   in
     result
-  end *)
+  end
 
 
 fun primesOnCpuBenchmark {simultaneous: int, n: int} : int array array =
@@ -232,7 +234,7 @@ val _ = print ("gpu-thresh " ^ Int.toString gpuThresh ^ "\n")
 val bench =
   case impl of
     "cpu" => primesOnCpuBenchmark
-  (* | "gpu" => primesOnGpuBenchmark *)
+  | "gpu" => primesOnGpuBenchmark
   | "hybrid" => primesHybridBenchmark gpuThresh
   | _ => Util.die ("unknown -impl " ^ impl)
 
