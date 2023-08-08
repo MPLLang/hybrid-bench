@@ -266,6 +266,11 @@ def su(x):
     return None
   return str(int(round(x)))
 
+def suu(x):
+  if x is None:
+    return None
+  return int(round(x))
+
 def bu(x):
   if x is None:
     return None
@@ -615,6 +620,91 @@ print(table(tt, defaultAlign))
 print("")
 
 # ============================================================================
+# LaTeX figure: main comparison table
+# ============================================================================
+
+
+ensureFigDir()
+comparisonTable = "figures/comparison-table.tex"
+with open(comparisonTable, 'w') as output:
+
+  # overheads1 = []
+  # overheads5 = []
+
+  imps_1_over_cpu = []
+  imps_1_over_gpu = []
+  imps_half_over_cpu = []
+  imps_half_over_gpu = []
+  imps_p_over_cpu = []
+  imps_p_over_gpu = []
+
+  def fmtt(x):
+    return fmt(x) + ("" if x is None else " s")
+  def fmto(x):
+    if x is None:
+      return fmt(x)
+    return makeBold(fmt(x) + "x")
+
+  for tag in orderedTags:
+    ct1 = tm(averageTime(D, 'cpu', None, tag, 2))
+    cth = tm(averageTime(D, 'cpu', None, tag, 16))
+    ctp = tm(averageTime(D, 'cpu', None, tag, maxp))
+
+    gt = tm(averageTime(D, 'gpu', None, tag, 2))
+
+    ht1 = tm(averageTime(D, 'hybrid', 2, tag, 2))
+    hth = tm(averageTime(D, 'hybrid', 2, tag, 16))
+    htp = tm(averageTime(D, 'hybrid', 2, tag, maxp))
+
+    imp_1_over_cpu = ovv(sd(ct1, ht1))
+    imp_1_over_gpu = ovv(sd(gt, ht1))
+    imp_half_over_cpu = ovv(sd(cth, hth))
+    imp_half_over_gpu = ovv(sd(gt, hth))
+    imp_p_over_cpu = ovv(sd(ctp, htp))
+    imp_p_over_gpu = ovv(sd(gt, htp))
+
+    imps_1_over_cpu.append(imp_1_over_cpu)
+    imps_1_over_gpu.append(imp_1_over_gpu)
+    imps_half_over_cpu.append(imp_half_over_cpu)
+    imps_half_over_gpu.append(imp_half_over_gpu)
+    imps_p_over_cpu.append(imp_p_over_cpu)
+    imps_p_over_gpu.append(imp_p_over_gpu)
+
+    row = \
+      [ fmtt(gt)
+      , fmtt(ct1)
+      , fmtt(cth)
+      , fmtt(ctp)
+      , fmtt(ht1)
+      , fmto(ov(imp_1_over_gpu))
+      , fmto(ov(imp_1_over_cpu))
+      , fmtt(hth)
+      , fmto(ov(imp_half_over_gpu))
+      , fmto(ov(imp_half_over_cpu))
+      , fmtt(htp)
+      , fmto(ov(imp_p_over_gpu))
+      , fmto(ov(imp_p_over_cpu))
+      ]
+
+    output.write(" & ".join([displayTag(tag)] + row))
+    output.write("  \\\\\n")
+
+  output.write("\\midrule\n")
+  row = [
+    "", "", "", "", "",
+    fmto(ov(geomean(filterSome(imps_1_over_gpu)))),
+    fmto(ov(geomean(filterSome(imps_1_over_cpu)))),
+    "",
+    fmto(ov(geomean(filterSome(imps_half_over_gpu)))),
+    fmto(ov(geomean(filterSome(imps_half_over_cpu)))),
+    "",
+    fmto(ov(geomean(filterSome(imps_p_over_gpu)))),
+    fmto(ov(geomean(filterSome(imps_p_over_cpu))))
+  ]
+  output.write(" & ".join(["geomean"] + row))
+  output.write("  \\\\\n")
+print("[INFO] wrote to {}".format(comparisonTable))
+
 
 # ============================================================================
 # PDF: Speedup plot
