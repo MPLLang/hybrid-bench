@@ -127,11 +127,11 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
       (* ForkJoin.choice {cpu = cpuRow ylo, gpu = gpuRows ylo (ylo + 1)} *)
       else
         let val ymid = ylo + (yhi - ylo) div 2
-        in ForkJoin.par (fn _ => loop ylo ymid, fn _ => loopChoose ymid yhi); ()
+        in ForkJoin.par (fn _ => loopChoose ylo ymid, fn _ => loop ymid yhi); ()
         end
 
     and loopChoose ylo yhi =
-      if yhi - ylo < 50 then loop ylo yhi
+      if yhi - ylo < 10 then loop ylo yhi
       else ForkJoin.choice {cpu = fn _ => loop ylo yhi, gpu = gpuRows ylo yhi}
   in
     loop 0 h;

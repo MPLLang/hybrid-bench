@@ -1,6 +1,16 @@
 #include "futmandelbrot/mandelbrot.h"
 #include "timer.h"
 #include <pthread.h>
+#include <sched.h>
+
+void set_cpu_affinity(int cpu) {
+  cpu_set_t cpuset;
+  pthread_t thread;
+  thread = pthread_self();
+  CPU_ZERO(&cpuset);
+  CPU_SET(cpu, &cpuset);
+  pthread_setaffinity_np(thread, sizeof cpuset, &cpuset);
+}
 
 // ==========================================================================
 // context boilerplate
@@ -65,6 +75,7 @@ struct mandelbrot_pack
 
 void *mandelbrot_threadfunc(void *rawArg)
 {
+  set_cpu_affinity(31);
   struct timer_t t;
   timer_begin(&t, "mandelbrot_threadfunc");
 

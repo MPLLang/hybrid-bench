@@ -25,15 +25,18 @@ struct
     _import "mandelbrot_finish" public : mandelbrot_package -> unit;
 
   fun mandelbrot ctx ylo yhi blo bhi (cleanup: u8 array -> 'a) :
-    (mandelbrot_package, 'a) ForkJoin.gpu_task =
+    (mandelbrot_package * u8 array, 'a) ForkJoin.gpu_task =
     let
-      val data = ForkJoin.alloc ((yhi - ylo) * (bhi - blo))
-
       fun spawn () =
-        mandelbrot_spawn (ctx, ylo, yhi, blo, bhi, data)
-      fun poll pkg =
+        let
+          val data = ForkJoin.alloc ((yhi - ylo) * (bhi - blo))
+          val pkg = mandelbrot_spawn (ctx, ylo, yhi, blo, bhi, data)
+        in
+          (pkg, data)
+        end
+      fun poll (pkg, _) =
         (mandelbrot_poll pkg = 0w1)
-      fun finish pkg =
+      fun finish (pkg, data) =
         (mandelbrot_finish pkg; data)
     in
       ForkJoin.gpuWithCleanup

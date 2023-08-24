@@ -5,7 +5,7 @@ MLTONFLAGS = \
 	-default-type word64 \
 	-disable-pass splitTypes1 \
 	-disable-pass splitTypes2 \
-	-cc-opt '-I/opt/nvidia/cuda/include/ -I../common/' \
+	-cc-opt '-I/opt/nvidia/cuda/include/ -I../common/ -D_GNU_SOURCE' \
 	-link-opt '-rdynamic -L/opt/nvidia/cuda/lib64/ -lcuda -lnvrtc -lcublas -lcudart -lstdc++'
 
 MPL=/home/ec2-user/proj/mpl/hybrid-sched/build/bin/mpl

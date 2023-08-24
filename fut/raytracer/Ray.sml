@@ -368,7 +368,7 @@ struct
      ^ " (fraction given to gpu choice points)\n")
 
   fun calculateMid lo hi =
-    lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - renderHybridGpuSplit))
+    lo + Real.ceil (Real.fromInt (hi - lo) * renderHybridGpuSplit)
 
   fun render_hybrid ctx fut_prepared_scene objs width height cam : image =
     let
@@ -392,7 +392,7 @@ struct
           ForkJoin.parfor 100 (lo, hi) writePixel
         else
           let val mid = calculateMid lo hi
-          in ForkJoin.par (fn _ => loop lo mid, fn _ => loopChoose mid hi); ()
+          in ForkJoin.par (fn _ => loopChoose lo mid, fn _ => loop mid hi); ()
           end
 
       and loopChoose lo hi =
@@ -424,11 +424,10 @@ struct
   fun render_gpu ctx fut_prepared_scene width height : image =
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
-      fun doCpu () =
-        raise Fail "Whoops! Hack failed. This shouldn't happen..."
       val doGpu = FutRay.render ctx fut_prepared_scene (ArraySlice.full pixels)
+      fun ensureOnGpu () = ForkJoin.choice {cpu = ensureOnGpu, gpu = doGpu}
     in
-      ForkJoin.choice {cpu = doCpu, gpu = doGpu};
+      ensureOnGpu ();
       {width = width, height = height, pixels = pixels}
     end
 
