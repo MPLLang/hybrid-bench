@@ -395,10 +395,10 @@ struct
           hybrid_multiply_inplace_two_choose (m1, m3, da) (m2, m4, db) c
       in
         par4
-          ( fn _ => doBlock (a11, b11, a12, b21, c11)
+          ( fn _ => doBlockChoose (a11, b11, a12, b21, c11)
           , fn _ => doBlockChoose (a11, b12, a12, b22, c12)
           , fn _ => doBlockChoose (a21, b11, a22, b21, c21)
-          , fn _ => doBlockChoose (a21, b12, a22, b22, c22)
+          , fn _ => doBlock (a21, b12, a22, b22, c22)
           );
         ()
       end
