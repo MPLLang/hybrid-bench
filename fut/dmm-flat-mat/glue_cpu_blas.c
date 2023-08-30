@@ -19,12 +19,20 @@ void cblas_sgemm(
 */
 
 void cpu_sgemm(
-  float* input1,
-  float* input2,
-  float* output,
-  int64_t n)
+  float* input1,   /* m * k */
+  float* input2,   /* k * n */
+  float* output,   /* m * n */
+  int64_t m,
+  int64_t n,
+  int64_t k,
+  int32_t bool_accumulate)
 {
-  cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, n, n, n, 1.0, input1, n, input2, n, 1.0, output, n);
+  if (bool_accumulate) {
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1, k, input2, n, 1.0, output, n);
+  }
+  else {
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1, k, input2, n, 0.0, output, n);
+  }
 }
 
 

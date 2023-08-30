@@ -42,7 +42,7 @@ struct
     _import "memcpy_floats" public : r32 array * i64 * r32 array * i64 * i64 -> unit;
 
   val cpu_sgemm =
-    _import "cpu_sgemm" public : r32 array * r32 array * r32 array * i64 -> unit;
+    _import "cpu_sgemm" public : r32 array * r32 array * r32 array * i64 * i64 * i64 * bool -> unit;
 
   val memcpyFloatsToGpu =
     _import "memcpyFloatsToGpu" public : r32 array * i64 -> MLton.Pointer.t;
@@ -77,8 +77,46 @@ struct
   datatype slice =
     Slice of {mat: mat, top: int, left: int, width: int, height: int}
 
-  fun slice {left, top, height, width} mat =
-    Slice {mat = mat, top = top, left = left, width = width, height = height}
+  (* fun slice {left, top, height, width} mat =
+    Slice {mat = mat, top = top, left = left, width = width, height = height} *)
+
+
+  fun splitHorizontal (Slice {left, top, height, width, mat}) =
+    let
+      val h2 = height div 2
+
+      val upper = Slice
+        {left = left, top = top, height = h2, width = width, mat = mat}
+
+      val lower = Slice
+        { left = left
+        , top = top + h2
+        , height = height - h2
+        , width = width
+        , mat = mat
+        }
+    in
+      (upper, lower)
+    end
+
+
+  fun splitVertical (Slice {left, top, height, width, mat}) =
+    let
+      val w2 = width div 2
+
+      val first = Slice
+        {left = left, top = top, height = height, width = w2, mat = mat}
+
+      val second = Slice
+        { left = left + w2
+        , top = top
+        , height = height
+        , width = width - w2
+        , mat = mat
+        }
+    in
+      (first, second)
+    end
 
 
   fun blocks (Slice {left, top, height, width, mat}) =
@@ -88,12 +126,28 @@ struct
 
       val b11 = Slice
         {left = left, top = top, height = h2, width = w2, mat = mat}
+
       val b12 = Slice
-        {left = left + w2, top = top, height = h2, width = w2, mat = mat}
+        { left = left + w2
+        , top = top
+        , height = h2
+        , width = width - w2
+        , mat = mat
+        }
       val b21 = Slice
-        {left = left, top = top + h2, height = h2, width = w2, mat = mat}
+        { left = left
+        , top = top + h2
+        , height = height - h2
+        , width = w2
+        , mat = mat
+        }
       val b22 = Slice
-        {left = left + w2, top = top + h2, height = h2, width = w2, mat = mat}
+        { left = left + w2
+        , top = top + h2
+        , height = height - h2
+        , width = width - w2
+        , mat = mat
+        }
     in
       (b11, b12, b21, b22)
     end
@@ -265,7 +319,7 @@ struct
         val tmpB = makeCopy b
         val tmpC = makeCopy c
       in
-        cpu_sgemm (data tmpA, data tmpB, data tmpC, n);
+        cpu_sgemm (data tmpA, data tmpB, data tmpC, n, n, n, true);
         copy {src = tmpC, dst = c}
       end
 
@@ -298,6 +352,108 @@ struct
       in
         cpu_multiply_inplace (a, b, c);
         c
+      end
+
+
+  (* ======================================================================
+   * This is the more general algorithm, which allows for non-square sizes
+   *
+   * TODO: hybridize this algorithm.
+   *)
+
+
+  datatype output_mode =
+    Accumulate
+  | Write
+
+
+  fun cpu_multiply_nonsquare_inplace outputMode (a, b, c) =
+    if
+      not
+        ((width a = height b) andalso (height a = height c)
+         andalso (width b = width c))
+    then
+      raise MatrixFormat
+    else
+      let
+        val m = height a
+        val n = width b
+        val k = width a
+
+        (* val _ = print (Int.toString m ^ " " ^ Int.toString n ^ " " ^ Int.toString ^ " " ^ k) *)
+
+        val maxdim = Int.max (Int.max (m, n), k)
+      in
+        if maxdim <= leafSize then
+          case outputMode of
+            Accumulate =>
+              let
+                val tmpA = makeCopy a
+                val tmpB = makeCopy b
+                val tmpC = makeCopy c
+              in
+                cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
+                copy {src = tmpC, dst = c}
+              end
+
+          | Write =>
+              let
+                val tmpA = makeCopy a
+                val tmpB = makeCopy b
+                val tmpC = allocate {height = m, width = n}
+              in
+                cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, false);
+                copy {src = tmpC, dst = c}
+              end
+
+
+        else if maxdim = m then
+          (* split a horizontally *)
+          let
+            val (a1, a2) = splitHorizontal a
+            val (c1, c2) = splitHorizontal c
+          (* val _ = print ("SPLIT HORIZONTAL   *)
+          in
+            par
+              ( fn _ => cpu_multiply_nonsquare_inplace outputMode (a1, b, c1)
+              , fn _ => cpu_multiply_nonsquare_inplace outputMode (a2, b, c2)
+              );
+            ()
+          end
+
+
+        else if maxdim = n then
+          (* split b vertically *)
+          let
+            val (b1, b2) = splitVertical b
+            val (c1, c2) = splitVertical c
+          in
+            par
+              ( fn _ => cpu_multiply_nonsquare_inplace outputMode (a, b1, c1)
+              , fn _ => cpu_multiply_nonsquare_inplace outputMode (a, b2, c2)
+              );
+            ()
+          end
+
+
+        else
+          (* split a vertically and b horizontally *)
+          let
+            val (a1, a2) = splitVertical a
+            val (b1, b2) = splitHorizontal b
+          in
+            cpu_multiply_nonsquare_inplace outputMode (a1, b1, c);
+            cpu_multiply_nonsquare_inplace Accumulate (a2, b2, c)
+          end
+      end
+
+
+  and cpu_multiply_nonsquare (a, b) =
+    if not (width a = height b) then
+      raise MatrixFormat
+    else
+      let val c = allocate {height = height a, width = width b}
+      in cpu_multiply_nonsquare_inplace Write (a, b, c); c
       end
 
 
@@ -376,7 +532,7 @@ struct
         val tmpB = makeCopy b
         val tmpC = makeCopy c
       in
-        cpu_sgemm (data tmpA, data tmpB, data tmpC, n);
+        cpu_sgemm (data tmpA, data tmpB, data tmpC, n, n, n, true);
         copy {src = tmpC, dst = c}
       end
 
