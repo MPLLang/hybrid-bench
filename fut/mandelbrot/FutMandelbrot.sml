@@ -1,3 +1,4 @@
+(*
 structure FutMandelbrot =
 struct
 
@@ -38,6 +39,42 @@ struct
         (mandelbrot_poll pkg = 0w1)
       fun finish (pkg, data) =
         (mandelbrot_finish pkg; data)
+    in
+      ForkJoin.gpuWithCleanup
+        {spawn = spawn, poll = poll, finish = finish, cleanup = cleanup}
+    end
+
+end
+*)
+
+structure FutMandelbrot =
+struct
+
+  type fut_context = FutharkMandelbrot.ctx
+
+  fun init () = FutharkMandelbrot.ctx_new FutharkMandelbrot.default_cfg
+
+  fun cleanup x = FutharkMandelbrot.ctx_free x
+
+  type i64 = Int64.int
+  type i32 = Int32.int
+  type u8 = Word8.word
+
+  fun mandelbrot ctx ylo yhi blo bhi (cleanup: u8 array -> 'a) :
+    (u8 array, 'a) ForkJoin.gpu_task =
+    let
+      fun spawn () =
+        let
+          val output = FutharkMandelbrot.Entry.mandelbrot ctx ylo yhi blo bhi
+          val _ = FutharkMandelbrot.ctx_sync ctx
+          val arr = FutharkMandelbrot.Word8Array1.values output
+        in
+          FutharkMandelbrot.Word8Array1.free output;
+          MLton.Word8Array.toPoly arr (* O(1) *)
+        end
+
+      fun poll _ = true
+      fun finish x = x
     in
       ForkJoin.gpuWithCleanup
         {spawn = spawn, poll = poll, finish = finish, cleanup = cleanup}
