@@ -159,18 +159,22 @@ fun gpuMandelbrot () =
     val numBytesPerRow = Util.ceilDiv w 8
     val rows = ForkJoin.alloc h
     fun putRow y row = Array.update (rows, y, row)
+
+    fun ensureOnGpu () =
+      ForkJoin.choice
+        { cpu = ensureOnGpu
+        , gpu =
+            FutMandelbrot.mandelbrot ctx 0 h 0 numBytesPerRow (fn outputArr =>
+              let
+                fun slice i =
+                  ArraySlice.slice
+                    (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
+              in
+                ForkJoin.parfor 1000 (0, h) (fn i => putRow i (slice i))
+              end)
+        }
   in
-    ForkJoin.choice
-      { cpu = fn _ => raise Fail "uh oh"
-      , gpu = FutMandelbrot.mandelbrot ctx 0 h 0 numBytesPerRow (fn outputArr =>
-          let
-            fun slice i =
-              ArraySlice.slice
-                (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
-          in
-            ForkJoin.parfor 1000 (0, h) (fn i => putRow i (slice i))
-          end)
-      };
+    ensureOnGpu ();
     ArraySlice.full rows
   end
 
