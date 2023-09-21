@@ -111,15 +111,13 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
            end)))
 
     fun gpuRows ylo yhi =
-      FutMandelbrot.mandelbrot ctx ylo yhi 0 numBytesPerRow (fn outputArr =>
-        let
-          fun slice i =
-            ArraySlice.slice
-              (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
-        in
-          ForkJoin.parfor 1000 (0, yhi - ylo) (fn i =>
-            putRow (ylo + i) (slice i))
-        end)
+      let
+        val outputArr = FutMandelbrot.mandelbrot ctx ylo yhi 0 numBytesPerRow
+        fun slice i =
+          ArraySlice.slice (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
+      in
+        ForkJoin.parfor 1000 (0, yhi - ylo) (fn i => putRow (ylo + i) (slice i))
+      end
 
     fun loop ylo yhi =
       if yhi - ylo = 1 then
@@ -131,8 +129,13 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
         end
 
     and loopChoose ylo yhi =
-      if yhi - ylo < 10 then loop ylo yhi
-      else ForkJoin.choice {cpu = fn _ => loop ylo yhi, gpu = gpuRows ylo yhi}
+      if yhi - ylo < 10 then
+        loop ylo yhi
+      else
+        ForkJoin.choice
+          { prefer_cpu = fn () => loop ylo yhi
+          , prefer_gpu = fn () => gpuRows ylo yhi
+          }
   in
     loop 0 h;
     ArraySlice.full rows
@@ -162,16 +165,16 @@ fun gpuMandelbrot () =
 
     fun ensureOnGpu () =
       ForkJoin.choice
-        { cpu = ensureOnGpu
-        , gpu =
-            FutMandelbrot.mandelbrot ctx 0 h 0 numBytesPerRow (fn outputArr =>
-              let
-                fun slice i =
-                  ArraySlice.slice
-                    (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
-              in
-                ForkJoin.parfor 1000 (0, h) (fn i => putRow i (slice i))
-              end)
+        { prefer_cpu = ensureOnGpu
+        , prefer_gpu = fn () =>
+            let
+              val outputArr = FutMandelbrot.mandelbrot ctx 0 h 0 numBytesPerRow
+              fun slice i =
+                ArraySlice.slice
+                  (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
+            in
+              ForkJoin.parfor 1000 (0, h) (fn i => putRow i (slice i))
+            end
         }
   in
     ensureOnGpu ();
