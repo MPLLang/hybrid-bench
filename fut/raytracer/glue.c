@@ -127,8 +127,6 @@ struct render_pack
 
 void *render_threadfunc(void *rawArg)
 {
-  set_cpu_affinity(31);
-  
   struct timer_t t;
   timer_begin(&t, "render_threadfunc");
 
@@ -171,11 +169,13 @@ render_spawn(
   pack->finished = false;
   pack->output = output + start;
 
-  if (0 != pthread_create(&(pack->friend), NULL, &render_threadfunc, pack))
-  {
-    printf("ERROR: glue.c: render_spawn: pthread_create failed\n");
-    exit(1);
-  }
+  render_threadfunc(pack);
+
+  // if (0 != pthread_create(&(pack->friend), NULL, &render_threadfunc, pack))
+  // {
+  //   printf("ERROR: glue.c: render_spawn: pthread_create failed\n");
+  //   exit(1);
+  // }
 
   return pack;
 }
@@ -187,10 +187,10 @@ uint8_t render_poll(struct render_pack *pack)
 
 void render_finish(struct render_pack *pack)
 {
-  if (0 != pthread_join(pack->friend, NULL))
-  {
-    printf("ERROR: glue.c: pthread_join failed\n");
-    exit(1);
-  }
+  // if (0 != pthread_join(pack->friend, NULL))
+  // {
+  //   printf("ERROR: glue.c: pthread_join failed\n");
+  //   exit(1);
+  // }
   free(pack);
 }

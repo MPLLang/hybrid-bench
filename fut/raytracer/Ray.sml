@@ -396,7 +396,8 @@ struct
           end
 
       and loopChoose lo hi =
-        ForkJoin.choice {cpu = fn _ => loop lo hi, gpu = gpuTask lo hi}
+        ForkJoin.choice
+          {prefer_cpu = fn _ => loop lo hi, prefer_gpu = fn _ => gpuTask lo hi}
     in
       loop 0 (height * width);
       {width = width, height = height, pixels = pixels}
@@ -425,7 +426,8 @@ struct
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
       val doGpu = FutRay.render ctx fut_prepared_scene (ArraySlice.full pixels)
-      fun ensureOnGpu () = ForkJoin.choice {cpu = ensureOnGpu, gpu = doGpu}
+      fun ensureOnGpu () =
+        ForkJoin.choice {prefer_cpu = ensureOnGpu, prefer_gpu = fn () => doGpu}
     in
       ensureOnGpu ();
       {width = width, height = height, pixels = pixels}

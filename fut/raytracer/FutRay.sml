@@ -25,22 +25,13 @@ struct
   val render_spawn =
     _import "render_spawn" public : fut_context * prepared_scene * i64 * i64 * ( i32 array ) -> render_package;
 
-  val render_poll = _import "render_poll" public : fut_context -> Word8.word;
+  (* val render_poll = _import "render_poll" public : fut_context -> Word8.word; *)
 
   val render_finish = _import "render_finish" public : fut_context -> unit;
 
-  fun render ctx prepared_scene output :
-    (render_package, unit) ForkJoin.gpu_task =
-    let
-      val (data, start, len) = ArraySlice.base output
-
-      fun spawn () =
-        render_spawn (ctx, prepared_scene, start, len, data)
-      fun poll x =
-        (render_poll x = 0w1)
-      fun finish x = render_finish x
-    in
-      ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+  fun render ctx prepared_scene output : unit =
+    let val (data, start, len) = ArraySlice.base output
+    in render_finish (render_spawn (ctx, prepared_scene, start, len, data))
     end
 
 end
