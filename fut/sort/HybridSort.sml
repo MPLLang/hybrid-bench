@@ -15,8 +15,7 @@ struct
       end
 
 
-  fun gpuOnlySort ctx xs =
-    ForkJoin.choice {cpu = fn _ => Util.die "uh oh", gpu = FutSort.sort ctx xs}
+  fun gpuOnlySort ctx xs = FutSort.sort ctx xs
 
 
   val quickThresh = CommandLineArgs.parseInt "quick-thresh" 5000
@@ -39,7 +38,10 @@ struct
 
   and sortChoose ctx xs =
     if Seq.length xs >= gpuMinThresh then
-      ForkJoin.choice {cpu = fn _ => sort ctx xs, gpu = FutSort.sort ctx xs}
+      ForkJoin.choice
+        { prefer_cpu = fn _ => sort ctx xs
+        , prefer_gpu = fn _ => FutSort.sort ctx xs
+        }
     else
       sort ctx xs
 

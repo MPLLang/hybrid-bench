@@ -17,28 +17,18 @@ struct
   val sort_spawn =
     _import "sort_spawn" public : fut_context * i32 array * i64 * i64 * i32 array -> sort_package;
 
-  val sort_poll = _import "sort_poll" public : sort_package -> Word8.word;
+  (* val sort_poll = _import "sort_poll" public : sort_package -> Word8.word; *)
 
   val sort_finish = _import "sort_finish" public : sort_package -> unit;
 
-  fun sort ctx seq : (sort_package * i32 array, i32 Seq.t) ForkJoin.gpu_task =
+  fun sort ctx seq : i32 Seq.t =
     let
-      fun spawn () =
-        let
-          val (data, start, len) = ArraySlice.base seq
-          val output = ForkJoin.alloc len
-          val pkg = sort_spawn (ctx, data, start, len, output)
-        in
-          (pkg, output)
-        end
-
-      fun poll (pkg, output) =
-        (sort_poll pkg = 0w1)
-
-      fun finish (pkg, output) =
-        (sort_finish pkg; ArraySlice.full output)
+      val (data, start, len) = ArraySlice.base seq
+      val output = ForkJoin.alloc len
+      val pkg = sort_spawn (ctx, data, start, len, output)
     in
-      ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+      sort_finish pkg;
+      ArraySlice.full output
     end
 
 end
