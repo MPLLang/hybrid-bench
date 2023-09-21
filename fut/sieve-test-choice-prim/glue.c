@@ -106,19 +106,21 @@ futSieveSpawn(
 
   // timer_report_tick(&t, "initialize pack");
 
-  if (0 != pthread_create(&(pack->friend), NULL, &asyncSieveFunc, pack)) {
-    printf("ERROR: glue.c: futSieveSpawn: pthread_create failed\n");
-    exit(1);
-  }
+  asyncSieveFunc(pack);
+
+  // if (0 != pthread_create(&(pack->friend), NULL, &asyncSieveFunc, pack)) {
+  //   printf("ERROR: glue.c: futSieveSpawn: pthread_create failed\n");
+  //   exit(1);
+  // }
 
   // timer_report_tick(&t, "spawn friend");
   return pack;
 }
 
 
-uint8_t futSievePoll(struct sievePackage *pack) {
-  return pack->finished ? 1 : 0;
-}
+// uint8_t futSievePoll(struct sievePackage *pack) {
+//   return pack->finished ? 1 : 0;
+// }
 
 
 void futSieveFinish(
@@ -128,10 +130,10 @@ void futSieveFinish(
   // struct timer_t t;
   // timer_begin(&t, "futSieveFinish");
 
-  if (0 != pthread_join(pack->friend, NULL)) {
-    printf("ERROR: glue.c: pthread_join failed\n");
-    exit(1);
-  }
+  // if (0 != pthread_join(pack->friend, NULL)) {
+  //   printf("ERROR: glue.c: pthread_join failed\n");
+  //   exit(1);
+  // }
 
   // timer_report_tick(&t, "pthread_join");
 
@@ -195,10 +197,12 @@ futPrimesSpawn(
   pack->output_size = 0;
   pack->finished = false;
 
-  if (0 != pthread_create(&(pack->friend), NULL, &asyncPrimesFunc, pack)) {
-    printf("ERROR: glue.c: futPrimesSpawn: pthread_create failed\n");
-    exit(1);
-  }
+  asyncPrimesFunc(pack);
+
+  // if (0 != pthread_create(&(pack->friend), NULL, &asyncPrimesFunc, pack)) {
+  //   printf("ERROR: glue.c: futPrimesSpawn: pthread_create failed\n");
+  //   exit(1);
+  // }
 
   // timer_report_tick(&t, "done");
 
@@ -206,19 +210,19 @@ futPrimesSpawn(
 }
 
 
-uint8_t futPrimesPoll(struct primesPackage *pack) {
-  return pack->finished ? 1 : 0;
-}
+// uint8_t futPrimesPoll(struct primesPackage *pack) {
+//   return pack->finished ? 1 : 0;
+// }
 
 
 int64_t futPrimesOutputSize(struct primesPackage *pack) {
   // struct timer_t t;
   // timer_begin(&t, "futPrimesOutputSize");
 
-  if (0 != pthread_join(pack->friend, NULL)) {
-    printf("ERROR: glue.c: futPrimesOutputSize: pthread_join failed\n");
-    exit(1);
-  }
+  // if (0 != pthread_join(pack->friend, NULL)) {
+  //   printf("ERROR: glue.c: futPrimesOutputSize: pthread_join failed\n");
+  //   exit(1);
+  // }
 
   // timer_report_tick(&t, "done");
   return pack->output_size;

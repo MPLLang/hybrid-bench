@@ -10,8 +10,8 @@ type primes_package = MLton.Pointer.t
 val rawFutSieveSpawn =
   _import "futSieveSpawn" public : fut_ctx * Int64.int * Int64.int array * Int64.int -> sieve_package;
 
-val rawFutSievePoll =
-  _import "futSievePoll" public : sieve_package -> Word8.word;
+(* val rawFutSievePoll =
+  _import "futSievePoll" public : sieve_package -> Word8.word; *)
 
 val rawFutSieveFinish =
   _import "futSieveFinish" public : sieve_package * Word8.word array -> unit;
@@ -20,8 +20,8 @@ val rawFutSieveFinish =
 val rawFutPrimesSpawn =
   _import "futPrimesSpawn" public : fut_ctx * Int64.int -> primes_package;
 
-val rawFutPrimesPoll =
-  _import "futPrimesPoll" public : sieve_package -> Word8.word;
+(* val rawFutPrimesPoll =
+  _import "futPrimesPoll" public : sieve_package -> Word8.word; *)
 
 val rawFutPrimesOutputSize =
   _import "futPrimesOutputSize" public : sieve_package -> Int64.int;
@@ -43,45 +43,26 @@ val rawFutPrimesFinish =
 
 fun makePrimesOnGpuTask ctx n =
   let
-    fun spawn () = rawFutPrimesSpawn (ctx, n)
-
-    fun poll pack =
-      (0w1 = rawFutPrimesPoll pack)
-
-    fun finish pack =
-      let
-        val outputSize = rawFutPrimesOutputSize pack
-        val output = ForkJoin.alloc outputSize
-      in
-        rawFutPrimesFinish (pack, output);
-        output
-      end
+    val pack = rawFutPrimesSpawn (ctx, n)
+    val outputSize = rawFutPrimesOutputSize pack
+    val output = ForkJoin.alloc outputSize
   in
-    ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+    rawFutPrimesFinish (pack, output);
+    output
   end
 
 
 fun makeSieveOnGpuTask ctx n sqrtPrimes =
   let
     val numFlags = n + 1
-
-    fun spawn () =
+    val pack =
       rawFutSieveSpawn (ctx, Array.length sqrtPrimes, sqrtPrimes, numFlags)
-
-    fun poll pack =
-      (0w1 = rawFutSievePoll pack)
-
-    fun finish pack =
-      let
-        val flags: Word8.word array = ForkJoin.alloc numFlags
-        fun isMarked i =
-          Array.sub (flags, i) = 0w1
-      in
-        rawFutSieveFinish (pack, flags);
-        isMarked
-      end
+    val flags: Word8.word array = ForkJoin.alloc numFlags
+    fun isMarked i =
+      Array.sub (flags, i) = 0w1
   in
-    ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+    rawFutSieveFinish (pack, flags);
+    isMarked
   end
 
 
@@ -126,9 +107,7 @@ fun primesOnGpuBenchmark {simultaneous: int, n: int} : int array array =
   let
     val ctx = futInit ()
     val result = Benchmark.run ("primes gpu") (fn _ =>
-      Array.tabulate (simultaneous, fn _ =>
-        ForkJoin.choice
-          {cpu = fn () => Util.die "uh oh", gpu = makePrimesOnGpuTask ctx n}))
+      Array.tabulate (simultaneous, fn _ => makePrimesOnGpuTask ctx n))
     val _ = futFinish ctx
   in
     result
@@ -174,8 +153,8 @@ fun primesHybridBenchmark gpuThreshold {simultaneous: int, n: int} :
     fun hybridSieve ctx n sqrtPrimes =
       if n >= gpuThreshold then
         ForkJoin.choice
-          { cpu = fn _ => doSieveOnCpu ctx n sqrtPrimes
-          , gpu = makeSieveOnGpuTask ctx n sqrtPrimes
+          { prefer_cpu = fn _ => doSieveOnCpu ctx n sqrtPrimes
+          , prefer_gpu = fn _ => makeSieveOnGpuTask ctx n sqrtPrimes
           }
       else
         doSieveOnCpu ctx n sqrtPrimes
@@ -202,7 +181,10 @@ fun primesHybridBenchmark gpuThreshold {simultaneous: int, n: int} :
                 end
             in
               if n >= gpuThreshold then
-                ForkJoin.choice {gpu = makePrimesOnGpuTask ctx n, cpu = doCpu}
+                ForkJoin.choice
+                  { prefer_gpu = fn _ => makePrimesOnGpuTask ctx n
+                  , prefer_cpu = doCpu
+                  }
               else
                 doCpu ()
             end
