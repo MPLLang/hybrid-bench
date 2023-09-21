@@ -115,26 +115,28 @@ sort_spawn(
   pack->output = output;
   pack->finished = false;
 
-  if (0 != pthread_create(&(pack->friend), NULL, &sort_threadfunc, pack))
-  {
-    printf("ERROR: glue.c: sort_spawn: pthread_create failed\n");
-    exit(1);
-  }
+  sort_threadfunc(pack);
+
+  // if (0 != pthread_create(&(pack->friend), NULL, &sort_threadfunc, pack))
+  // {
+  //   printf("ERROR: glue.c: sort_spawn: pthread_create failed\n");
+  //   exit(1);
+  // }
 
   return pack;
 }
 
-uint8_t sort_poll(struct sort_pack *pack)
-{
-  return pack->finished ? 1 : 0;
-}
+// uint8_t sort_poll(struct sort_pack *pack)
+// {
+//   return pack->finished ? 1 : 0;
+// }
 
 void sort_finish(struct sort_pack *pack)
 {
-  if (0 != pthread_join(pack->friend, NULL))
-  {
-    printf("ERROR: glue.c: pthread_join failed\n");
-    exit(1);
-  }
+  // if (0 != pthread_join(pack->friend, NULL))
+  // {
+  //   printf("ERROR: glue.c: pthread_join failed\n");
+  //   exit(1);
+  // }
   free(pack);
 }

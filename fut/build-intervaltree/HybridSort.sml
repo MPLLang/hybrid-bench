@@ -44,9 +44,9 @@ struct
   and sortChoose ctx vals idxs =
     if Seq.length idxs >= gpuMinThresh then
       ForkJoin.choice
-        { cpu = fn _ => sort ctx vals idxs
+        { prefer_cpu = fn _ => sort ctx vals idxs
         (* NOTE: vals needs to be initialized on GPU beforehand... *)
-        , gpu = FutSort.sort ctx (*vals*) idxs
+        , prefer_gpu = fn _ => FutSort.sort ctx (*vals*) idxs
         }
     else
       sort ctx vals idxs
