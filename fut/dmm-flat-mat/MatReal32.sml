@@ -53,7 +53,7 @@ struct
     _import "freeFloatsOnGpu" public : MLton.Pointer.t -> unit;
 
   val leafSize = CommandLineArgs.parseInt "leaf-size" 256
-  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 2048
+  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 512
 
   val _ = print ("leaf-size " ^ Int.toString leafSize ^ "\n")
   val _ = print ("gpu-thresh " ^ Int.toString gpuThresh ^ "\n")
