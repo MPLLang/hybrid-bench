@@ -159,17 +159,19 @@ dMMSpawn(
   pack->inputLen = inputLen;
   pack->finished = false;
 
-  if (0 != pthread_create(&(pack->friends), NULL, &asyncdMMFunc, pack)) {
-    printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
-    exit(1);
-  }
+  asyncdMMFunc(pack);
+
+  // if (0 != pthread_create(&(pack->friends), NULL, &asyncdMMFunc, pack)) {
+  //   printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
+  //   exit(1);
+  // }
 
   return pack;
 }
 
-extern "C" uint8_t dMMPoll(struct dMMPackage *pack) {
-  return pack->finished ? 1 : 0;
-}
+// extern "C" uint8_t dMMPoll(struct dMMPackage *pack) {
+//   return pack->finished ? 1 : 0;
+// }
 
 
 /* TODO: memcpy from GPU back to pack->output
@@ -178,10 +180,10 @@ extern "C" uint8_t dMMPoll(struct dMMPackage *pack) {
 extern "C" void dMMFinish(
   struct dMMPackage * pack)
 {
-  if (0 != pthread_join(pack->friends, NULL)) {
-    printf("ERROR: glue.c: pthread_join failed\n");
-    exit(1);
-  }
+  // if (0 != pthread_join(pack->friends, NULL)) {
+  //   printf("ERROR: glue.c: pthread_join failed\n");
+  //   exit(1);
+  // }
 
   free(pack);
 }
@@ -351,18 +353,21 @@ fancy_dmm_spawn(
   pack->n = n;
 
   pack->finished = false;
-  if (0 != pthread_create(&(pack->friends), NULL, &fancy_dmm_func, pack)) {
-    printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
-    exit(1);
-  }
+
+  fancy_dmm_func(pack);
+
+  // if (0 != pthread_create(&(pack->friends), NULL, &fancy_dmm_func, pack)) {
+  //   printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
+  //   exit(1);
+  // }
 
   return pack;
 }
 
 
-extern "C" uint8_t fancy_dmm_poll(struct fancy_dmm_package *pack) {
-  return pack->finished ? 1 : 0;
-}
+// extern "C" uint8_t fancy_dmm_poll(struct fancy_dmm_package *pack) {
+//   return pack->finished ? 1 : 0;
+// }
 
 
 /* TODO: memcpy from GPU back to pack->output
@@ -371,10 +376,10 @@ extern "C" uint8_t fancy_dmm_poll(struct fancy_dmm_package *pack) {
 extern "C" void fancy_dmm_finish(
   struct fancy_dmm_package * pack)
 {
-  if (0 != pthread_join(pack->friends, NULL)) {
-    printf("ERROR: glue.c: pthread_join failed\n");
-    exit(1);
-  }
+  // if (0 != pthread_join(pack->friends, NULL)) {
+  //   printf("ERROR: glue.c: pthread_join failed\n");
+  //   exit(1);
+  // }
 
   free(pack);
 }
@@ -528,27 +533,30 @@ fancy_two_dmm_spawn(
   pack->n = n;
 
   pack->finished = false;
-  if (0 != pthread_create(&(pack->friends), NULL, &fancy_two_dmm_func, pack)) {
-    printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
-    exit(1);
-  }
+
+  fancy_two_dmm_func(pack);
+
+  // if (0 != pthread_create(&(pack->friends), NULL, &fancy_two_dmm_func, pack)) {
+  //   printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
+  //   exit(1);
+  // }
 
   return pack;
 }
 
 
-extern "C" uint8_t fancy_two_dmm_poll(struct fancy_two_dmm_package *pack) {
-  return pack->finished ? 1 : 0;
-}
+// extern "C" uint8_t fancy_two_dmm_poll(struct fancy_two_dmm_package *pack) {
+//   return pack->finished ? 1 : 0;
+// }
 
 
 extern "C" void fancy_two_dmm_finish(
   struct fancy_two_dmm_package * pack)
 {
-  if (0 != pthread_join(pack->friends, NULL)) {
-    printf("ERROR: glue.c: pthread_join failed\n");
-    exit(1);
-  }
+  // if (0 != pthread_join(pack->friends, NULL)) {
+  //   printf("ERROR: glue.c: pthread_join failed\n");
+  //   exit(1);
+  // }
 
   free(pack);
 }

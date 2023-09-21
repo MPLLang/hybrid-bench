@@ -11,7 +11,7 @@ struct
   val rawSpawn =
     _import "dMMSpawn" public : r32 array * r32 array * r32 array * i64 -> dmm_package;
 
-  val rawPoll = _import "dMMPoll" public : dmm_package -> Word8.word;
+  (* val rawPoll = _import "dMMPoll" public : dmm_package -> Word8.word; *)
 
   val rawFinish = _import "dMMFinish" public : dmm_package -> unit;
 
@@ -20,8 +20,8 @@ struct
   val rawFancySpawn =
     _import "fancy_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
 
-  val rawFancyPoll =
-    _import "fancy_dmm_poll" public : dmm_package -> Word8.word;
+  (* val rawFancyPoll =
+    _import "fancy_dmm_poll" public : dmm_package -> Word8.word; *)
 
   val rawFancyFinish = _import "fancy_dmm_finish" public : dmm_package -> unit;
 
@@ -30,8 +30,8 @@ struct
   val rawFancyTwoSpawn =
     _import "fancy_two_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
 
-  val rawFancyTwoPoll =
-    _import "fancy_two_dmm_poll" public : dmm_package -> Word8.word;
+  (* val rawFancyTwoPoll =
+    _import "fancy_two_dmm_poll" public : dmm_package -> Word8.word; *)
 
   val rawFancyTwoFinish =
     _import "fancy_two_dmm_finish" public : dmm_package -> unit;
@@ -470,45 +470,27 @@ struct
         val device_b = memcpyFloatsToGpu (data b, Array.length (data b))
         val _ = syncGpu ()
 
-        val result = ForkJoin.choice
-          { cpu = fn () => Util.die "uh oh! gpu_multiply failed"
-          , gpu =
-              let
-                fun spawn () =
-                  let
-                    val output = allocate {width = n, height = n}
-                    val pkg = rawFancySpawn
-                      ( (*data a*) device_a
-                      , top a
-                      , left a
-                      , rowskip a
-                      , (*data b*) device_b
-                      , top b
-                      , left b
-                      , rowskip b
-                      , (*data c*) data output
-                      , (*top c*) 0
-                      , (*left c*) 0
-                      , (*rowskip c)*) 0
-                      , n
-                      )
-                  in
-                    (pkg, output)
-                  end
-
-                fun poll (pkg, _) =
-                  (rawFancyPoll pkg = 0w1)
-
-                fun finish (pkg, output) =
-                  (rawFancyFinish pkg; output)
-              in
-                ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
-              end
-          }
+        val output = allocate {width = n, height = n}
+        val pkg = rawFancySpawn
+          ( (*data a*) device_a
+          , top a
+          , left a
+          , rowskip a
+          , (*data b*) device_b
+          , top b
+          , left b
+          , rowskip b
+          , (*data c*) data output
+          , (*top c*) 0
+          , (*left c*) 0
+          , (*rowskip c)*) 0
+          , n
+          )
       in
+        rawFancyFinish pkg;
         freeFloatsOnGpu device_a;
         freeFloatsOnGpu device_b;
-        result
+        output
       end
 
 
@@ -569,61 +551,51 @@ struct
     else
       let
         val n = width a1
-      in
-        ForkJoin.choice
-          { cpu = fn () =>
+
+        val choiceResult = ForkJoin.choice
+          { prefer_cpu = fn () =>
               ( hybrid_multiply_inplace (a1, da) (b1, db) c
               ; hybrid_multiply_inplace_choose (a2, da) (b2, db) c
+              ; NONE
               )
-          , gpu =
+
+          , prefer_gpu = fn () =>
               let
-                fun spawn () =
-                  let
-                    val tmp = ForkJoin.alloc (n * n)
-                    val pkg = rawFancyTwoSpawn
-                      ( (*data a*) da
-                      , top a1
-                      , left a1
-                      , top a2
-                      , left a2
-                      , rowskip a1
-                      , (*data b*) db
-                      , top b1
-                      , left b1
-                      , top b2
-                      , left b2
-                      , rowskip b1
+                val tmp = ForkJoin.alloc (n * n)
+                val pkg = rawFancyTwoSpawn
+                  ( (*data a*) da
+                  , top a1
+                  , left a1
+                  , top a2
+                  , left a2
+                  , rowskip a1
+                  , (*data b*) db
+                  , top b1
+                  , left b1
+                  , top b2
+                  , left b2
+                  , rowskip b1
 
-                      (* TODO: get rid of unused parameters, the 0s here *)
-                      , (*data c*) tmp
-                      , (*top c*) 0
-                      , (*left c*) 0
-                      , (*rowskip c*) 0
-                      , n
-                      )
-                  in
-                    (pkg, tmp)
-                  end
-
-                fun poll (pkg, _) =
-                  (rawFancyTwoPoll pkg = 0w1)
-
-                fun finish (pkg, tmp) =
-                  (rawFancyTwoFinish pkg; tmp)
-
-                fun cleanup tmp =
-                  modify c (fn {row, col, v} =>
-                    v + Array.sub (tmp, row * n + col))
-
+                  (* TODO: get rid of unused parameters, the 0s here *)
+                  , (*data c*) tmp
+                  , (*top c*) 0
+                  , (*left c*) 0
+                  , (*rowskip c*) 0
+                  , n
+                  )
               in
-                ForkJoin.gpuWithCleanup
-                  { spawn = spawn
-                  , poll = poll
-                  , finish = finish
-                  , cleanup = cleanup
-                  }
+                rawFancyTwoFinish pkg;
+                SOME tmp
               end
           }
+      in
+        case choiceResult of
+          NONE => ()
+        | SOME tmp =>
+            (* if the gpu branch was used, then we still need to copy the result
+             * back into the output.
+             *)
+            modify c (fn {row, col, v} => v + Array.sub (tmp, row * n + col))
       end
 
 
@@ -634,51 +606,42 @@ struct
     else
       let
         val n = width a
-      in
-        ForkJoin.choice
-          { cpu = fn () => hybrid_multiply_inplace (a, da) (b, db) c
-          , gpu =
+
+        val choiceResult = ForkJoin.choice
+          { prefer_cpu = fn () =>
+              (hybrid_multiply_inplace (a, da) (b, db) c; NONE)
+
+          , prefer_gpu = fn () =>
               let
-                fun spawn () =
-                  let
-                    val tmp = ForkJoin.alloc (n * n)
-                    val pkg = rawFancySpawn
-                      ( (*data a*) da
-                      , top a
-                      , left a
-                      , rowskip a
-                      , (*data b*) db
-                      , top b
-                      , left b
-                      , rowskip b
-                      , (*data c*) tmp
-                      , (*top c*) 0
-                      , (*left c*) 0
-                      , (*rowskip c*) 0
-                      , n
-                      )
-                  in
-                    (pkg, tmp)
-                  end
-
-                fun poll (pkg, _) =
-                  (rawFancyPoll pkg = 0w1)
-
-                fun finish (pkg, tmp) =
-                  (rawFancyFinish pkg; tmp)
-
-                fun cleanup tmp =
-                  modify c (fn {row, col, v} =>
-                    v + Array.sub (tmp, row * n + col))
+                val tmp = ForkJoin.alloc (n * n)
+                val pkg = rawFancySpawn
+                  ( (*data a*) da
+                  , top a
+                  , left a
+                  , rowskip a
+                  , (*data b*) db
+                  , top b
+                  , left b
+                  , rowskip b
+                  , (*data c*) tmp
+                  , (*top c*) 0
+                  , (*left c*) 0
+                  , (*rowskip c*) 0
+                  , n
+                  )
               in
-                ForkJoin.gpuWithCleanup
-                  { spawn = spawn
-                  , poll = poll
-                  , finish = finish
-                  , cleanup = cleanup
-                  }
+                rawFancyFinish pkg;
+                SOME tmp
               end
           }
+      in
+        case choiceResult of
+          NONE => ()
+        | SOME tmp =>
+            (* if the gpu branch was used, then we still need to copy the result
+             * back into the output.
+             *)
+            modify c (fn {row, col, v} => v + Array.sub (tmp, row * n + col))
       end
 
 

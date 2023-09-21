@@ -1,6 +1,8 @@
 MLTONFLAGS = \
   -default-ann 'allowFFI true' \
 	-default-ann 'allowLineComments true' \
+	-disable-pass splitTypes1 \
+	-disable-pass splitTypes2 \
 	-default-type int64 \
 	-default-type word64 \
 	-cc-opt '-I/opt/nvidia/cuda/include/ -I../common/ -I/home/ec2-user/openblas-v0.3.23/installed/include/' \
