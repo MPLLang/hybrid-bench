@@ -1,37 +1,38 @@
 structure FutRay =
 struct
 
-  type fut_context = MLton.Pointer.t
+  type fut_context = Ray.ctx
 
   fun init () =
-    (_import "fut_init" public : unit -> fut_context;) ()
+      Ray.ctx_new Ray.default_cfg
 
   fun cleanup x =
-    (_import "fut_cleanup" public : fut_context -> unit;) x
+      Ray.ctx_free x
 
   type i64 = Int64.int
   type i32 = Int32.int
 
-  type prepared_scene = MLton.Pointer.t
+  type prepared_scene = {prepared: Ray.opaque_prepared_scene.t,
+                         height: i64,
+                         width: i64}
 
-  val prepare_rgbbox_scene =
-    _import "prepare_rgbbox_scene" public : fut_context * i64 * i64 -> prepared_scene;
+  fun prepare_rgbbox_scene (ctx, height, width) =
+      let val scene = Ray.Entry.rgbbox ctx ()
+      in {prepared=Ray.Entry.prepare_scene ctx (height, width, scene),
+          height=height,
+          width=width}
+         before Ray.opaque_scene.free scene
+      end
 
-  val prepare_rgbbox_scene_free =
-    _import "prepare_rgbbox_scene_free" public : fut_context * prepared_scene -> unit;
+  fun prepare_rgbbox_scene_free (scene : prepared_scene) =
+      Ray.opaque_prepared_scene.free (#prepared scene)
 
-  type render_package = MLton.Pointer.t
-
-  val render_spawn =
-    _import "render_spawn" public : fut_context * prepared_scene * i64 * i64 * ( i32 array ) -> render_package;
-
-  (* val render_poll = _import "render_poll" public : fut_context -> Word8.word; *)
-
-  val render_finish = _import "render_finish" public : fut_context -> unit;
-
-  fun render ctx prepared_scene output : unit =
-    let val (data, start, len) = ArraySlice.base output
-    in render_finish (render_spawn (ctx, prepared_scene, start, len, data))
-    end
+  fun render ctx {prepared,height,width} output : unit =
+      let val (data, start, len) = ArraySlice.base output
+          val arr = Ray.Entry.render_pixels ctx (height, width, start, len, prepared)
+          val arr_sml = Ray.Int32Array1.values arr
+          val () = Ray.Int32Array1.free arr
+      in Int32Array.appi (fn (i, x) => ArraySlice.update (output, i, x)) arr_sml
+      end
 
 end
