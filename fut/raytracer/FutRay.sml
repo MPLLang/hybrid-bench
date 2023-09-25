@@ -12,7 +12,7 @@ struct
   type i64 = Int64.int
   type i32 = Int32.int
 
-  type prepared_scene = {prepared: Ray.opaque_prepared_scene.t,
+  type prepared_scene = {prepared: Ray.Opaque.prepared_scene.t,
                          height: i64,
                          width: i64}
 
@@ -21,11 +21,11 @@ struct
       in {prepared=Ray.Entry.prepare_scene ctx (height, width, scene),
           height=height,
           width=width}
-         before Ray.opaque_scene.free scene
+         before Ray.Opaque.scene.free scene
       end
 
   fun prepare_rgbbox_scene_free (scene : prepared_scene) =
-      Ray.opaque_prepared_scene.free (#prepared scene)
+      Ray.Opaque.prepared_scene.free (#prepared scene)
 
   fun render ctx {prepared,height,width} output : unit =
       let val (data, start, len) = ArraySlice.base output
