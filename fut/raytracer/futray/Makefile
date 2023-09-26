@@ -1,5 +1,5 @@
 default: phony
-	futhark c --library ray.fut
+	futhark cuda --library ray.fut
 	smlfut ray.json -o . --signature-name RAY --structure-name Ray
 
 clean: phony
