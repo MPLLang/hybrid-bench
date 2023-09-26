@@ -115,11 +115,13 @@ render_pixels_spawn(
 
   pack->finished = false;
 
-  if (0 != pthread_create(&(pack->friend), NULL, &render_pixels_threadfunc, pack))
-  {
-    printf("ERROR: glue.c: render_pixels_spawn: pthread_create failed\n");
-    exit(1);
-  }
+  render_pixels_threadfunc(pack);
+
+  // if (0 != pthread_create(&(pack->friend), NULL, &render_pixels_threadfunc, pack))
+  // {
+  //   printf("ERROR: glue.c: render_pixels_spawn: pthread_create failed\n");
+  //   exit(1);
+  // }
 
   return pack;
 }
@@ -133,10 +135,10 @@ uint8_t render_pixels_poll(struct render_pixels_pack *pack)
 
 void render_pixels_finish(struct render_pixels_pack *pack)
 {
-  if (0 != pthread_join(pack->friend, NULL))
-  {
-    printf("ERROR: glue.c: pthread_join failed\n");
-    exit(1);
-  }
+  // if (0 != pthread_join(pack->friend, NULL))
+  // {
+  //   printf("ERROR: glue.c: pthread_join failed\n");
+  //   exit(1);
+  // }
   free(pack);
 }

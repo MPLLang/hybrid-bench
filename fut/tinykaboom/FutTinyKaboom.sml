@@ -19,27 +19,25 @@ struct
   val render_pixels_spawn =
     _import "render_pixels_spawn" public : fut_context * i64 * i64 * f32 * i64 * i64 * u32 array -> render_pixels_package;
 
-  val render_pixels_poll =
-    _import "render_pixels_poll" public : fut_context -> Word8.word;
+  (* 
+    val render_pixels_poll =
+      _import "render_pixels_poll" public : fut_context -> Word8.word; *)
 
   val render_pixels_finish =
     _import "render_pixels_finish" public : fut_context -> unit;
 
 
-  fun render_pixels ctx width height t output :
-    (render_pixels_package, unit) ForkJoin.gpu_task =
+  fun render_pixels ctx width height t output : unit =
     let
       val (data, start, len) = ArraySlice.base output
       val lo = start
       val hi = start + len
-
-      fun spawn () =
-        render_pixels_spawn (ctx, width, height, t, lo, hi, data)
-      fun poll x =
-        (render_pixels_poll x = 0w1)
-      fun finish x = render_pixels_finish x
+      (* val _ = print
+        ("calling render_pixels_spawn " ^ Int.toString lo ^ " "
+         ^ Int.toString hi ^ "\n") *)
+      val pack = render_pixels_spawn (ctx, width, height, t, lo, hi, data)
     in
-      ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+      render_pixels_finish pack
     end
 
 end

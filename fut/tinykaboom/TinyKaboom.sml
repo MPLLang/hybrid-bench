@@ -196,15 +196,15 @@ struct
 
 
   val renderHybridGpuSplit =
-    CommandLineArgs.parseReal "render-hybrid-gpu-split" 0.5
+    CommandLineArgs.parseReal "render-hybrid-gpu-split" 0.75
   val _ = print
     ("render-hybrid-gpu-split " ^ Real.toString renderHybridGpuSplit
      ^ " (fraction given to gpu choice points)\n")
 
-  val gpuThresh = CommandLineArgs.parseInt "gpu-min-thresh" 5000
+  val gpuThresh = CommandLineArgs.parseInt "gpu-min-thresh" 50
 
   fun calculateMid lo hi =
-    lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - renderHybridGpuSplit))
+    lo + Real.ceil (Real.fromInt (hi - lo) * renderHybridGpuSplit)
 
 
   fun compute_frame_hybrid ctx t width height =
@@ -221,26 +221,30 @@ struct
           (output, lo, SOME (hi - lo)))
 
       fun loop lo hi =
-        if hi - lo <= 100 then
+        if hi - lo <= 50 then
           Util.for (lo, hi) writePixel
         else
           let val mid = calculateMid lo hi
-          in ForkJoin.par (fn _ => loop lo mid, fn _ => loopChoose mid hi); ()
+          in ForkJoin.par (fn _ => loopChoose lo mid, fn _ => loop mid hi); ()
           end
 
       and loopChoose lo hi =
         if hi - lo >= gpuThresh then
-          ForkJoin.choice {cpu = fn _ => loop lo hi, gpu = gpuTask lo hi}
+          ForkJoin.choice
+            { prefer_cpu = fn _ => loop lo hi
+            , prefer_gpu = fn _ => gpuTask lo hi
+            }
         else
-          ForkJoin.parfor 100 (lo, hi) writePixel
+          ForkJoin.parfor 50 (lo, hi) writePixel
     in
-      loopChoose 0 (width * height);
+      loop 0 (width * height);
       output
     end
 
 
   fun render_cpu frames fps width height =
-    SeqBasis.tabulate 1 (0, frames) (fn frame =>
+    (* SeqBasis.tabulate 1 (0, frames) (fn frame => *)
+    Array.tabulate (frames, fn frame =>
       { width = width
       , height = height
       , data = ArraySlice.full
@@ -256,24 +260,71 @@ struct
           let
             val output = ArraySlice.full (ForkJoin.alloc (width * height))
           in
-            ForkJoin.choice
-              { cpu = fn _ => raise Fail "Uh oh! Should be impossible!"
-              , gpu =
-                  FutTinyKaboom.render_pixels ctx width height
-                    (f32.fromInt frame / f32.fromInt fps) output
-              };
+            FutTinyKaboom.render_pixels ctx width height
+              (f32.fromInt frame / f32.fromInt fps) output;
             output
           end
       })
 
 
   fun render_hybrid ctx frames fps width height =
-    SeqBasis.tabulate 1 (0, frames) (fn frame =>
-      { width = width
-      , height = height
-      , data = ArraySlice.full
-          (compute_frame_hybrid ctx (f32.fromInt frame / f32.fromInt fps) width
-             height)
-      })
+    let
+      val result = ForkJoin.alloc frames
+
+      fun single frame =
+        Array.update
+          ( result
+          , frame
+          , { width = width
+            , height = height
+            , data = ArraySlice.full
+                (compute_frame_hybrid ctx (f32.fromInt frame / f32.fromInt fps)
+                   width height)
+            }
+          )
+
+      fun single_on_gpu frame =
+        Array.update
+          ( result
+          , frame
+          , { width = width
+            , height = height
+            , data =
+                let
+                  val output = ArraySlice.full (ForkJoin.alloc (width * height))
+                in
+                  FutTinyKaboom.render_pixels ctx width height
+                    (f32.fromInt frame / f32.fromInt fps) output;
+                  output
+                end
+            }
+          )
+
+      fun loop lo hi =
+        if hi - lo <= 0 then
+          ()
+        else if hi - lo = 1 then
+          single lo
+        else
+          let val mid = lo + Util.ceilDiv (hi - lo) 2
+          in ForkJoin.par (fn _ => loopChoose lo mid, fn _ => loop mid hi); ()
+          end
+
+      and loopChoose lo hi =
+        if hi - lo <= 0 then
+          ()
+        else if hi - lo = 1 then
+          single lo
+        else
+          ForkJoin.choice
+            { prefer_cpu = fn _ => loop lo hi
+            , prefer_gpu = fn _ => Util.for (lo, hi) single_on_gpu
+            }
+
+    in
+      loop 0 frames;
+
+      result
+    end
 
 end
