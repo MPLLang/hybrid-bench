@@ -1,5 +1,7 @@
 #pragma once
 
+#include <sys/time.h>
+
 struct timer_t {
   const char *name;
   struct timespec start;

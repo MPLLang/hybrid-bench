@@ -36,7 +36,7 @@ val bench =
 
 val result = Benchmark.run ("rendering (" ^ impl ^ ")") bench
 
-val _ = FutRay.prepare_rgbbox_scene_free (ctx, prepared_scene)
+val _ = FutRay.prepare_rgbbox_scene_free prepared_scene
 val _ = FutRay.cleanup ctx
 
 val writeImage = if dop6 then Ray.image2ppm6 else Ray.image2ppm
