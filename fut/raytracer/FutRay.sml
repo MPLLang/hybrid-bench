@@ -28,11 +28,11 @@ struct
       Ray.Opaque.prepared_scene.free (#prepared scene)
 
   fun render ctx {prepared,height,width} output : unit =
-      let val (data, start, len) = ArraySlice.base output
+      let val (data, start, len) = Int32ArraySlice.base output
           val arr = Ray.Entry.render_pixels ctx (height, width, start, len, prepared)
-          val arr_sml = Ray.Int32Array1.values arr
+          val () = Ray.Int32Array1.values_into arr output
           val () = Ray.Int32Array1.free arr
-      in Int32Array.appi (fn (i, x) => ArraySlice.update (output, i, x)) arr_sml
+      in ()
       end
 
 end
