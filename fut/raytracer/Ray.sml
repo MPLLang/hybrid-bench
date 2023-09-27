@@ -308,8 +308,6 @@ struct
     end
 
   type pixel = Int32.int
-  structure PixelArray = Int32Array
-  structure PixelArraySlice = Int32ArraySlice
 
   fun colour_to_pixel {x = r, y = g, z = b} : pixel =
     let
@@ -333,7 +331,7 @@ struct
       (Word32.toInt r, Word32.toInt g, Word32.toInt b)
     end
 
-  type image = {pixels: PixelArray.array, height: int, width: int}
+  type image = {pixels: pixel Array.array, height: int, width: int}
 
   fun image2ppm out ({pixels, height, width}: image) =
     let
@@ -347,7 +345,7 @@ struct
         ( out
         , "P3\n" ^ Int.toString width ^ " " ^ Int.toString height ^ "\n"
           ^ "255\n"
-        ) before PixelArray.app (onPixel o pixel_to_rgb) pixels
+        ) before Array.app (onPixel o pixel_to_rgb) pixels
     end
 
   fun image2ppm6 out ({pixels, height, width}: image) =
@@ -359,7 +357,7 @@ struct
         ( out
         , "P6\n" ^ Int.toString width ^ " " ^ Int.toString height ^ "\n"
           ^ "255\n"
-        ) before PixelArray.app (onPixel o pixel_to_rgb) pixels
+        ) before Array.app (onPixel o pixel_to_rgb) pixels
     end
 
 
@@ -374,19 +372,19 @@ struct
 
   fun render_hybrid ctx fut_prepared_scene objs width height cam : image =
     let
-      val pixels = PixelArray.array (height * width, 0)
+      val pixels: Int32.int array = ForkJoin.alloc (height * width)
 
       fun writePixel l =
         let
           val i = l mod width
           val j = height - l div width
         in
-          PixelArray.update (pixels, l, colour_to_pixel
+          Array.update (pixels, l, colour_to_pixel
             (trace_ray objs width height cam j i))
         end
 
       fun gpuTask lo hi =
-        FutRay.render ctx fut_prepared_scene (PixelArraySlice.slice
+        FutRay.render ctx fut_prepared_scene (ArraySlice.slice
           (pixels, lo, SOME (hi - lo)))
 
       fun loop lo hi =
@@ -408,14 +406,14 @@ struct
 
   fun render_cpu objs width height cam : image =
     let
-      val pixels = PixelArray.array (height * width, 0)
+      val pixels: Int32.int array = ForkJoin.alloc (height * width)
 
       fun writePixel l =
         let
           val i = l mod width
           val j = height - l div width
         in
-          PixelArray.update (pixels, l, colour_to_pixel
+          Array.update (pixels, l, colour_to_pixel
             (trace_ray objs width height cam j i))
         end
     in
@@ -426,8 +424,8 @@ struct
 
   fun render_gpu ctx fut_prepared_scene width height : image =
     let
-      val pixels = PixelArray.array (height * width, 0)
-      val doGpu = FutRay.render ctx fut_prepared_scene (PixelArraySlice.full pixels)
+      val pixels: Int32.int array = ForkJoin.alloc (height * width)
+      val doGpu = FutRay.render ctx fut_prepared_scene (ArraySlice.full pixels)
       fun ensureOnGpu () =
         ForkJoin.choice {prefer_cpu = ensureOnGpu, prefer_gpu = fn () => doGpu}
     in
