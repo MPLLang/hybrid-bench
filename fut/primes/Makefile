@@ -12,8 +12,8 @@ MPL=/home/ec2-user/proj/mpl/hybrid-sched/build/bin/mpl
 
 main.mpl.bin: phony
 	futhark cuda --library futhark-primes.fut
-	smlfut -o . --signature-name=FUTHARK_PRIMES --structure-name=FutharkPrimes futhark-primes.json
-	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb futhark-primes.c # futhark-primes.smlfut.c
+	~/proj/smlfut/smlfut -o . --signature-name=FUTHARK_PRIMES --structure-name=FutharkPrimes futhark-primes.json
+	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb futhark-primes.c futhark-primes.smlfut.c
 
 clean: 
 	rm test.mpl
