@@ -76,7 +76,12 @@ val _ = print
    ^ " (fraction of segments given to gpu choice points)\n")
 
 fun calculateMid lo hi =
-  lo + Real.ceil (Real.fromInt (hi - lo) * hybrid_gpu_split)
+  let
+    val result =
+      lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - hybrid_gpu_split))
+  in
+    if result = lo then lo + 1 else if result = hi then hi - 1 else result
+  end
 
 
 fun primes_hybrid n : Int64.int array =
@@ -151,7 +156,7 @@ fun primes_hybrid n : Int64.int array =
           let
             val midb = calculateMid lob hib
           in
-            ForkJoin.par (fn _ => loopChoose lob midb, fn _ => loop midb hib);
+            ForkJoin.par (fn _ => loop lob midb, fn _ => loopChoose midb hib);
             ()
           end
 
