@@ -8,10 +8,15 @@ val ctx = FutharkPrimes.ctx_new FutharkPrimes.default_cfg
 
 fun primes_gpu n : Int64.int array =
   let
+    val t0 = Time.now ()
     val farr = FutharkPrimes.Entry.primes ctx n
     val _ = FutharkPrimes.ctx_sync ctx
+    val t1 = Time.now ()
+    val _ = print ("gpu primes " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n")
     val output = FutharkPrimes.Int64Array1.values farr
     val _ = FutharkPrimes.Int64Array1.free farr
+    val t2 = Time.now ()
+    val _ = print ("gpu copy back " ^ Time.fmt 4 (Time.- (t2, t1)) ^ "s\n")
   in
     output
   end
@@ -39,28 +44,31 @@ fun primes_cpu n : Int64.int array =
       val blockSize = Int.max (sqrtN, 1000)
       val numBlocks = Util.ceilDiv (n + 1) blockSize
 
-      val _ = ForkJoin.parfor 1 (0, numBlocks) (fn b =>
-        let
-          val lo = b * blockSize
-          val hi = Int.min (lo + blockSize, n + 1)
+      val (_, tm) = Util.getTime (fn _ =>
+        ForkJoin.parfor 1 (0, numBlocks) (fn b =>
+          let
+            val lo = b * blockSize
+            val hi = Int.min (lo + blockSize, n + 1)
 
-          fun loop i =
-            if i >= Array.length sqrtPrimes then
-              ()
-            else if 2 * Int64.toInt (Array.sub (sqrtPrimes, i)) >= hi then
-              ()
-            else
-              let
-                val p = Int64.toInt (Array.sub (sqrtPrimes, i))
-                val lom = Int.max (2, Util.ceilDiv lo p)
-                val him = Util.ceilDiv hi p
-              in
-                Util.for (lom, him) (fn m => unmark (m * p));
-                loop (i + 1)
-              end
-        in
-          loop 0
-        end)
+            fun loop i =
+              if i >= Array.length sqrtPrimes then
+                ()
+              else if 2 * Int64.toInt (Array.sub (sqrtPrimes, i)) >= hi then
+                ()
+              else
+                let
+                  val p = Int64.toInt (Array.sub (sqrtPrimes, i))
+                  val lom = Int.max (2, Util.ceilDiv lo p)
+                  val him = Util.ceilDiv hi p
+                in
+                  Util.for (lom, him) (fn m => unmark (m * p));
+                  loop (i + 1)
+                end
+          in
+            loop 0
+          end))
+      val _ = print
+        ("sieve (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm ^ "s\n")
     in
       SeqBasis.filter 4096 (2, n + 1) (fn i => Int64.fromInt i) isMarked
     end
@@ -70,22 +78,19 @@ fun primes_cpu n : Int64.int array =
  * primes hybrid cpu+gpu
  *)
 
-val hybrid_gpu_split = CLA.parseReal "hybrid-gpu-split" 0.2
+val hybrid_gpu_split = CLA.parseReal "hybrid-gpu-split" 0.1
 val _ = print
   ("hybrid-gpu-split " ^ Real.toString hybrid_gpu_split
    ^ " (fraction of segments given to gpu choice points)\n")
 
 fun calculateMid lo hi =
-  let
-    val result =
-      lo + Real.ceil (Real.fromInt (hi - lo) * (1.0 - hybrid_gpu_split))
-  in
-    if result = lo then lo + 1 else if result = hi then hi - 1 else result
+  let val result = lo + Real.ceil (Real.fromInt (hi - lo) * hybrid_gpu_split)
+  in if result = lo then lo + 1 else if result = hi then hi - 1 else result
   end
 
 
 fun primes_hybrid n : Int64.int array =
-  if n <= 1000 then
+  if n <= 10000 then
     primes_cpu n
   (* ForkJoin.choice
     {prefer_cpu = fn _ => primes_cpu n, prefer_gpu = fn _ => primes_gpu n} *)
@@ -127,8 +132,11 @@ fun primes_hybrid n : Int64.int array =
           loop 0
         end
 
-      val sqrtPrimesOnGpu =
-        FutharkPrimes.Int64Array1.new ctx sqrtPrimes (Array.length sqrtPrimes)
+      val (sqrtPrimesOnGpu, tm) = Util.getTime (fn _ =>
+        FutharkPrimes.Int64Array1.new ctx sqrtPrimes (Array.length sqrtPrimes))
+      val _ = print
+        ("copy sqrtPrimes (n=" ^ Int.toString n ^ ") to gpu: " ^ Time.fmt 4 tm
+         ^ "s\n")
 
       fun blockRangeSize lob hib =
         Int.min (n + 1, hib * blockSize) - lob * blockSize
@@ -138,12 +146,23 @@ fun primes_hybrid n : Int64.int array =
           val lo = lob * blockSize
           val hi = Int.min (n + 1, hib * blockSize)
 
+          val t0 = Time.now ()
           val gpuFlags =
-            FutharkPrimes.Entry.sieve_segment ctx (sqrtPrimesOnGpu, lo, hi)
+            FutharkPrimes.Entry.sieve_segmented_segment ctx
+              (sqrtPrimesOnGpu, lo, hi)
           val _ = FutharkPrimes.ctx_sync ctx
+          val t1 = Time.now ()
+          val _ = print
+            ("gpu sieve (" ^ Int.toString (hi - lo) ^ "): "
+             ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n")
           val target = ArraySlice.slice (flags, lo, SOME (hi - lo))
         in
-          FutharkPrimes.Word8Array1.values_into gpuFlags target;
+          let
+            val (_, tm) = Util.getTime (fn _ =>
+              FutharkPrimes.Word8Array1.values_into gpuFlags target)
+          in
+            print ("gpu copy back: " ^ Time.fmt 4 tm ^ "s\n")
+          end;
           FutharkPrimes.Word8Array1.free gpuFlags
         end
 
@@ -156,22 +175,33 @@ fun primes_hybrid n : Int64.int array =
           let
             val midb = calculateMid lob hib
           in
-            ForkJoin.par (fn _ => loop lob midb, fn _ => loopChoose midb hib);
+            ForkJoin.par (fn _ => loopChoose lob midb, fn _ => loop midb hib);
             ()
           end
 
       and loopChoose lob hib =
-        if blockRangeSize lob hib < 10000 then
+        if blockRangeSize lob hib < 100000 then
           loop lob hib
         else
           ForkJoin.choice
             { prefer_cpu = fn _ => loop lob hib
             , prefer_gpu = fn _ => doBlocksOnGpu lob hib
             }
+
+      val (_, tm) = Util.getTime (fn _ => loop 0 numBlocks)
+      val _ = print
+        ("sieve (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm ^ "s\n")
     in
-      loop 0 numBlocks;
       FutharkPrimes.Int64Array1.free sqrtPrimesOnGpu;
-      SeqBasis.filter 5000 (2, n + 1) (fn i => Int64.fromInt i) isMarked
+
+      let
+        val (result, tm) = Util.getTime (fn _ =>
+          SeqBasis.filter 5000 (2, n + 1) (fn i => Int64.fromInt i) isMarked)
+      in
+        print ("filter (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm ^ "s\n");
+        result
+      end
+
     end
 
 
