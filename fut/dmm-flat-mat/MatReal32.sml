@@ -18,7 +18,7 @@ struct
   (* ====================== *)
 
   val rawFancySpawn =
-    _import "fancy_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
+    _import "fancy_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * i64 -> dmm_package;
 
   (* val rawFancyPoll =
     _import "fancy_dmm_poll" public : dmm_package -> Word8.word; *)
@@ -485,6 +485,8 @@ struct
           , (*left c*) 0
           , (*rowskip c)*) 0
           , n
+          , n
+          , n
           )
       in
         rawFancyFinish pkg;
@@ -496,6 +498,194 @@ struct
 
   (* ====================================================================== *)
 
+
+  fun hybrid_multiply_nonsquare_inplace outputMode (da, db) (a, b, c) =
+    if
+      not
+        ((width a = height b) andalso (height a = height c)
+         andalso (width b = width c))
+    then
+      raise MatrixFormat
+    else
+      let
+        val m = height a
+        val n = width b
+        val k = width a
+
+        (* val _ = print
+          ("hybrid_multiply_nonsquare_inplace " ^ Int.toString m ^ " "
+           ^ Int.toString n ^ " " ^ Int.toString k ^ "\n") *)
+
+        val maxdim = Int.max (Int.max (m, n), k)
+      in
+        if maxdim <= leafSize then
+          case outputMode of
+            Accumulate =>
+              let
+                val tmpA = makeCopy a
+                val tmpB = makeCopy b
+                val tmpC = makeCopy c
+              in
+                cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
+                copy {src = tmpC, dst = c}
+              end
+
+          | Write =>
+              let
+                val tmpA = makeCopy a
+                val tmpB = makeCopy b
+                val tmpC = allocate {height = m, width = n}
+              in
+                cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, false);
+                copy {src = tmpC, dst = c}
+              end
+
+
+        else if maxdim = m then
+          (* split a horizontally *)
+          let
+            val (a1, a2) = splitHorizontal a
+            val (c1, c2) = splitHorizontal c
+          (* val _ = print ("SPLIT HORIZONTAL   *)
+          in
+            par
+              ( fn _ =>
+                  hybrid_multiply_nonsquare_inplace_choose outputMode (da, db)
+                    (a1, b, c1)
+              , fn _ =>
+                  hybrid_multiply_nonsquare_inplace outputMode (da, db)
+                    (a2, b, c2)
+              );
+            ()
+          end
+
+
+        else if maxdim = n then
+          (* split b vertically *)
+          let
+            val (b1, b2) = splitVertical b
+            val (c1, c2) = splitVertical c
+          in
+            par
+              ( fn _ =>
+                  hybrid_multiply_nonsquare_inplace_choose outputMode (da, db)
+                    (a, b1, c1)
+              , fn _ =>
+                  hybrid_multiply_nonsquare_inplace outputMode (da, db)
+                    (a, b2, c2)
+              );
+            ()
+          end
+
+
+        else
+          (* split a vertically and b horizontally *)
+          let
+            val (a1, a2) = splitVertical a
+            val (b1, b2) = splitHorizontal b
+          in
+            hybrid_multiply_nonsquare_inplace outputMode (da, db) (a1, b1, c);
+            hybrid_multiply_nonsquare_inplace Accumulate (da, db) (a2, b2, c)
+          end
+      end
+
+
+  and hybrid_multiply_nonsquare_inplace_choose outputMode (da, db) (a, b, c) =
+    if
+      not
+        ((width a = height b) andalso (height a = height c)
+         andalso (width b = width c))
+    then
+      raise MatrixFormat
+    else
+      let
+        val m = height a
+        val n = width b
+        val k = width a
+        (* val _ = print
+          ("hybrid_multiply_nonsquare_inplace_choose " ^ Int.toString m ^ " "
+           ^ Int.toString n ^ " " ^ Int.toString k ^ "\n") *)
+        val maxdim = Int.max (Int.max (m, n), k)
+      in
+        if maxdim < gpuThresh then
+          hybrid_multiply_nonsquare_inplace outputMode (da, db) (a, b, c)
+        else
+          let
+            val choiceResult = ForkJoin.choice
+              { prefer_cpu = fn _ =>
+                  ( hybrid_multiply_nonsquare_inplace outputMode (da, db)
+                      (a, b, c)
+                  ; NONE
+                  )
+
+              , prefer_gpu = fn _ =>
+                  let
+                    (* val _ = print ("calling cuBLAS...\n") *)
+                    val tmpC = allocate {height = m, width = n}
+                    val pkg = rawFancySpawn
+                      ( (*data a*) da
+                      , top a
+                      , left a
+                      , rowskip a
+                      , (*data b*) db
+                      , top b
+                      , left b
+                      , rowskip b
+                      , (*data c*) data tmpC
+                      , (*top c*) 0
+                      , (*left c*) 0
+                      , (*rowskip c*) 0
+                      , m
+                      , n
+                      , k
+                      )
+                  in
+                    (* print ("finishing cuBLAS... \n"); *)
+                    rawFancyFinish pkg;
+                    (* print ("cuBLAS success\n"); *)
+                    SOME tmpC
+                  end
+              }
+          in
+            case choiceResult of
+              NONE => ()
+            | SOME tmpC =>
+                case outputMode of
+                  Write => copy {src = tmpC, dst = c}
+                | Accumulate =>
+                    let
+                      val arr = data tmpC
+                    in
+                      modify c (fn {row, col, v} =>
+                        v + Array.sub (arr, row * n + col))
+                    end
+          end
+      end
+
+
+  and hybrid_multiply_nonsquare (a, b) =
+    if not (width a = height b) then
+      raise MatrixFormat
+    else
+      let
+        val c = allocate {height = height a, width = width b}
+        val ((da, db), tm) = Util.getTime (fn () =>
+          let
+            val da = memcpyFloatsToGpu (data a, Array.length (data a))
+            val db = memcpyFloatsToGpu (data b, Array.length (data b))
+          in
+            syncGpu ();
+            (da, db)
+          end)
+        val _ = print ("hybrid_multiply: setup time: " ^ Time.fmt 4 tm ^ "\n")
+      in
+        hybrid_multiply_nonsquare_inplace Write (da, db) (a, b, c);
+        freeFloatsOnGpu da;
+        freeFloatsOnGpu db;
+        c
+      end
+
+  (* ====================================================================== *)
 
   fun hybrid_multiply_inplace (a, da) (b, db) c =
     if
@@ -627,6 +817,8 @@ struct
                   , (*top c*) 0
                   , (*left c*) 0
                   , (*rowskip c*) 0
+                  , n
+                  , n
                   , n
                   )
               in

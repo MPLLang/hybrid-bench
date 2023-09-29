@@ -219,9 +219,10 @@ void freeFloatsOnGpu(void *devicePtr) {
 
 // copy into dst[0..n*n)
 __global__
-void copy_square_block(
+void copy_block(
   float *dst,
-  uint64_t n,
+  uint64_t height,
+  uint64_t width,
   float *src,
   uint64_t top,
   uint64_t left,
@@ -230,10 +231,10 @@ void copy_square_block(
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int stride = blockDim.x * gridDim.x;
 
-  int total = n*n;
+  int total = height*width;
   for (int i = tid; i < total; i += stride) {
-    int row = i/n;
-    int col = i%n;
+    int row = i/width;
+    int col = i%width;
     int srcIdx = (top + row) * rowskip + left + col;
     dst[i] = src[srcIdx];
   }
@@ -256,7 +257,9 @@ struct fancy_dmm_package {
   int64_t cTop;
   int64_t cLeft;
   int64_t cRowskip;
+  int64_t m;
   int64_t n;
+  int64_t k;
 
   /* these should stay */
   bool finished;
@@ -272,26 +275,29 @@ void* fancy_dmm_func(void* rawArg) {
 
   struct fancy_dmm_package *pack = (struct fancy_dmm_package *)rawArg;
 
+  uint64_t m = pack->m;
   uint64_t n = pack->n;
-  uint64_t rowbytes = n*sizeof(float);
-  uint64_t bytes = n*rowbytes;
+  uint64_t k = pack->k;
 
+  uint64_t abytes = m*k*sizeof(float);
+  uint64_t bbytes = k*n*sizeof(float);
+  uint64_t cbytes = m*n*sizeof(float);
 
   float *device_a;
   float *device_b;
   float *device_c;
-  cudaMalloc(&device_a, bytes);
-  cudaMalloc(&device_b, bytes);
-  cudaMalloc(&device_c, bytes);
+  cudaMalloc(&device_a, abytes);
+  cudaMalloc(&device_b, bbytes);
+  cudaMalloc(&device_c, cbytes);
 
   int GRID = ((n*n)+(SIZE-1))/SIZE;
   if(GRID == 0) {
     GRID = 1;
   }
-  copy_square_block<<<GRID, SIZE>>>(device_a, n, pack->a, pack->aTop, pack->aLeft, pack->aRowskip);
+  copy_block<<<GRID, SIZE>>>(device_a, m, k, pack->a, pack->aTop, pack->aLeft, pack->aRowskip);
   // cudaDeviceSynchronize();
 
-  copy_square_block<<<GRID, SIZE>>>(device_b, n, pack->b, pack->bTop, pack->bLeft, pack->bRowskip);
+  copy_block<<<GRID, SIZE>>>(device_b, k, n, pack->b, pack->bTop, pack->bLeft, pack->bRowskip);
   cudaDeviceSynchronize();
 
   timer_report_tick(&t, "--- memcpy to gpu");
@@ -300,12 +306,12 @@ void* fancy_dmm_func(void* rawArg) {
   float beta = 0.0;
   cublasHandle_t handle;
   cublasCreate(&handle);  
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, device_a, n, device_b, n, &beta, device_c, n);
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha, device_a, m, device_b, k, &beta, device_c, m);
   cublasDestroy(handle);
   timer_report_tick(&t, "      cublasSgemm");
 
 
-  cudaMemcpy(pack->c, device_c, bytes, cudaMemcpyDeviceToHost);
+  cudaMemcpy(pack->c, device_c, cbytes, cudaMemcpyDeviceToHost);
 
   cudaFree(device_a);
   cudaFree(device_b);
@@ -331,7 +337,9 @@ fancy_dmm_spawn(
   int64_t cTop,
   int64_t cLeft,
   int64_t cRowskip,
-  int64_t n)
+  int64_t m,
+  int64_t n,
+  int64_t k)
 {
   struct fancy_dmm_package *pack = (fancy_dmm_package*)malloc(sizeof(struct fancy_dmm_package));
 
@@ -350,7 +358,9 @@ fancy_dmm_spawn(
   pack->cLeft = cLeft;
   pack->cRowskip = cRowskip;
 
+  pack->m = m;
   pack->n = n;
+  pack->k = k;
 
   pack->finished = false;
 
@@ -446,8 +456,8 @@ void* fancy_two_dmm_func(void* rawArg) {
   if(GRID == 0) {
     GRID = 1;
   }
-  copy_square_block<<<GRID, SIZE>>>(tmp_a, n, pack->a, pack->aTop1, pack->aLeft1, pack->aRowskip);
-  copy_square_block<<<GRID, SIZE>>>(tmp_b, n, pack->b, pack->bTop1, pack->bLeft1, pack->bRowskip);
+  copy_block<<<GRID, SIZE>>>(tmp_a, n, n, pack->a, pack->aTop1, pack->aLeft1, pack->aRowskip);
+  copy_block<<<GRID, SIZE>>>(tmp_b, n, n, pack->b, pack->bTop1, pack->bLeft1, pack->bRowskip);
   cudaDeviceSynchronize();
   timer_report_tick(&t, "- memcpy A1,B1 on gpu");
 
@@ -460,8 +470,8 @@ void* fancy_two_dmm_func(void* rawArg) {
   timer_report_tick(&t, "   cublasSgemm(A1,B1)");
   
 
-  copy_square_block<<<GRID, SIZE>>>(tmp_a, n, pack->a, pack->aTop2, pack->aLeft2, pack->aRowskip);
-  copy_square_block<<<GRID, SIZE>>>(tmp_b, n, pack->b, pack->bTop2, pack->bLeft2, pack->bRowskip);
+  copy_block<<<GRID, SIZE>>>(tmp_a, n, n, pack->a, pack->aTop2, pack->aLeft2, pack->aRowskip);
+  copy_block<<<GRID, SIZE>>>(tmp_b, n, n, pack->b, pack->bTop2, pack->bLeft2, pack->bRowskip);
   cudaDeviceSynchronize();
   timer_report_tick(&t, "  memcpy A2,B2 on gpu");
 

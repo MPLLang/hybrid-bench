@@ -13,6 +13,7 @@ val bench =
   | "cpu-nonsquare" => MatReal32.cpu_multiply_nonsquare
   | "gpu" => MatReal32.gpu_multiply
   | "hybrid" => MatReal32.hybrid_multiply
+  | "hybrid-nonsquare" => MatReal32.hybrid_multiply_nonsquare
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val result = Benchmark.run "dmm" (fn _ => bench (input1, input2))
