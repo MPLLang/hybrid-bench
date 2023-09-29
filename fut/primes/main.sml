@@ -166,7 +166,7 @@ fun primes_hybrid n : Int64.int array =
           FutharkPrimes.Word8Array1.free gpuFlags
         end
 
-      fun loop lob hib =
+      fun loop depth lob hib =
         if hib - lob = 0 then
           ()
         else if hib - lob = 1 then
@@ -175,20 +175,33 @@ fun primes_hybrid n : Int64.int array =
           let
             val midb = calculateMid lob hib
           in
-            ForkJoin.par (fn _ => loopChoose lob midb, fn _ => loop midb hib);
+            ForkJoin.par (fn _ => loopChoose (depth + 1) lob midb, fn _ =>
+              loop (depth + 1) midb hib);
             ()
           end
 
-      and loopChoose lob hib =
+      and loopChoose depth lob hib =
         if blockRangeSize lob hib < 100000 then
-          loop lob hib
+          ForkJoin.parfor 1 (lob, hib) doBlock
         else
           ForkJoin.choice
-            { prefer_cpu = fn _ => loop lob hib
+            { prefer_cpu = fn _ => loop depth lob hib
             , prefer_gpu = fn _ => doBlocksOnGpu lob hib
             }
 
-      val (_, tm) = Util.getTime (fn _ => loop 0 numBlocks)
+      fun outerLoop depth lob hib =
+        if depth >= 2 orelse hib - lob <= 1 then
+          loop depth lob hib
+        else
+          let
+            val midb = lob + (hib - lob) div 2
+          in
+            ForkJoin.par (fn _ => outerLoop (depth + 1) lob midb, fn _ =>
+              outerLoop (depth + 1) midb hib);
+            ()
+          end
+
+      val (_, tm) = Util.getTime (fn _ => outerLoop 0 0 numBlocks)
       val _ = print
         ("sieve (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm ^ "s\n")
     in
