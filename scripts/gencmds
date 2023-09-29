@@ -2,87 +2,85 @@
 import json
 
 
-def cmd(procs, impl, sched_k, args):
-  cmd_template = "/usr/bin/time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 -- -warmup 5 -repeat 20 -impl {} {} {}"
-  sched_param = "" if impl != "hybrid" else "-sched-gpu-payout {}".format(str(sched_k))
-  return cmd_template.format(str(procs), impl, sched_param, args)
+def cmd(procs, impl, args):
+  cmd_template = "/usr/bin/time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 set-affinity -- -warmup 5 -repeat 20 -impl {} {}"
+  return cmd_template.format(str(procs), impl, args)
 
 
-def interval_tree(procs, impl, sched_k):
+def interval_tree(procs, impl):
   row = {
     "tag": "interval-tree",
     "cwd": "fut/build-intervaltree",
-    "cmd": cmd(procs, impl, sched_k, "-n 5000000"),
+    "cmd": cmd(procs, impl, "-n 5000000"),
     "procs": procs,
     "impl": impl
   }
-  if impl == "hybrid":
-    row["sched_k"] = sched_k
   return row
 
 
-def dmm(procs, impl, sched_k):
+def dmm(procs, impl):
   row = {
     "tag": "dmm",
     "cwd": "fut/dmm-flat-mat",
-    "cmd": cmd(procs, impl, sched_k, "-n 8192"),
+    "cmd": cmd(procs, impl, "-n 8192"),
     "procs": procs,
     "impl": impl
   }
-  if impl == "hybrid":
-    row["sched_k"] = sched_k
   return row
 
 
-def mandelbrot(procs, impl, sched_k):
+def mandelbrot(procs, impl):
   row = {
     "tag": "mandelbrot",
     "cwd": "fut/mandelbrot",
-    "cmd": cmd(procs, impl, sched_k, ""),
+    "cmd": cmd(procs, impl, ""),
     "procs": procs,
     "impl": impl
   }
-  if impl == "hybrid":
-    row["sched_k"] = sched_k
   return row
 
 
-def raytracer(procs, impl, sched_k):
+def raytracer(procs, impl):
   row = {
     "tag": "raytracer",
     "cwd": "fut/raytracer",
-    "cmd": cmd(procs, impl, sched_k, "-h 1000 -w 1000"),
+    "cmd": cmd(procs, impl, "-h 1000 -w 1000"),
     "procs": procs,
     "impl": impl
   }
-  if impl == "hybrid":
-    row["sched_k"] = sched_k
   return row
 
 
-def mergesort(procs, impl, sched_k):
+def mergesort(procs, impl):
   row = {
     "tag": "mergesort",
     "cwd": "fut/sort",
-    "cmd": cmd(procs, impl, sched_k, "-n 10000000"),
+    "cmd": cmd(procs, impl, "-n 10000000"),
     "procs": procs,
     "impl": impl
   }
-  if impl == "hybrid":
-    row["sched_k"] = sched_k
   return row
 
 
-def primes(procs, impl, sched_k):
+def primes(procs, impl):
   row = {
     "tag": "primes",
     "cwd": "fut/sieve-test-choice-prim",
-    "cmd": cmd(procs, impl, sched_k, "-n 10000000 -simultaneous 20"),
+    "cmd": cmd(procs, impl, "-n 10000000 -simultaneous 20"),
     "procs": procs,
     "impl": impl
   }
-  if impl == "hybrid":
-    row["sched_k"] = sched_k
+  return row
+
+
+def new_primes(procs, impl):
+  row = {
+    "tag": "new-primes",
+    "cwd": "fut/primes",
+    "cmd": cmd(procs, impl, "-n 100000000"),
+    "procs": procs,
+    "impl": impl
+  }
   return row
 
 
@@ -111,17 +109,16 @@ def filter_unique(row):
 def filter_gpu_procs(row):
   if row is None:
     return None
-  if row['impl'] == 'gpu' and row['procs'] != 2:
+  if row['impl'] == 'gpu' and row['procs'] != 1:
     return None
   return row
 
 
 tests = [
-  add_extra(filter_gpu_procs(filter_unique(make_row(procs, impl, k))))
-  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, primes]
-  for procs in [2,4,6,8,12,16,24,30]
+  add_extra(filter_gpu_procs(filter_unique(make_row(procs, impl))))
+  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, primes, new_primes]
+  for procs in [1,2,4,6,8,12,16,24,30,32]
   for impl in ["hybrid","cpu","gpu"]
-  for k in [1,2,4,8]
 ]
 tests = [ r for r in tests if r is not None ]
 

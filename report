@@ -176,7 +176,7 @@ def findTrials(data, impl, schedk, tag, procs):
     if (row['impl'] == impl and \
         row['tag'] == tag and \
         row['procs'] == procs and \
-        (schedk is None or row['sched_k'] == schedk)):
+        (schedk is None or ('sched_k' in row and row['sched_k'] == schedk))):
       result.append(row)
   return result
 
@@ -735,13 +735,12 @@ def speedupPlot(outputName, tag):
   usedFull = dict()
   usedNoc = dict()
 
-  baseline = tm(averageTime(D, 'cpu', None, tag, 2))
+  baseline = tm(averageTime(D, 'cpu', None, tag, 1))
   def this_su(impl, p):
     try:
-      impll = 'hybrid' if impl.startswith('hybrid') else impl
-      schedk = int(impl[len('hybrid'):]) if impll == 'hybrid' else None
-      pp = 2 if impl == "gpu" else p
-      return baseline / averageTime(D, impll, schedk, tag, pp)
+      schedk = "new" if impl == "hybrid" else None
+      pp = 1 if impl == "gpu" else p
+      return baseline / averageTime(D, impl, schedk, tag, pp)
     except Exception as e:
       sys.stderr.write('[WARN] error while plotting {} speedup of {} at P={}: {}\n'.format(impl, tag, p, e))
       return None
@@ -750,12 +749,12 @@ def speedupPlot(outputName, tag):
   lines = []
 
   try:
-    gpu_su = this_su('gpu', 2)
+    gpu_su = this_su('gpu', 1)
     lines.append(plt.plot([0,40], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color='darkviolet', alpha=0.8))
   except Exception as e:
     sys.stderr.write('[WARN] error while plotting gpu speedup of {}: {}\n'.format(tag, e))
 
-  impls = ['cpu','hybrid1','hybrid2','hybrid4','hybrid8']
+  impls = ['cpu','hybrid']
   for impl in impls:
     try:
       speedups = list(map(lambda p: this_su(impl, p), procs))
@@ -778,7 +777,7 @@ def speedupPlot(outputName, tag):
       else:
         usedNoc[tuple((mi, si))] = tag
 
-      workers = [p-1 for p in procs]
+      workers = [p for p in procs]
 
       color = colors[ci]
       marker = markers[mi]
@@ -802,16 +801,16 @@ def speedupPlot(outputName, tag):
   # set legend position
   matplotlib.rcParams['legend.loc'] = 'upper left'
 
-  xticks = [1] + list(range(5, 31, 5))
-  yticks = [1] + list(range(5, 62, 5))
+  xticks = [1] + list(range(5, 33, 5))
+  yticks = [1] + list(range(5, 66, 5))
 
   # plt.xlabel('Num Workers (CPU)', fontsize=fontSize)
   # plt.ylabel('Speedup', fontsize=fontSize)
   plt.title(displayTag(tag), fontsize=fontSize)
   plt.yticks(yticks, fontsize=fontSize)
   plt.xticks(xticks, fontsize=fontSize)
-  plt.xlim(0, 31)
-  plt.ylim(0, 2*31)
+  plt.xlim(0, 33)
+  plt.ylim(0, 2*33)
   plt.gca().grid(axis='both', linestyle='dotted', linewidth=2)
   plt.gca().set_axisbelow(True)
   # plt.margins(y=10)
@@ -819,7 +818,7 @@ def speedupPlot(outputName, tag):
   if tag == 'dmm':
     plt.legend(
       [b[0] for b in lines],
-      ['GPU','CPU','H(1)','H(2)','H(4)','H(8)'],
+      ['GPU','CPU','Hybrid'],
       # bbox_to_anchor=(-0.16,1.05),
       # loc='upper right',
       bbox_to_anchor=(-0.17,1.04),
@@ -867,6 +866,7 @@ speedupPlot("figures/mandelbrot-speedups.pdf", "mandelbrot")
 speedupPlot("figures/sort-speedups.pdf", "mergesort")
 speedupPlot("figures/interval-tree-speedups.pdf", "interval-tree")
 speedupPlot("figures/primes-speedups.pdf", "primes")
+speedupPlot("figures/new-primes-speedups.pdf", "new-primes")
 
 # ============================================================================
 # ============================================================================
