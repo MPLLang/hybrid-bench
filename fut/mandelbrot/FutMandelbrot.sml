@@ -62,12 +62,12 @@ struct
 
   fun mandelbrot ctx ylo yhi blo bhi : u8 array =
     let
-      val output = FutharkMandelbrot.Entry.mandelbrot ctx ylo yhi blo bhi
+      val output = FutharkMandelbrot.Entry.mandelbrot ctx (ylo, yhi, blo, bhi)
       val _ = FutharkMandelbrot.ctx_sync ctx
       val arr = FutharkMandelbrot.Word8Array1.values output
     in
       FutharkMandelbrot.Word8Array1.free output;
-      MLton.Word8Array.toPoly arr (* O(1) *)
+      arr
     end
 
 end
