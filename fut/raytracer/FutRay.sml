@@ -4,10 +4,10 @@ struct
   type fut_context = Ray.ctx
 
   fun init () =
-      Ray.ctx_new Ray.default_cfg
+      Ray.Context.new Ray.default_cfg
 
   fun cleanup x =
-      Ray.ctx_free x
+      Ray.Context.free x
 
   type i64 = Int64.int
   type i32 = Int32.int

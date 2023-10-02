@@ -1,6 +1,6 @@
 structure CLA = CommandLineArgs
 
-val ctx = FutharkPrimes.ctx_new FutharkPrimes.default_cfg
+val ctx = FutharkPrimes.Context.new FutharkPrimes.default_cfg
 
 (* ==========================================================================
  * primes on gpu
@@ -10,7 +10,7 @@ fun primes_gpu n : Int64.int array =
   let
     val t0 = Time.now ()
     val farr = FutharkPrimes.Entry.primes ctx n
-    val _ = FutharkPrimes.ctx_sync ctx
+    val _ = FutharkPrimes.Context.sync ctx
     val t1 = Time.now ()
     val _ = print ("gpu primes " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n")
     val output = FutharkPrimes.Int64Array1.values farr
@@ -150,7 +150,7 @@ fun primes_hybrid n : Int64.int array =
           val gpuFlags =
             FutharkPrimes.Entry.sieve_segmented_segment ctx
               (sqrtPrimesOnGpu, lo, hi)
-          val _ = FutharkPrimes.ctx_sync ctx
+          val _ = FutharkPrimes.Context.sync ctx
           val t1 = Time.now ()
           val _ = print
             ("gpu sieve (" ^ Int.toString (hi - lo) ^ "): "

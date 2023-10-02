@@ -1,5 +1,7 @@
+include ../../config.mk
+
 default: phony
-	futhark cuda --library ray.fut
+	futhark $(FUTHARK_BACKEND) --library ray.fut
 	smlfut ray.json --output-dir . --signature-name RAY --structure-name Ray --poly-arrays
 
 clean: phony

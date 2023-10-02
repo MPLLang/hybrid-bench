@@ -1,5 +1,7 @@
+include ../../config.mk
+
 default: phony
-	futhark cuda --library mandelbrot.fut
+	futhark $(FUTHARK_BACKEND) --library mandelbrot.fut
 	smlfut --poly-arrays --signature-name=FUTHARK_MANDELBROT --structure-name=FutharkMandelbrot -o . mandelbrot.json
 
 clean: phony
