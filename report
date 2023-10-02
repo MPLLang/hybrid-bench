@@ -125,7 +125,9 @@ def displayTag(t):
   if t == "dmm":
     return "dense-matmul"
   if t == "primes":
-    return "batch-primes"
+    return "primes-batched"
+  if t == "new-primes":
+    return "primes-new"
   if t == "mergesort":
     return "sort"
   return t
@@ -646,15 +648,15 @@ with open(comparisonTable, 'w') as output:
     return makeBold(fmt(x) + "x")
 
   for tag in orderedTags:
-    ct1 = tm(averageTime(D, 'cpu', None, tag, 2))
+    ct1 = tm(averageTime(D, 'cpu', None, tag, 1))
     cth = tm(averageTime(D, 'cpu', None, tag, 16))
     ctp = tm(averageTime(D, 'cpu', None, tag, maxp))
 
-    gt = tm(averageTime(D, 'gpu', None, tag, 2))
+    gt = tm(averageTime(D, 'gpu', None, tag, 1))
 
-    ht1 = tm(averageTime(D, 'hybrid', 2, tag, 2))
-    hth = tm(averageTime(D, 'hybrid', 2, tag, 16))
-    htp = tm(averageTime(D, 'hybrid', 2, tag, maxp))
+    ht1 = tm(averageTime(D, 'hybrid', 'new', tag, 1))
+    hth = tm(averageTime(D, 'hybrid', 'new', tag, 16))
+    htp = tm(averageTime(D, 'hybrid', 'new', tag, maxp))
 
     imp_1_over_cpu = ovv(sd(ct1, ht1))
     imp_1_over_gpu = ovv(sd(gt, ht1))
@@ -818,12 +820,12 @@ def speedupPlot(outputName, tag):
   if tag == 'dmm':
     plt.legend(
       [b[0] for b in lines],
-      ['GPU','CPU','Hybrid'],
+      ['GPU+copy','CPU','Hybrid (ours)'],
       # bbox_to_anchor=(-0.16,1.05),
       # loc='upper right',
       bbox_to_anchor=(-0.17,1.04),
       loc='lower left',
-      ncol=2
+      ncol=1
     )
 
   ensureFigDir()
@@ -865,8 +867,8 @@ speedupPlot("figures/raytracer-speedups.pdf", "raytracer")
 speedupPlot("figures/mandelbrot-speedups.pdf", "mandelbrot")
 speedupPlot("figures/sort-speedups.pdf", "mergesort")
 speedupPlot("figures/interval-tree-speedups.pdf", "interval-tree")
-speedupPlot("figures/primes-speedups.pdf", "primes")
-speedupPlot("figures/new-primes-speedups.pdf", "new-primes")
+speedupPlot("figures/primes-batched-speedups.pdf", "primes")
+speedupPlot("figures/primes-new-speedups.pdf", "new-primes")
 
 # ============================================================================
 # ============================================================================
