@@ -52,9 +52,9 @@ struct
 
   type fut_context = FutharkMandelbrot.ctx
 
-  fun init () = FutharkMandelbrot.ctx_new FutharkMandelbrot.default_cfg
+  fun init () = FutharkMandelbrot.Context.new FutharkMandelbrot.default_cfg
 
-  fun cleanup x = FutharkMandelbrot.ctx_free x
+  fun cleanup x = FutharkMandelbrot.Context.free x
 
   type i64 = Int64.int
   type i32 = Int32.int
@@ -63,7 +63,7 @@ struct
   fun mandelbrot ctx ylo yhi blo bhi : u8 array =
     let
       val output = FutharkMandelbrot.Entry.mandelbrot ctx (ylo, yhi, blo, bhi)
-      val _ = FutharkMandelbrot.ctx_sync ctx
+      val _ = FutharkMandelbrot.Context.sync ctx
       val arr = FutharkMandelbrot.Word8Array1.values output
     in
       FutharkMandelbrot.Word8Array1.free output;
