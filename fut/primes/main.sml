@@ -15,7 +15,8 @@ val doit =
     "cpu" => SegmentedPrimes.primes_cpu
   | "cpu-alternate" => singleton o SegmentedFlagsPrimes.primes_cpu
   | "gpu" => singleton o SegmentedFlagsPrimes.primes_gpu ctx
-  | "hybrid" => singleton o SegmentedFlagsPrimes.primes_hybrid ctx
+  (* | "hybrid" => singleton o SegmentedFlagsPrimes.primes_hybrid ctx *)
+  | "hybrid" => SegmentedPrimes.primes_hybrid ctx
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val result = Benchmark.run ("primes " ^ impl) (fn () => doit n)

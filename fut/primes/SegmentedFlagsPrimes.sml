@@ -152,7 +152,7 @@ struct
             val t0 = Time.now ()
             val gpuFlags =
               FutharkPrimes.Entry.sieve_segmented_segment ctx
-                (sqrtPrimesOnGpu, lo, hi)
+                (sqrtPrimesOnGpu, blockSize, lo, hi)
             val _ = FutharkPrimes.Context.sync ctx
             val t1 = Time.now ()
             val _ = print

@@ -63,10 +63,8 @@ entry sieve_segment' (seed_primes: []i64) (lo: i64) (hi: i64) (num_flags: i64) :
   in flags
 
 
-entry sieve_segmented_segment (seed_primes: []i64) (lo: i64) (hi: i64) : []u8 =
+entry sieve_segmented_segment (seed_primes: []i64) block_size (lo: i64) (hi: i64) : []u8 =
   let num_flags = hi-lo
-  -- let block_size = i64.max 10000 (i64.f64 (f64.sqrt (f64.i64 hi)))
-  let block_size = 1000
   let num_blocks = ceil_div num_flags block_size
   let do_block b =
     let lo' = lo + b*block_size
@@ -74,6 +72,11 @@ entry sieve_segmented_segment (seed_primes: []i64) (lo: i64) (hi: i64) : []u8 =
     in sieve_segment' seed_primes lo' hi' block_size
   in
   take num_flags (flatten (tabulate num_blocks do_block))
+
+
+entry sieve_primes (seed_primes: []i64) (block_size: i64) (lo: i64) (hi: i64) : []i64 =
+  let flags = sieve_segmented_segment seed_primes block_size lo hi
+  in filter (\i -> flags[i-lo] == 1) (lo...(hi-1))
 
 
 entry primes (n: i64) : []i64 =
@@ -85,7 +88,7 @@ entry primes (n: i64) : []i64 =
       let newBound = i64.min (bound*bound) n
       -- let flags = sieve_segment' primesSoFar 2 (newBound+1) (newBound-1)
       -- let flags = sieve_segment primesSoFar 2 (newBound+1) 
-      let flags = sieve_segmented_segment primesSoFar 2 (newBound+1)
+      let flags = sieve_segmented_segment primesSoFar 1000 2 (newBound+1)
       let newPrimes = filter (\i -> flags[i-2] == 1) (2...newBound)
       in (newPrimes, newBound)
   in ps
