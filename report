@@ -178,7 +178,10 @@ def findTrials(data, impl, schedk, tag, procs):
     if (row['impl'] == impl and \
         row['tag'] == tag and \
         row['procs'] == procs and \
-        (schedk is None or ('sched_k' in row and row['sched_k'] == schedk))):
+        ( schedk is None or \
+          ('sched_k' == 'new' and ('sched_k' not in row)) or \
+          ('sched_k' in row and row['sched_k'] == schedk) \
+        )):
       result.append(row)
   return result
 
@@ -654,9 +657,9 @@ with open(comparisonTable, 'w') as output:
 
     gt = tm(averageTime(D, 'gpu', None, tag, 1))
 
-    ht1 = tm(averageTime(D, 'hybrid', 'new', tag, 1))
-    hth = tm(averageTime(D, 'hybrid', 'new', tag, 16))
-    htp = tm(averageTime(D, 'hybrid', 'new', tag, maxp))
+    ht1 = tm(averageTime(D, 'hybrid', None, tag, 1))
+    hth = tm(averageTime(D, 'hybrid', None, tag, 16))
+    htp = tm(averageTime(D, 'hybrid', None, tag, maxp))
 
     imp_1_over_cpu = ovv(sd(ct1, ht1))
     imp_1_over_gpu = ovv(sd(gt, ht1))
@@ -740,9 +743,8 @@ def speedupPlot(outputName, tag):
   baseline = tm(averageTime(D, 'cpu', None, tag, 1))
   def this_su(impl, p):
     try:
-      schedk = "new" if impl == "hybrid" else None
       pp = 1 if impl == "gpu" else p
-      return baseline / averageTime(D, impl, schedk, tag, pp)
+      return baseline / averageTime(D, impl, None, tag, pp)
     except Exception as e:
       sys.stderr.write('[WARN] error while plotting {} speedup of {} at P={}: {}\n'.format(impl, tag, p, e))
       return None
