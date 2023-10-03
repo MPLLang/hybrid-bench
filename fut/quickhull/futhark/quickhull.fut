@@ -28,11 +28,11 @@ module type convex_hull = {
   val compute [n] : [n]point -> ([]point,[]point)
 }
 
-module naive_space : euclidean_space with point = {x:f32, y:f32} = {
-  type dist = f32
-  type point = {x:f32, y:f32}
+module naive_space : euclidean_space with point = {x:f64, y:f64} = {
+  type dist = f64
+  type point = {x:f64, y:f64}
 
-  def zero_dist = 0f32
+  def zero_dist = 0f64
   def dist_less (x : dist) (y : dist) = x < y
 
   def point_eq (p : point) (q : point) =
@@ -40,8 +40,8 @@ module naive_space : euclidean_space with point = {x:f32, y:f32} = {
   def point_less (p : point) (q : point) =
     p.x < q.x || (p.x == q.x && p.y < q.y)
 
-  def sqr (x : f32) = x * x
-  def ssqr (x : f32) = f32.abs x * x
+  def sqr (x : f64) = x * x
+  def ssqr (x : f64) = f64.abs x * x
 
   def signed_dist_to_line (p : point) (q : point) (r : point) =
     let ax = q.x - p.x
@@ -66,7 +66,7 @@ module indexed_space (S: euclidean_space)
     S.signed_dist_to_line p.0 q.0 r.0
 }
 
-module mk_quickhull (S : euclidean_space) : convex_hull with space.point = S.point = {
+module mk_quickhull (S : euclidean_space) = {
   module space = S
   open space
 
@@ -147,13 +147,20 @@ module mk_quickhull (S : euclidean_space) : convex_hull with space.point = S.poi
     in (upper_hull, lower_hull)
 }
 
-module space = indexed_space naive_space
+module space = (indexed_space naive_space)
 module naive_quickhull = mk_quickhull space
-
 type point = space.point
 
 import "lib/github.com/diku-dk/sorts/radix_sort"
-def sort_by f = radix_sort_float_by_key f f32.num_bits f32.get_bit
+def sort_by f = radix_sort_float_by_key f f64.num_bits f64.get_bit
+
+entry semihull points l r idxs =
+  let p i = ({x=points[i,0], y=points[i,1]}, i)
+  let start = p l
+  let end = p r
+  in naive_quickhull.semihull start end (map p idxs)
+     |> sort_by (.0.y) |> sort_by (.0.x)
+     |> map (.1)
 
 def clockwise (convex_upper: []point) (convex_lower: []point) =
   let sorted_upper = convex_upper |> sort_by (.0.y) |> sort_by (.0.x)
@@ -164,7 +171,7 @@ def clockwise (convex_upper: []point) (convex_lower: []point) =
   in upper_is++lower_is
 
 entry quickhull [k] (ps : [k][2]f64) : []i32 =
-  let ps' = map2 (\i p -> ({x=f32.f64 p[0], y=f32.f64 p[1]}, i32.i64 i))
+  let ps' = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 i))
                  (indices ps) ps
   let (convex_upper, convex_lower) = naive_quickhull.compute ps'
   in clockwise convex_upper convex_lower

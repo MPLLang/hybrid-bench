@@ -8,35 +8,80 @@ fun rand i n =
     (Util.hash64 (Word64.fromInt i), Word64.fromInt n)))
 
 fun randomPoints n =
-  Array.tabulate (n * 2, fn i => Real64.fromInt (rand i n) / Real64.fromInt n)
+  Seq.tabulate
+    (fn i =>
+       ( Real64.fromInt (rand i n) / Real64.fromInt n
+       , Real64.fromInt (rand (i + 1) n) / Real64.fromInt n
+       )) n
 
 val ctx = Futhark.Context.new Futhark.default_cfg
 
 fun quickhullCPU points =
-    raise Fail "quickhullCPU: unimplemented"
+  Quickhull.hull (fn _ => NONE) points
 
-fun quickhullHybrid points =
-    raise Fail "quickhullHybrid: unimplemented"
+fun semihullGPU points_fut (idxs, l, r) =
+  let
+    val idxs' = Array.tabulate (Seq.length idxs, Int32.fromInt o Seq.nth idxs)
+    val idxs_fut = Futhark.Int32Array1.new ctx idxs' (Seq.length idxs)
+    val res_fut =
+      Futhark.Entry.semihull ctx
+        (points_fut, Int32.fromInt l, Int32.fromInt r, idxs_fut)
+    val res = Futhark.Int32Array1.values res_fut
+    val () = Futhark.Int32Array1.free res_fut
+    val () = Futhark.Int32Array1.free idxs_fut
+  in
+    Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
+  end
 
-fun quickhullGPU points =
-    let val shape = (Int64.fromInt num_points,2)
-        val points_fut = Futhark.Real64Array2.new ctx points shape
-        val res_fut = Futhark.Entry.quickhull ctx points_fut
-    in Futhark.Int32Array1.values res_fut before
-       Futhark.Int32Array1.free res_fut before
-       Futhark.Real64Array2.free points_fut
-    end
+fun quickhullHybrid points points_fut =
+  let
+    (* FIXME: Need a much better heuristic here. *)
+    val (lower, upper) = (1000, Seq.length points div 128)
+    fun useGPU (idxs, l, r) =
+        Seq.length idxs >= lower andalso Seq.length idxs <= upper
+  in
+    Quickhull.hull
+      (fn arg =>
+         if useGPU arg then
+           SOME (semihullGPU points_fut arg)
+         else
+           NONE) points
+  end
 
-val doit =
+fun quickhullGPU points_fut =
+  let
+    val res_fut = Futhark.Entry.quickhull ctx points_fut
+    val res = Futhark.Int32Array1.values res_fut
+    val () = Futhark.Int32Array1.free res_fut
+  in
+    Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
+  end
+
+val () = print
+  ("Generating " ^ Int.toString num_points ^ " random uniform points.\n")
+val points = randomPoints num_points
+
+val points_fut =
+  let
+    val points_arr = Array.tabulate (Seq.length points * 2, fn i =>
+      let val (x, y) = Seq.nth points (i div 2)
+      in if i mod 2 = 0 then x else y
+      end)
+  in
+    Futhark.Real64Array2.new ctx points_arr (Seq.length points, 2)
+  end
+
+val bench =
   case impl of
-    "cpu" => quickhullCPU
-  | "gpu" => quickhullGPU
-  | "hybrid" => quickhullHybrid
+    "cpu" => (fn () => quickhullCPU points)
+  | "gpu" => (fn () => quickhullGPU points_fut)
+  | "hybrid" => (fn () => quickhullHybrid points points_fut)
   | _ => Util.die ("unknown -impl " ^ impl)
 
-val () = print ("Generating " ^ Int.toString num_points ^ " random uniform points.\n")
-val input = randomPoints num_points
+val result = Benchmark.run ("quickhull " ^ impl) bench
 
-val result = Benchmark.run ("quickhull " ^ impl) (fn () => doit input)
-
+val () = Futhark.Real64Array2.free points_fut
 val () = Futhark.Context.free ctx
+val () = print
+  ("Indexes of points in convex hull:\n" ^ Seq.toString Int.toString result
+   ^ "\n")
