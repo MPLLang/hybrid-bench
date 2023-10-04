@@ -34,14 +34,7 @@ fun semihullGPU points_fut (idxs, l, r) =
   end
 
 fun quickhullHybrid points points_fut =
-  let
-    (* FIXME: Need a much better heuristic here. *)
-    val (lower, upper) = (1000, Seq.length points div 128)
-    fun useGPU (idxs, l, r) =
-      Seq.length idxs >= lower andalso Seq.length idxs <= upper
-  in
-    Quickhull.hull true (semihullGPU points_fut) points
-  end
+  Quickhull.hull true (semihullGPU points_fut) points
 
 fun quickhullGPU points_fut =
   let
