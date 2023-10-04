@@ -17,7 +17,7 @@ fun randomPoints n =
 val ctx = Futhark.Context.new Futhark.default_cfg
 
 fun quickhullCPU points =
-  Quickhull.hull (fn _ => NONE) points
+  Quickhull.hull false (fn _ => raise Fail "No GPU for you") points
 
 fun semihullGPU points_fut (idxs, l, r) =
   let
@@ -38,14 +38,9 @@ fun quickhullHybrid points points_fut =
     (* FIXME: Need a much better heuristic here. *)
     val (lower, upper) = (1000, Seq.length points div 128)
     fun useGPU (idxs, l, r) =
-        Seq.length idxs >= lower andalso Seq.length idxs <= upper
+      Seq.length idxs >= lower andalso Seq.length idxs <= upper
   in
-    Quickhull.hull
-      (fn arg =>
-         if useGPU arg then
-           SOME (semihullGPU points_fut arg)
-         else
-           NONE) points
+    Quickhull.hull true (semihullGPU points_fut) points
   end
 
 fun quickhullGPU points_fut =
