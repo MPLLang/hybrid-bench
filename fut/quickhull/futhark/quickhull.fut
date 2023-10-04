@@ -158,20 +158,12 @@ entry semihull points l r idxs =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
   let start = p l
   let end = p r
-  in naive_quickhull.semihull start end (map p idxs)
-     |> sort_by (.0.y) |> sort_by (.0.x)
+  in naive_quickhull.semihull start end (map p (#[trace(idxs)] idxs))
      |> map (.1)
-
-def clockwise (convex_upper: []point) (convex_lower: []point) =
-  let sorted_upper = convex_upper |> sort_by (.0.y) |> sort_by (.0.x)
-  let sorted_lower = convex_lower |> sort_by (.0.y) |> sort_by (.0.x)
-
-  let upper_is = map (.1) sorted_upper
-  let lower_is = map (.1) (reverse sorted_lower)
-  in upper_is++lower_is
+     |> tail -- Remove starting point.
 
 entry quickhull [k] (ps : [k][2]f64) : []i32 =
   let ps' = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 i))
                  (indices ps) ps
   let (convex_upper, convex_lower) = naive_quickhull.compute ps'
-  in clockwise convex_upper convex_lower
+  in convex_upper ++ convex_lower
