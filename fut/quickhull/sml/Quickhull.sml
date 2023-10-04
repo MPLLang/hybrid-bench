@@ -20,6 +20,10 @@ struct
         if di > dj then (i, di) else (j, dj)
       fun x i =
         #1 (pt i)
+      fun min_by f x y =
+          if f x < f y then x else y
+      fun max_by f x y =
+          if f x > f y then x else y
 
       fun aboveLine p q i =
         (dist p q i > 0.0)
@@ -90,7 +94,7 @@ struct
       val (l, r) =
         SeqBasis.reduce 10000
           (fn ((l1, r1), (l2, r2)) =>
-             (if x l1 < x l2 then l1 else l2, if x r1 > x r2 then r1 else r2))
+             (min_by x l1 l2, max_by x r1 r2))
           (0, 0) (0, Seq.length pts) (fn i => (i, i))
 
       (* val tm = Util.tick tm "endpoints" *)
