@@ -1,80 +1,49 @@
-type fut_ctx = MLton.Pointer.t
-type fut_u8_1d = MLton.Pointer.t
-val futInit = _import "futInit" public : unit -> fut_ctx;
-val futFinish = _import "futFinish" public : fut_ctx -> unit;
-(* val rawFutBigAdd =
-  _import "futBigAdd" public : fut_ctx * Word8.word array * Word8.word array * Int64.int * Word8.word array -> unit;
-val rawFutReadValuesAndFree =
-  _import "futReadValuesAndFree" public : fut_ctx * fut_u8_1d * Word8.word array array -> unit; *)
-
-type bigadd_package = MLton.Pointer.t
-
-val rawFutBigAddSpawn =
-  _import "futBigAddSpawn" public : fut_ctx * Word8.word array * Word8.word array * Int64.int -> bigadd_package;
-
-val rawFutBigAddPoll =
-  _import "futBigAddPoll" public : bigadd_package -> Word8.word;
-
-val rawFutBigAddOutputSize =
-  _import "futBigAddOutputSize" public : bigadd_package -> Int64.int;
-
-val rawFutBigAddFinish =
-  _import "futBigAddFinish" public : bigadd_package * Word8.word array -> unit;
-
-
-
 fun generate n seed =
-    let
-      fun hash seed = Util.hash32_2 (Word32.fromInt seed)
-      fun w32to8 w = Word8.fromInt (Word32.toInt (Word32.andb (w, 0wx7F)))
-      fun genByte seed = w32to8 (hash seed)
-      fun genNonZeroByte seed =
-        w32to8 (Word32.+ (0w1, Word32.mod (hash seed, 0w127)))
-    in
-      Seq.tabulate (fn i =>
-        if i < n-1 then
-          genByte (seed+i)
-        else
-          genNonZeroByte (seed+i))
-      n
+  let
+    fun hash seed =
+      Util.hash32_2 (Word32.fromInt seed)
+    fun w32to8 w =
+      Word8.fromInt (Word32.toInt (Word32.andb (w, 0wx7F)))
+    fun genByte seed =
+      w32to8 (hash seed)
+    fun genNonZeroByte seed =
+      w32to8 (Word32.+ (0w1, Word32.mod (hash seed, 0w127)))
+  in
+    Seq.tabulate
+      (fn i =>
+         if i < n - 1 then genByte (seed + i) else genNonZeroByte (seed + i)) n
   end
 
-val ctx = futInit ()
+val ctx = Futhark.Context.new Futhark.default_cfg
 
-fun makeBigAddOnGpuTask input1 input2 =
+fun bigAddOnGpuBenchmark input1 input2 =
   let
-    (* val input1 = generate n seed *)
     val (a1, i1, n) = ArraySlice.base input1
     val _ = if i1 = 0 then () else raise Fail "uh oh"
-    (* val input2 = generate n seed *)
     val (a2, i2, _) = ArraySlice.base input2
     val _ = if i2 = 0 then () else raise Fail "uh oh"
 
-    fun spawn () = rawFutBigAddSpawn(ctx, a1, a2, n)
-
-    fun poll pack = (0w1 = rawFutBigAddPoll pack)
-
-    fun finish pack = 
-      let
-        val outputSize = rawFutBigAddOutputSize pack
-        val output = ForkJoin.alloc outputSize
-      in
-        rawFutBigAddFinish (pack, output);
-        Seq.take (ArraySlice.full output) outputSize
-      end
+    val input1_fut = Futhark.Word8Array1.new ctx a1 n
+    val input2_fut = Futhark.Word8Array1.new ctx a1 n
+    val (result_fut, result_n) = Futhark.Entry.add ctx (input1_fut, input2_fut)
+    val result = Futhark.Word8Array1.values result_fut
+    val () = Futhark.Word8Array1.free input1_fut
+    val () = Futhark.Word8Array1.free input2_fut
+    val () = Futhark.Word8Array1.free result_fut
   in
-    ForkJoin.gpu {spawn = spawn, poll = poll, finish = finish}
+    Seq.take (ArraySlice.full result) result_n
   end
 
-fun bigAddOnCpuBenchmark a b = 
-  let
-    val res = Add.add (a, b) 
-  in
-    res
+fun bigAddOnCpuBenchmark a b =
+  let val res = Add.add (a, b)
+  in res
   end
 
-fun bigAddHybridBenchmark a b = 
-  ForkJoin.choice {gpu = makeBigAddOnGpuTask a b, cpu = (fn () => bigAddOnCpuBenchmark a b) }
+fun bigAddHybridBenchmark a b =
+  ForkJoin.choice
+    { prefer_gpu = fn () => bigAddOnGpuBenchmark a b
+    , prefer_cpu = fn () => bigAddOnCpuBenchmark a b
+    }
 
 fun trace n prefix f =
   if true (*n < 10000*) then
@@ -104,15 +73,18 @@ val _ = print ("gpu-thresh " ^ Int.toString gpuThresh ^ "\n")
 val bench =
   case impl of
     "cpu" => bigAddOnCpuBenchmark
-  (* | "gpu" => primesOnGpuBenchmark *)
-  | "hybrid" => bigAddHybridBenchmark 
+  | "gpu" => bigAddOnGpuBenchmark
+  | "hybrid" => bigAddHybridBenchmark
   | _ => Util.die ("unknown -impl " ^ impl)
 
-val result = Benchmark.run "bignum" (fn () => SeqBasis.tabulate 1 (0, simultaneous ) (fn _ => bench input1 input2))
+val result = Benchmark.run "bignum" (fn () =>
+  SeqBasis.tabulate 1 (0, simultaneous) (fn _ => bench input1 input2))
+val () = Futhark.Context.free ctx
 val result = Array.sub (result, 0)
-val _ = print ("result " ^ Util.summarizeArraySlice 8 Word8.toString result ^ "\n") 
-val _ = print ("result length " ^ Int.toString (Seq.length result) ^ "\n")
-(* val result = bench {simultaneous = simultaneous, n = n}
-val result0 = Array.sub (result, 0)
-val _ = print ("result " ^ Util.summarizeArray 8 Int.toString result0 ^ "\n") *)
-(* val _ = print ("num primes " ^ Int.toString (Array.length result0) ^ "\n") *)
+val _ = print
+  ("result " ^ Util.summarizeArraySlice 8 Word8.toString result ^ "\n")
+val _ = print
+  ("result length " ^ Int.toString (Seq.length result) ^ "\n")
+    (* val result = bench {simultaneous = simultaneous, n = n}
+    val result0 = Array.sub (result, 0)
+    val _ = print ("result " ^ Util.summarizeArray 8 Int.toString result0 ^ "\n") *) (* val _ = print ("num primes " ^ Int.toString (Array.length result0) ^ "\n") *)
