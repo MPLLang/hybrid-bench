@@ -115,7 +115,7 @@ module mk_quickhull (S : euclidean_space) = {
     let segs_indicator = map i32.bool segs_inhabited
     let new_segs_ix =
       scan (+) 0 segs_indicator |> map2 (\i n -> n - i) segs_indicator
-    let hull' = hull ++ map ((.0) <-< (.0)) segs_false
+    let hull' = hull ++ map (.0.0) segs_false
     let segs' = map (.0) segs_true
     let points' = map (\(seg_ix, p) -> (new_segs_ix[seg_ix], p)) points
     in (hull', segs', points')
@@ -156,14 +156,14 @@ def sort_by f = radix_sort_float_by_key f f64.num_bits f64.get_bit
 
 entry semihull points l r idxs =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
-  let start = p l
-  let end = p r
-  in naive_quickhull.semihull start end (map p (#[trace(idxs)] idxs))
+  let start = p (#[trace(l)] l)
+  let end = p (#[trace(r)] r)
+  in naive_quickhull.semihull start end (map p idxs)
      |> map (.1)
-     |> tail -- Remove starting point.
+     |> filter (!=l) -- Remove starting point.
 
 entry quickhull [k] (ps : [k][2]f64) : []i32 =
   let ps' = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 i))
                  (indices ps) ps
   let (convex_upper, convex_lower) = naive_quickhull.compute ps'
-  in convex_upper ++ convex_lower
+  in map (.1) (convex_upper ++ convex_lower)
