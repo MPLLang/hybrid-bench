@@ -1,0 +1,8 @@
+main.mpl.bin
+quickhull.smlfut.c
+quickhull.sig
+quickhull.sml
+futhark/*.c
+futhark/*.h
+futhark/*.json
+
