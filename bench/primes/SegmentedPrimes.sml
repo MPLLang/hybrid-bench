@@ -178,25 +178,23 @@ struct
           else
             let
               (* val midb = calculateMid lob hib *)
-              val midb =
-                if depth = 0 then calculateMid lob hib
-                else lob + (hib - lob) div 2
+              (* val midb =
+                if depth <= 1 then calculateMid lob hib
+                else lob + (hib - lob) div 2 *)
+              val midb = lob + (hib - lob) div 2
             in
               ForkJoin.par (fn _ => loopChoose (depth + 1) lob midb, fn _ =>
-                ForkJoin.parfor 1 (midb, hib) doBlock);
+                loop (depth + 1) midb hib);
               ()
             end
 
         and loopChoose depth lob hib =
-          if blockRangeSize lob hib < 100000 then
-            ForkJoin.parfor 1 (lob, hib) doBlock
-          (* else if depth < hybrid_depth then
-            loop depth lob hib *)
-          else
-            ForkJoin.choice
-              { prefer_cpu = fn _ => loop depth lob hib
-              , prefer_gpu = fn _ => doBlocksOnGpu lob hib
-              }
+          ForkJoin.choice_with_payout
+            { prefer_cpu = fn _ => loop depth lob hib
+            , prefer_gpu = fn _ => doBlocksOnGpu lob hib
+            , gpu_payout =
+                Real.fromInt (blockRangeSize lob hib) / 15000000.0 + 0.2
+            }
 
         val (_, tm) = Util.getTime (fn _ => loop 0 0 numBlocks)
         val _ =
