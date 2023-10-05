@@ -1,5 +1,7 @@
+include ../../config.mk
+
 default: phony
-	futhark cuda --library tinykaboom.fut
+	futhark $(FUTHARK_BACKEND) --library tinykaboom.fut
 
 clean: phony
 	rm -f tinykaboom.c tinykaboom.h tinykaboom.json
