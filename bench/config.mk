@@ -20,6 +20,10 @@ MLTONFLAGS = \
 	-disable-pass splitTypes1 \
 	-disable-pass splitTypes2
 
+OPENBLAS_MLTONFLAGS = \
+	-cc-opt '-I/home/ec2-user/openblas-v0.3.23/installed/include/' \
+	-link-opt '-L/home/ec2-user/openblas-v0.3.23/installed/lib/ -lopenblas'
+
 ifeq ($(FUTHARK_BACKEND), c)
 MLTONFLAGS += \
 	-cc-opt '-I../common/ -D_GNU_SOURCE' \
