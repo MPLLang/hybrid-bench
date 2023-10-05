@@ -1,4 +1,6 @@
 .*
+!.gitignore
+*.smlfut.c
 objs/*
 *.o
 main.mpl.bin

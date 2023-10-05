@@ -9,8 +9,8 @@ main.mpl: phony futray
 futray: phony
 	$(MAKE) -C futray
 
-clean: 
-	rm main.mpl
+clean:
+	rm -f main.mpl.bin
 	$(MAKE) -C futray clean
 
 .PHONY: phony

@@ -10,7 +10,7 @@ futmandelbrot: phony
 	$(MAKE) -C futmandelbrot
 
 clean: 
-	rm main.mpl
+	rm -f main.mpl
 	$(MAKE) -C futmandelbrot clean
 
 .PHONY: phony
