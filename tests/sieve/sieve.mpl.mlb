@@ -1,7 +1,0 @@
-local
-  $(SML_LIB)/basis/basis.mlb
-  ../../dep/dep.mlb
-  ../../lib/lib.mlb
-in
-  sieve.sml
-end
