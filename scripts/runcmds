@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 
 import sys, signal, socket, time, threading, subprocess, multiprocessing
 from datetime import datetime
@@ -7,7 +7,7 @@ NCPU = multiprocessing.cpu_count()
 
 def getGitRoot():
   return subprocess.Popen(['git', 'rev-parse', '--show-toplevel'],
-    stdout=subprocess.PIPE).communicate()[0].rstrip()
+                          stdout=subprocess.PIPE,text=True).communicate()[0].rstrip()
 
 _currentChildren = []
 
@@ -114,8 +114,8 @@ if __name__ == "__main__":
     places = set(prefix for (prefix, _) in binsToMake)
 
     for place in places:
-      binsToMakeHere = filter(lambda (prefix, _): prefix == place, binsToMake)
-      binsToMakeHere = map(lambda (_, b): b, binsToMakeHere)
+      binsToMakeHere = filter(lambda arg: arg[0] == place, binsToMake)
+      binsToMakeHere = list(map(lambda arg: arg[1], binsToMakeHere))
       if len(binsToMakeHere) == 0:
         continue
 
@@ -123,14 +123,14 @@ if __name__ == "__main__":
       for b in binsToMakeHere:
         sys.stderr.write("  " + b + "\n")
 
-      jobs = max(4, NCPU/2)
+      jobs = int(max(4, NCPU/2))
       cmd = "make -C {} -j {} ".format(place, jobs) + (" ".join(binsToMakeHere))
       sys.stderr.write("[INFO] " + cmd + "\n")
 
       output = None
       shouldQuit = False
       try:
-        output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
       except subprocess.CalledProcessError as e:
         output = e.output
         shouldQuit = True
