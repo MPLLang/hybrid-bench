@@ -1,22 +1,15 @@
-MLTONFLAGS = \
-  -default-ann 'allowFFI true' \
-	-default-ann 'allowLineComments true' \
-	-default-type int64 \
-	-default-type word64 \
-	-cc-opt '-I/opt/nvidia/cuda/include/ -I../common/' \
-	-link-opt '-rdynamic -L/opt/nvidia/cuda/lib64/ -lcuda -lnvrtc -lcublas -lcudart -lstdc++'
+include ../config.mk
 
-# MPL=/home/ec2-user/mpl-hybrid-sched/build/bin/mpl
-MPL=/home/ec2-user/proj/mpl/hybrid-sched/build/bin/mpl
+test.mpl: phony bigadd.smlfut.c
+	$(MPL) $(MLTONFLAGS) -output test.mpl test.mlb ../common/timer.c bigadd.c bigadd.smlfut.c
 
-test.mpl: phony bigadd.c
-	$(MPL) $(MLTONFLAGS) -output test.mpl test.mlb ../common/timer.c bigadd.c glue.c
+bigadd.smlfut.c: bigadd.c
+	smlfut -o . --poly-arrays --structure=Futhark --signature=FUTHARK bigadd.json
 
-bigadd.c: phony
-	futhark cuda --library bigadd.fut
-
-clean: 
-	rm test.mpl
+bigadd.c: bigadd.fut
+	futhark $(FUTHARK_BACKEND) --library bigadd.fut
+clean:
+	rm -f test.mpl bigadd.c
 
 .PHONY: phony
 phony:
