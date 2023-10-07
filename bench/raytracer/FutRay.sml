@@ -4,7 +4,7 @@ struct
   type fut_context = Ray.ctx
 
   fun init () =
-      Ray.Context.new Ray.default_cfg
+      Ray.Context.new Ray.Config.default
 
   fun cleanup x =
       Ray.Context.free x

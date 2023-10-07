@@ -1,6 +1,6 @@
 structure CLA = CommandLineArgs
 
-val ctx = FutharkPrimes.Context.new FutharkPrimes.default_cfg
+val ctx = FutharkPrimes.Context.new FutharkPrimes.Config.default
 
 val n = CommandLineArgs.parseInt "n" (100 * 1000 * 1000)
 val impl = CommandLineArgs.parseString "impl" "cpu"

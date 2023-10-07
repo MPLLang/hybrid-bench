@@ -52,7 +52,7 @@ struct
 
   type fut_context = FutharkMandelbrot.ctx
 
-  fun init () = FutharkMandelbrot.Context.new FutharkMandelbrot.default_cfg
+  fun init () = FutharkMandelbrot.Context.new FutharkMandelbrot.Config.default
 
   fun cleanup x = FutharkMandelbrot.Context.free x
 

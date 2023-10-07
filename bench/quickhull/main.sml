@@ -14,7 +14,7 @@ fun randomPoints n =
        , Real64.fromInt (rand (i + 1) n) / Real64.fromInt n
        )) n
 
-val ctx = Futhark.Context.new Futhark.default_cfg
+val ctx = Futhark.Context.new Futhark.Config.default
 
 fun quickhullCPU points =
   Quickhull.hull false (fn _ => raise Fail "No GPU for you") points
