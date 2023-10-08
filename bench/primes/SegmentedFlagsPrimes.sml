@@ -136,7 +136,7 @@ struct
           end
 
         val (sqrtPrimesOnGpu, tm) = Util.getTime (fn _ =>
-          FutharkPrimes.Int64Array1.new ctx sqrtPrimes (Array.length sqrtPrimes))
+          FutharkPrimes.Int64Array1.new ctx (ArraySlice.full sqrtPrimes) (Array.length sqrtPrimes))
         val _ = print
           ("copy sqrtPrimes (n=" ^ Int.toString n ^ ") to gpu: " ^ Time.fmt 4 tm
            ^ "s\n")

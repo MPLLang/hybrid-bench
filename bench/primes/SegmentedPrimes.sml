@@ -90,15 +90,7 @@ struct
           (Seq.map ArraySlice.full (ArraySlice.full sqrtPrimes))
 
         val (sqrtPrimesOnGpu, tm) = Util.getTime (fn _ =>
-          let
-            val (arr, i, len) = ArraySlice.base sqrtPrimes
-          in
-            if i <> 0 then
-              Util.die
-                "SegmentedPrimes.primes_hybrid: copy sqrtPrimes to gpu: whoops"
-            else
-              FutharkPrimes.Int64Array1.new ctx arr len
-          end)
+          FutharkPrimes.Int64Array1.new ctx sqrtPrimes (ArraySlice.length sqrtPrimes))
 
         val _ = print
           ("copy sqrtPrimes to gpu (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm

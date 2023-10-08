@@ -22,7 +22,7 @@ fun quickhullCPU points =
 fun semihullGPU points_fut (idxs, l, r) =
   let
     val idxs' = Array.tabulate (Seq.length idxs, Int32.fromInt o Seq.nth idxs)
-    val idxs_fut = Futhark.Int32Array1.new ctx idxs' (Seq.length idxs)
+    val idxs_fut = Futhark.Int32Array1.new ctx (ArraySlice.full idxs') (Seq.length idxs)
     val res_fut =
       Futhark.Entry.semihull ctx
         (points_fut, Int32.fromInt l, Int32.fromInt r, idxs_fut)
@@ -56,7 +56,7 @@ val points_fut =
       in if i mod 2 = 0 then x else y
       end)
   in
-    Futhark.Real64Array2.new ctx points_arr (Seq.length points, 2)
+    Futhark.Real64Array2.new ctx (ArraySlice.full points_arr) (Seq.length points, 2)
   end
 
 val bench =
