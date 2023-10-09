@@ -14,7 +14,9 @@ fun generate n seed =
          if i < n - 1 then genByte (seed + i) else genNonZeroByte (seed + i)) n
   end
 
-val ctx = Futhark.Context.new Futhark.Config.default
+val () = "Initialising Futhark context... "
+val ctx = Futhark.Config.cache (SOME "futhark.cache") Futhark.Config.default
+val () = print "Done!\n"
 
 fun bigAddOnGpuBenchmark input1 input2 =
   let

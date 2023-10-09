@@ -4,7 +4,10 @@ struct
   type fut_context = Ray.ctx
 
   fun init () =
-      Ray.Context.new Ray.Config.default
+      let val () = "Initialising Futhark context... "
+          val ctx = Ray.Config.cache (SOME "futhark.cache") Ray.Config.default
+          val () = print "Done!\n"
+      in ctx end
 
   fun cleanup x =
       Ray.Context.free x

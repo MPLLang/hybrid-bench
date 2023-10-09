@@ -52,7 +52,11 @@ struct
 
   type fut_context = FutharkMandelbrot.ctx
 
-  fun init () = FutharkMandelbrot.Context.new FutharkMandelbrot.Config.default
+  fun init () =
+      let val () = "Initialising Futhark context... "
+          val ctx = FutharkMandelbrot.Config.cache (SOME "futhark.cache") FutharkMandelbrot.Config.default
+          val () = print "Done!\n"
+      in ctx end
 
   fun cleanup x = FutharkMandelbrot.Context.free x
 
