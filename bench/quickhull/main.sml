@@ -1,7 +1,17 @@
 structure CLA = CommandLineArgs
 
-val num_points = CLA.parseInt "n" 100000
+(* File must contain data as produced by the randPoints program in PBBS. *)
+val file = CLA.parseString "points" ""
+
 val impl = CommandLineArgs.parseString "impl" "cpu"
+
+val points =
+  if file = "" then raise Fail "Need -points FILE"
+  else (print ("Reading points from " ^ file ^ "... ");
+        ParseFile.readSequencePoint2d file before
+        print "Done!\n")
+
+val num_points = Seq.length points
 
 fun rand i n =
   Int.fromLarge (Word64.toLargeInt (Word64.mod
@@ -22,7 +32,8 @@ fun quickhullCPU points =
 fun semihullGPU points_fut (idxs, l, r) =
   let
     val idxs' = Array.tabulate (Seq.length idxs, Int32.fromInt o Seq.nth idxs)
-    val idxs_fut = Futhark.Int32Array1.new ctx (ArraySlice.full idxs') (Seq.length idxs)
+    val idxs_fut =
+      Futhark.Int32Array1.new ctx (ArraySlice.full idxs') (Seq.length idxs)
     val res_fut =
       Futhark.Entry.semihull ctx
         (points_fut, Int32.fromInt l, Int32.fromInt r, idxs_fut)
@@ -45,10 +56,6 @@ fun quickhullGPU points_fut =
     Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
   end
 
-val () = print
-  ("Generating " ^ Int.toString num_points ^ " random uniform points.\n")
-val points = randomPoints num_points
-
 val points_fut =
   let
     val points_arr = Array.tabulate (Seq.length points * 2, fn i =>
@@ -56,7 +63,8 @@ val points_fut =
       in if i mod 2 = 0 then x else y
       end)
   in
-    Futhark.Real64Array2.new ctx (ArraySlice.full points_arr) (Seq.length points, 2)
+    Futhark.Real64Array2.new ctx (ArraySlice.full points_arr)
+      (Seq.length points, 2)
   end
 
 val bench =
