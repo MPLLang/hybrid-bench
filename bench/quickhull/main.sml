@@ -6,10 +6,12 @@ val file = CLA.parseString "points" ""
 val impl = CommandLineArgs.parseString "impl" "cpu"
 
 val points =
-  if file = "" then raise Fail "Need -points FILE"
-  else (print ("Reading points from " ^ file ^ "... ");
-        ParseFile.readSequencePoint2d file before
-        print "Done!\n")
+  if file = "" then
+    raise Fail "Need -points FILE"
+  else
+    ( print ("Reading points from " ^ file ^ "... ")
+    ; ParseFile.readSequencePoint2d file before print "Done!\n"
+    )
 
 val num_points = Seq.length points
 
@@ -24,7 +26,10 @@ fun randomPoints n =
        , Real64.fromInt (rand (i + 1) n) / Real64.fromInt n
        )) n
 
-val ctx = Futhark.Context.new Futhark.Config.default
+val () = print "Initialising Futhark context... "
+val ctx = Futhark.Context.new
+  (Futhark.Config.cache (SOME "futhark.cache") Futhark.Config.default)
+val () = print "Done!\n"
 
 fun quickhullCPU points =
   Quickhull.hull false (fn _ => raise Fail "No GPU for you") points
@@ -56,7 +61,7 @@ fun quickhullGPU points_fut =
     Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
   end
 
-val points_fut =
+fun futharkPoints points =
   let
     val points_arr = Array.tabulate (Seq.length points * 2, fn i =>
       let val (x, y) = Seq.nth points (i div 2)
@@ -66,6 +71,8 @@ val points_fut =
     Futhark.Real64Array2.new ctx (ArraySlice.full points_arr)
       (Seq.length points, 2)
   end
+
+val points_fut = futharkPoints points
 
 val bench =
   case impl of
