@@ -156,8 +156,8 @@ def sort_by f = radix_sort_float_by_key f f64.num_bits f64.get_bit
 
 entry semihull points l r idxs =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
-  let start = p (#[trace(l)] l)
-  let end = p (#[trace(r)] r)
+  let start = p l
+  let end = p r
   in naive_quickhull.semihull start end (map p idxs)
      |> map (.1)
      |> filter (!=l) -- Remove starting point.
