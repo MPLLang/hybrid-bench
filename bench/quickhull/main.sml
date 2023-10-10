@@ -86,5 +86,4 @@ val result = Benchmark.run ("quickhull " ^ impl) bench
 val () = Futhark.Real64Array2.free points_fut
 val () = Futhark.Context.free ctx
 val () = print
-  ("Indexes of points in convex hull:\n" ^ Seq.toString Int.toString result
-   ^ "\n")
+  ("Points in convex hull: " ^ Int.toString (Seq.length result)^ "\n")
