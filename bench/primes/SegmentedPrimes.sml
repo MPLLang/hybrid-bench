@@ -1,6 +1,15 @@
 structure SegmentedPrimes =
 struct
 
+  (* NOTE: Could tune by playing with this. Increasing blockSizeFactor will
+   * use larger blocks, which has all of the following effects on performance:
+   *   (1) decreased theoretical work, but also worse data locality
+   *   (2) less parallelism
+   *)
+  val blockSizeFactor = CommandLineArgs.parseReal "primes-block-size-factor" 1.0
+  val _ = print
+    ("primes-block-size-factor " ^ Real.toString blockSizeFactor ^ "\n")
+
   fun primes_cpu n : Int64.int array array =
     if n < 2 then
       ForkJoin.alloc 0
@@ -13,7 +22,8 @@ struct
           (Seq.map ArraySlice.full (ArraySlice.full sqrtPrimes))
 
         (* Split the range [2,n+1) into blocks *)
-        val blockSize = Int.max (sqrtN, 1000)
+        val blockSize = Real.ceil (Real.fromInt sqrtN * blockSizeFactor)
+        val blockSize = Int.max (blockSize, 1000)
         val numBlocks = Util.ceilDiv ((n + 1) - 2) blockSize
 
         val (result, tm) = Util.getTime (fn _ =>
@@ -67,7 +77,7 @@ struct
   (* val hybrid_depth = CommandLineArgs.parseInt "hybrid-depth" 2
   val _ = print ("hybrid-depth " ^ Int.toString hybrid_depth ^ "\n") *)
 
-  val hybrid_gpu_split = CommandLineArgs.parseReal "hybrid-gpu-split" 0.16
+  val hybrid_gpu_split = CommandLineArgs.parseReal "hybrid-gpu-split" 0.1
   val _ = print
     ("hybrid-gpu-split " ^ Real.toString hybrid_gpu_split
      ^ " (fraction of segments given to gpu choice points)\n")
@@ -79,7 +89,7 @@ struct
 
 
   fun primes_hybrid ctx n : Int64.int array array =
-    if n <= 10000 then
+    if n <= 100000 then
       primes_cpu n
     else
       let
@@ -90,19 +100,24 @@ struct
           (Seq.map ArraySlice.full (ArraySlice.full sqrtPrimes))
 
         val (sqrtPrimesOnGpu, tm) = Util.getTime (fn _ =>
-          FutharkPrimes.Int64Array1.new ctx sqrtPrimes (ArraySlice.length sqrtPrimes))
+          FutharkPrimes.Int64Array1.new ctx sqrtPrimes
+            (ArraySlice.length sqrtPrimes))
 
         val _ = print
           ("copy sqrtPrimes to gpu (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm
            ^ "s\n")
 
         (* Split the range [2,n+1) into blocks *)
-        val blockSize = Int.max (sqrtN, 1000)
-        val numBlocks = Util.ceilDiv ((n + 1) - 2) blockSize
+        val blockSize = Real.ceil (Real.fromInt sqrtN * blockSizeFactor)
+        val blockSize = Int.max (blockSize, 1000)
+        val total = (n + 1) - 2
+        val numBlocks = Util.ceilDiv total blockSize
         fun blockRangeSize lob hib =
           Int.min (n + 1, hib * blockSize) - lob * blockSize
         val outputBlocks = SeqBasis.tabulate 1000 (0, numBlocks) (fn _ =>
           ForkJoin.alloc 0)
+
+        val outerBlockSize = Real.ceil (hybrid_gpu_split * Real.fromInt total)
 
         fun doBlock b =
           let
@@ -162,35 +177,41 @@ struct
             FutharkPrimes.Int64Array1.free gpuPrimes
           end
 
-        fun loop depth lob hib =
+        fun loop lob hib =
           if hib - lob = 0 then
             ()
           else if hib - lob = 1 then
             doBlock lob
           else
             let
-              (* val midb = calculateMid lob hib *)
-              val midb =
-                if depth = 0 then calculateMid lob hib
-                else lob + (hib - lob) div 2
+              val midb = lob + (hib - lob) div 2
             in
-              ForkJoin.par (fn _ => loopChoose (depth + 1) lob midb, fn _ =>
-                ForkJoin.parfor 1 (midb, hib) doBlock);
+              ForkJoin.par (fn _ => loopChoose lob midb, fn _ => loop midb hib);
               ()
             end
 
-        and loopChoose depth lob hib =
-          if blockRangeSize lob hib < 100000 then
+        and loopChoose lob hib =
+          if blockRangeSize lob hib < 1000000 then
             ForkJoin.parfor 1 (lob, hib) doBlock
-          (* else if depth < hybrid_depth then
-            loop depth lob hib *)
           else
             ForkJoin.choice
-              { prefer_cpu = fn _ => loop depth lob hib
+              { prefer_cpu = fn _ => loop lob hib
               , prefer_gpu = fn _ => doBlocksOnGpu lob hib
               }
 
-        val (_, tm) = Util.getTime (fn _ => loop 0 0 numBlocks)
+        fun outerLoop lob hib =
+          if hib - lob <= 1 orelse blockRangeSize lob hib <= outerBlockSize then
+            loopChoose lob hib
+          else
+            let
+              val midb = lob + (hib - lob) div 2
+            in
+              ForkJoin.par (fn _ => outerLoop lob midb, fn _ =>
+                outerLoop midb hib);
+              ()
+            end
+
+        val (_, tm) = Util.getTime (fn _ => outerLoop 0 numBlocks)
         val _ =
           if n <= 100000 then
             ()
