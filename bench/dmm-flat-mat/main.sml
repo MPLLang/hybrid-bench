@@ -10,10 +10,10 @@ val _ = print ("impl " ^ impl ^ "\n")
 val bench =
   case impl of
     "cpu" => MatReal32.cpu_multiply_nonsquare
-  (* | "cpu-nonsquare" => MatReal32.cpu_multiply_nonsquare *)
+  | "cpu-pow2" => MatReal32.cpu_multiply
   | "gpu" => MatReal32.gpu_multiply
   | "hybrid" => MatReal32.hybrid_multiply_nonsquare
-  (* | "hybrid-nonsquare" => MatReal32.hybrid_multiply_nonsquare *)
+  | "hybrid-pow2" => MatReal32.hybrid_multiply
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val result = Benchmark.run "dmm" (fn _ => bench (input1, input2))
