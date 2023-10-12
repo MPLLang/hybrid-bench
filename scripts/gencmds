@@ -62,17 +62,6 @@ def mergesort(procs, impl):
   return row
 
 
-def primes(procs, impl):
-  row = {
-    "tag": "primes",
-    "cwd": "bench/sieve-test-choice-prim",
-    "cmd": cmd(procs, impl, "-n 10000000 -simultaneous 20"),
-    "procs": procs,
-    "impl": impl
-  }
-  return row
-
-
 def new_primes(procs, impl):
   row = {
     "tag": "new-primes",
@@ -116,7 +105,7 @@ def filter_gpu_procs(row):
 
 tests = [
   add_extra(filter_gpu_procs(filter_unique(make_row(procs, impl))))
-  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, primes, new_primes]
+  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes]
   for procs in [1,2,4,6,8,12,16,24,30,32]
   for impl in ["hybrid","cpu","gpu"]
 ]

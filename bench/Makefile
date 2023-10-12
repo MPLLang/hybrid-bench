@@ -1,4 +1,4 @@
-BENCHMARKS=mandelbrot raytracer primes sieve-test-choice-prim quickhull build-intervaltree
+BENCHMARKS=mandelbrot raytracer primes quickhull build-intervaltree
 
 all: $(BENCHMARKS:=/main.mpl.bin)
 
