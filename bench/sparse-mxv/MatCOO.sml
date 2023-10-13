@@ -27,17 +27,11 @@ struct
    * = length(values)
    *
    * we assume row_indices is sorted
-   *
-   * also, we keep track of lo/hi bounds on row and column indices:
-   *   row_lo <= r < row_hi   for every r in row_indices
-   *   col_lo <= c < col_hi   for every c in col_indices
    *)
   datatype mat =
     Mat of
-      { row_lo: I.int
-      , row_hi: I.int
-      , col_lo: I.int
-      , col_hi: I.int
+      { width: I.int
+      , height: I.int
       , row_indices: I.int Seq.t
       , col_indices: I.int Seq.t
       , values: R.real Seq.t
@@ -45,13 +39,18 @@ struct
 
   type t = mat
 
+  fun width (Mat m) = #width m
+  fun height (Mat m) = #height m
+
   fun nnz (Mat m) =
     Seq.length (#row_indices m)
 
-  fun row_lo (Mat m) = #row_lo m
-  fun row_hi (Mat m) = #row_hi m
-  fun col_lo (Mat m) = #col_lo m
-  fun col_hi (Mat m) = #col_hi m
+  fun row_lo (mat as Mat m) =
+    if nnz mat = 0 then I.fromInt 0 else Seq.first (#row_indices m)
+
+  fun row_hi (mat as Mat m) =
+    if nnz mat = 0 then I.fromInt 0
+    else I.+ (I.fromInt 1, Seq.last (#row_indices m))
 
   fun split_seq s k =
     (Seq.take s k, Seq.drop s k)
@@ -68,26 +67,17 @@ struct
       val (c1, c2) = split_seq (#col_indices m) half
       val (v1, v2) = split_seq (#values m) half
 
-      val row_hi_1 =
-        if Seq.length r1 > 0 then I.+ (I.fromInt 1, Seq.last r1) else #row_lo m
-
-      val row_lo_2 = if Seq.length r2 > 0 then Seq.first r2 else #row_hi m
-
       val m1 = Mat
-        { row_lo = #row_lo m
-        , row_hi = row_hi_1
-        , col_lo = #col_lo m
-        , col_hi = #col_hi m
+        { width = #width m
+        , height = #height m
         , row_indices = r1
         , col_indices = c1
         , values = v1
         }
 
       val m2 = Mat
-        { row_lo = row_lo_2
-        , row_hi = #row_hi m
-        , col_lo = #col_lo m
-        , col_hi = #col_hi m
+        { width = #width m
+        , height = #height m
         , row_indices = r2
         , col_indices = c2
         , values = v2
@@ -101,10 +91,6 @@ struct
     let
       val info = String.concatWith " "
         [ msg
-        , I.toString (#row_lo m)
-        , I.toString (#row_hi m)
-        , I.toString (#col_lo m)
-        , I.toString (#col_hi m)
         , Seq.toString I.toString (#row_indices m)
         , Seq.toString I.toString (#col_indices m)
         , Seq.toString (R.fmt (StringCvt.FIX (SOME 1))) (#values m)
@@ -290,6 +276,7 @@ struct
 
   fun fromFile path =
     let
+      val _ = print ("parsing " ^ path ^ "\n")
       val chars = ReadFile.contentsSeq path
       val lines = ParseFile.tokens (fn c => c = #"\n") chars
       val numLines = DS.length lines
@@ -336,9 +323,11 @@ struct
         end
         handle _ => fail ()
 
-      val _ = print
-        (Int.toString numRows ^ " " ^ Int.toString numCols ^ " "
-         ^ Int.toString numValues ^ "\n")
+      val _ = print ("num rows    " ^ Int.toString numRows ^ "\n")
+      val _ = print ("num cols    " ^ Int.toString numCols ^ "\n")
+      val _ = print ("num nonzero " ^ Int.toString numValues ^ "\n")
+      val _ = print ("parsing elements (may take a while...)\n")
+
       val row_indices = ForkJoin.alloc numValues
       val col_indices = ForkJoin.alloc numValues
       val values = ForkJoin.alloc numValues
@@ -348,6 +337,7 @@ struct
           ("MatCOO.fromFile: error parsing line " ^ Int.toString (1 + lineNum)
            ^ ": expected <row> <col> <value>")
 
+      (* TODO: this is very slow *)
       fun parseValue i =
         let
           val lineNum = firstNonCommentLineNum + 1 + i
@@ -358,18 +348,23 @@ struct
           val v = R.fromLarge IEEEReal.TO_NEAREST (valOf (ParseFile.parseReal
             (DS.nth toks 2)))
         in
-          if i mod 500000 = 0 then
+          (* if i mod 500000 = 0 then
             print ("finished row " ^ Int.toString i ^ "\n")
           else
-            ();
-          Array.update (row_indices, i, r);
-          Array.update (col_indices, i, c);
+            (); *)
+
+          (* coordinates are stored in .mtx files using 1-indexing, but we
+           * want 0-indexing
+           *)
+          Array.update (row_indices, i, I.- (r, I.fromInt 1));
+          Array.update (col_indices, i, I.- (c, I.fromInt 1));
           Array.update (values, i, v)
         end
         handle _ => fail (firstNonCommentLineNum + 1 + i)
 
       val _ = ForkJoin.parfor 1000 (0, numValues) parseValue
-      val _ = print ("parsed values\n")
+      val _ = print ("finished parsing elements\n")
+      val _ = print ("formatting...\n")
 
       val getSorted =
         let
@@ -388,34 +383,16 @@ struct
         Seq.tabulate (fn i => Array.sub (col_indices, getSorted i)) numValues
       val values =
         Seq.tabulate (fn i => Array.sub (values, getSorted i)) numValues
+
+      val _ = print ("done parsing " ^ path ^ "\n")
     in
       Mat
-        { row_lo = if numValues = 0 then I.fromInt 0 else Seq.first row_indices
-        , row_hi =
-            if numValues = 0 then I.fromInt 0
-            else I.+ (I.fromInt 1, Seq.last row_indices)
-        , col_lo = I.fromInt 0
-        , col_hi = I.fromInt numCols
+        { width = I.fromInt numCols
+        , height = I.fromInt numRows
         , row_indices = row_indices
         , col_indices = col_indices
         , values = values
         }
     end
-
-
-  (* =================================================================== *)
-
-  fun ii x = I.fromInt x
-
-  val example1 = Mat
-    { row_lo = ii 1
-    , row_hi = ii 5
-    , col_lo = ii 0
-    , col_hi = ii 5
-    , row_indices = Seq.map ii (Seq.fromList [1, 1, 1, 2, 4, 4])
-    , col_indices = Seq.map ii (Seq.fromList [1, 3, 4, 2, 0, 4])
-    , values = Seq.map (R.fromLarge IEEEReal.TO_NEAREST) (Seq.fromList
-        [0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-    }
 
 end
