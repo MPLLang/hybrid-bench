@@ -20,6 +20,12 @@ val _ =
     )
 
 val num_rows = M.height mat
+val num_cols = M.width mat
+val num_vals = M.nnz mat
+val _ = print ("num rows " ^ Int.toString num_rows ^ "\n")
+val _ = print ("num cols " ^ Int.toString num_cols ^ "\n")
+val _ = print ("num vals " ^ Int.toString num_vals ^ "\n")
+
 val vec = Seq.tabulate (fn _ => M.R.fromInt 1) num_rows
 
 val result = Benchmark.run "sparse-mxv" (fn _ => M.mxv mat vec)

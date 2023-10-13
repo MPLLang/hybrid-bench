@@ -282,7 +282,7 @@ struct
 
   structure DS = DelayedSeq
 
-  fun fromTextFile path chars =
+  fun fromMatrixMarketFile path chars =
     let
       val lines = ParseFile.tokens (fn c => c = #"\n") chars
       val numLines = DS.length lines
@@ -606,7 +606,7 @@ struct
       TextIO.closeIn file;
 
       if String.isPrefix h1 actualHeader then
-        fromTextFile path (ReadFile.contentsSeq path)
+        fromMatrixMarketFile path (ReadFile.contentsSeq path)
       else if String.isPrefix h2 actualHeader then
         fromBinFile path (ReadFile.contentsBinSeq path)
       else
