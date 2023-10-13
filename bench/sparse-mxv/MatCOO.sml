@@ -13,7 +13,15 @@
  *   structure M = MatCOO(structure I = Int64
  *                        structure R = Real64)
  *)
-functor MatCOO (structure I: INTEGER structure R: REAL) =
+functor MatCOO
+  (structure I: INTEGER
+   structure R:
+   sig
+     include REAL
+     structure W: WORD
+     val castFromWord: W.word -> real
+     val castToWord: real -> W.word
+   end) =
 struct
   structure I = I
   structure R = R
@@ -274,10 +282,8 @@ struct
 
   structure DS = DelayedSeq
 
-  fun fromFile path =
+  fun fromTextFile path chars =
     let
-      val _ = print ("parsing " ^ path ^ "\n")
-      val chars = ReadFile.contentsSeq path
       val lines = ParseFile.tokens (fn c => c = #"\n") chars
       val numLines = DS.length lines
       fun line i : char DS.t = DS.nth lines i
@@ -393,6 +399,218 @@ struct
         , col_indices = col_indices
         , values = values
         }
+    end
+
+
+  (* MatrixCoordinateRealBin\n
+   * [8 bits unsigned: real value precision, either 32 or 64]
+   * [64 bits unsigned: number of rows]
+   * [64 bits unsigned: number of columns]
+   * [64 bits unsigned: number of elements]
+   * [element]
+   * [element]
+   * ...
+   *
+   * each element is as follows, where X is the real value precision (32 or 64)
+   * [64 bits unsigned: row index][64 bits unsigned: col index][X bits: value]
+   *)
+  fun writeBinFile mat path =
+    let
+      val file = TextIO.openOut path
+      val _ = TextIO.output (file, "MatrixCoordinateRealBin\n")
+      val _ = TextIO.closeOut file
+
+      val file = BinIO.openAppend path
+
+      fun w8 (w: Word8.word) = BinIO.output1 (file, w)
+
+      fun w32 (w: Word64.word) =
+        let
+          open Word64
+          infix 2 >> andb
+        in
+          w8 (Word8.fromLarge (w >> 0w24));
+          w8 (Word8.fromLarge (w >> 0w16));
+          w8 (Word8.fromLarge (w >> 0w8));
+          w8 (Word8.fromLarge w)
+        end
+
+      fun w64 (w: Word64.word) =
+        let
+          open Word64
+          infix 2 >> andb
+        in
+          (* this will only work if Word64 = LargeWord, which is good. *)
+          w8 (Word8.fromLarge (w >> 0w56));
+          w8 (Word8.fromLarge (w >> 0w48));
+          w8 (Word8.fromLarge (w >> 0w40));
+          w8 (Word8.fromLarge (w >> 0w32));
+          w8 (Word8.fromLarge (w >> 0w24));
+          w8 (Word8.fromLarge (w >> 0w16));
+          w8 (Word8.fromLarge (w >> 0w8));
+          w8 (Word8.fromLarge w)
+        end
+
+      fun wr64 (r: R.real) =
+        w64 (R.W.toLarge (R.castToWord r))
+      fun wr32 (r: R.real) =
+        w32 (R.W.toLarge (R.castToWord r))
+
+      val (wr, rsize) =
+        case R.W.wordSize of
+          32 => (wr32, 0w32)
+        | 64 => (wr64, 0w64)
+        | _ =>
+            raise Fail
+              "MatCOO.writeBinFile: only 32-bit and 64-bit reals supported"
+    in
+      w8 rsize;
+      w64 (Word64.fromInt (I.toInt (height mat)));
+      w64 (Word64.fromInt (I.toInt (width mat)));
+      w64 (Word64.fromInt (nnz mat));
+      Util.for (0, nnz mat) (fn i =>
+        let
+          val Mat {row_indices, col_indices, values, ...} = mat
+          val r = Seq.nth row_indices i
+          val c = Seq.nth col_indices i
+          val v = Seq.nth values i
+        in
+          w64 (Word64.fromInt (I.toInt r));
+          w64 (Word64.fromInt (I.toInt c));
+          wr v
+        end);
+      BinIO.closeOut file
+    end
+
+
+  fun fromBinFile path bytes =
+    let
+      val header = "MatrixCoordinateRealBin\n"
+      val header' =
+        if Seq.length bytes < String.size header then
+          raise Fail ("MatCOO.fromBinFile: missing or incomplete header")
+        else
+          CharVector.tabulate (String.size header, fn i =>
+            Char.chr (Word8.toInt (Seq.nth bytes i)))
+      val _ =
+        if header = header' then
+          ()
+        else
+          raise Fail
+            ("MatCOO.fromBinFile: expected MatrixCoordinateRealBin header")
+
+      val bytes = Seq.drop bytes (String.size header)
+
+      fun r64 off =
+        let
+          infix 2 << orb
+          val op<< = Word64.<<
+          val op orb = Word64.orb
+
+          val w = Word8.toLarge (Seq.nth bytes off)
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 1)))
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 2)))
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 3)))
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 4)))
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 5)))
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 6)))
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 7)))
+        in
+          w
+        end
+
+      fun r32 off =
+        let
+          infix 2 << orb
+          val op<< = Word64.<<
+          val op orb = Word64.orb
+
+          val w = Word8.toLarge (Seq.nth bytes off)
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 1)))
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 2)))
+          val w = (w << 0w8) orb (Word8.toLarge (Seq.nth bytes (off + 3)))
+        in
+          w
+        end
+
+      fun r8 off = Seq.nth bytes off
+      fun rr32 off =
+        R.castFromWord (R.W.fromLarge (r32 off))
+      fun rr64 off =
+        R.castFromWord (R.W.fromLarge (r64 off))
+
+      (* ====================================================================
+       * parse binary contents
+       *)
+
+      val rsize = Word8.toInt (r8 0)
+
+      fun rsizeFail () =
+        raise Fail
+          ("MatCOO.fromBinFile: found " ^ Int.toString rsize
+           ^ "-bit reals, but expected " ^ Int.toString R.W.wordSize ^ "-bit")
+
+      val (rr, rbytes) =
+        if rsize = R.W.wordSize then
+          case rsize of
+            32 => (rr32, 4)
+          | 64 => (rr64, 8)
+          | _ => rsizeFail ()
+        else
+          rsizeFail ()
+
+      val elemSize = 8 + 8 + rbytes
+      val elemStartOff = 1 + 8 + 8 + 8
+
+      val height = I.fromInt (Word64.toInt (r64 (1 + 0)))
+      val width = I.fromInt (Word64.toInt (r64 (1 + 8)))
+      val numValues = Word64.toInt (r64 (1 + 8 + 8))
+
+      val row_indices = ForkJoin.alloc numValues
+      val col_indices = ForkJoin.alloc numValues
+      val values = ForkJoin.alloc numValues
+    in
+      ForkJoin.parfor 5000 (0, numValues) (fn i =>
+        let
+          val off = elemStartOff + i * elemSize
+          val r = I.fromInt (Word64.toInt (r64 off))
+          val c = I.fromInt (Word64.toInt (r64 (off + 8)))
+          val v = rr (off + 8 + 8)
+        in
+          Array.update (row_indices, i, r);
+          Array.update (col_indices, i, c);
+          Array.update (values, i, v)
+        end);
+
+      Mat
+        { width = width
+        , height = height
+        , row_indices = ArraySlice.full row_indices
+        , col_indices = ArraySlice.full col_indices
+        , values = ArraySlice.full values
+        }
+    end
+
+
+  fun fromFile path =
+    let
+      val file = TextIO.openIn path
+      val _ = print ("loading " ^ path ^ "\n")
+
+      val h1 = "%%MatrixMarket"
+      val h2 = "MatrixCoordinateRealBin\n"
+
+      val actualHeader = TextIO.inputN
+        (file, Int.max (String.size h1, String.size h2))
+    in
+      TextIO.closeIn file;
+
+      if String.isPrefix h1 actualHeader then
+        fromTextFile path (ReadFile.contentsSeq path)
+      else if String.isPrefix h2 actualHeader then
+        fromBinFile path (ReadFile.contentsBinSeq path)
+      else
+        raise Fail ("unknown header " ^ actualHeader)
     end
 
 end
