@@ -36,7 +36,9 @@ fun quickhullCPU points =
 
 fun semihullGPU points_fut (idxs, l, r) =
   let
-    val idxs' = Array.tabulate (Seq.length idxs, Int32.fromInt o Seq.nth idxs)
+    val idxs' = SeqBasis.tabulate 5000 (0, Seq.length idxs)
+      (Int32.fromInt o Seq.nth idxs)
+    (* val idxs' = Array.tabulate (Seq.length idxs, Int32.fromInt o Seq.nth idxs) *)
     val idxs_fut =
       Futhark.Int32Array1.new ctx (ArraySlice.full idxs') (Seq.length idxs)
     val res_fut =
@@ -86,4 +88,4 @@ val result = Benchmark.run ("quickhull " ^ impl) bench
 val () = Futhark.Real64Array2.free points_fut
 val () = Futhark.Context.free ctx
 val () = print
-  ("Points in convex hull: " ^ Int.toString (Seq.length result)^ "\n")
+  ("Points in convex hull: " ^ Int.toString (Seq.length result) ^ "\n")
