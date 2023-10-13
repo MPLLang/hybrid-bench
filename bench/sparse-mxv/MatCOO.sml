@@ -283,7 +283,124 @@ struct
       end
 
 
-  fun fromFile path = raise Fail "not yet implemented"
+  (* =================================================================== *)
+
+
+  structure DS = DelayedSeq
+
+  fun fromFile path =
+    let
+      val chars = ReadFile.contentsSeq path
+      val lines = ParseFile.tokens (fn c => c = #"\n") chars
+      val numLines = DS.length lines
+      fun line i : char DS.t = DS.nth lines i
+      fun lineStr i : string =
+        let val ln = line i
+        in CharVector.tabulate (DS.length ln, DS.nth ln)
+        end
+
+      fun lineIsComment i =
+        let val ln = line i
+        in DS.length ln > 0 andalso DS.nth ln 0 = #"%"
+        end
+
+      val _ =
+        if
+          numLines > 0
+          andalso
+          ParseFile.eqStr "%%MatrixMarket matrix coordinate real general"
+            (line 0)
+        then ()
+        else raise Fail ("MatCOO.fromFile: not sure how to parse file: " ^ path)
+
+      val firstNonCommentLineNum =
+        case FindFirst.findFirst 1000 (1, numLines) (not o lineIsComment) of
+          SOME i => i
+        | NONE => raise Fail ("MatCOO.fromFile: missing contents?")
+
+      fun fail () =
+        raise Fail
+          ("MatCOO.fromFile: error parsing line "
+           ^ Int.toString (1 + firstNonCommentLineNum)
+           ^ ": expected <num-rows> <num-cols> <num-values>")
+      val (numRows, numCols, numValues) =
+        let
+          val lineNum = firstNonCommentLineNum
+          val lnChars = DS.toArraySeq (line lineNum)
+          val toks = ParseFile.tokens Char.isSpace lnChars
+          val nr = valOf (ParseFile.parseInt (DS.nth toks 0))
+          val nc = valOf (ParseFile.parseInt (DS.nth toks 1))
+          val nv = valOf (ParseFile.parseInt (DS.nth toks 2))
+        in
+          (nr, nc, nv)
+        end
+        handle _ => fail ()
+
+      val _ = print
+        (Int.toString numRows ^ " " ^ Int.toString numCols ^ " "
+         ^ Int.toString numValues ^ "\n")
+      val row_indices = ForkJoin.alloc numValues
+      val col_indices = ForkJoin.alloc numValues
+      val values = ForkJoin.alloc numValues
+
+      fun fail lineNum =
+        raise Fail
+          ("MatCOO.fromFile: error parsing line " ^ Int.toString (1 + lineNum)
+           ^ ": expected <row> <col> <value>")
+
+      fun parseValue i =
+        let
+          val lineNum = firstNonCommentLineNum + 1 + i
+          val lnChars = DS.toArraySeq (line lineNum)
+          val toks = ParseFile.tokens Char.isSpace lnChars
+          val r = I.fromInt (valOf (ParseFile.parseInt (DS.nth toks 0)))
+          val c = I.fromInt (valOf (ParseFile.parseInt (DS.nth toks 1)))
+          val v = R.fromLarge IEEEReal.TO_NEAREST (valOf (ParseFile.parseReal
+            (DS.nth toks 2)))
+        in
+          if i mod 500000 = 0 then
+            print ("finished row " ^ Int.toString i ^ "\n")
+          else
+            ();
+          Array.update (row_indices, i, r);
+          Array.update (col_indices, i, c);
+          Array.update (values, i, v)
+        end
+        handle _ => fail (firstNonCommentLineNum + 1 + i)
+
+      val _ = ForkJoin.parfor 1000 (0, numValues) parseValue
+      val _ = print ("parsed values\n")
+
+      val getSorted =
+        let
+          val idx = Seq.tabulate (fn i => i) numValues
+        in
+          StableSort.sortInPlace
+            (fn (i, j) =>
+               I.compare
+                 (Array.sub (row_indices, i), Array.sub (row_indices, j))) idx;
+          fn i => Seq.nth idx i
+        end
+
+      val row_indices =
+        Seq.tabulate (fn i => Array.sub (row_indices, getSorted i)) numValues
+      val col_indices =
+        Seq.tabulate (fn i => Array.sub (col_indices, getSorted i)) numValues
+      val values =
+        Seq.tabulate (fn i => Array.sub (values, getSorted i)) numValues
+    in
+      Mat
+        { row_lo = if numValues = 0 then I.fromInt 0 else Seq.first row_indices
+        , row_hi =
+            if numValues = 0 then I.fromInt 0
+            else I.+ (I.fromInt 1, Seq.last row_indices)
+        , col_lo = I.fromInt 0
+        , col_hi = I.fromInt numCols
+        , row_indices = row_indices
+        , col_indices = col_indices
+        , values = values
+        }
+    end
 
 
   (* =================================================================== *)

@@ -1,13 +1,13 @@
 structure CLA = CommandLineArgs
 structure M = MatCOO (structure I = Int64 structure R = Real32)
 
-(* val inputFile = CLA.parseString "input" ""
+val inputFile = CLA.parseString "input" ""
 
 val mat =
   if inputFile = "" then Util.die ("missing -input FILE.mtx")
-  else M.fromFile inputFile *)
+  else M.fromFile inputFile
 
-val mat = M.example1
+(* val mat = M.example1 *)
 
 (* can add more rows as desired here, doesn't matter *)
 val extra_empty_rows_at_bottom = 2
