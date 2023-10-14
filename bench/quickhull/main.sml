@@ -32,11 +32,29 @@ val ctx = Futhark.Context.new
 val () = print "Done!\n"
 
 fun quickhullCPU points =
-  Quickhull.hull false (fn _ => raise Fail "No GPU for you") points
+  let
+    fun fail () = raise Fail "No GPU for you"
+  in
+    Quickhull.hull false (fn _ => fail ()) (fn _ => fail ()) (fn _ => fail ())
+      points
+  end
+
+fun filterThenSemihullGPU points_fut (l, r) =
+  let
+    val res_fut =
+      Futhark.Entry.top_level_filter_then_semihull ctx
+        (points_fut, Int32.fromInt l, Int32.fromInt r)
+    val res = Futhark.Int32Array1.values res_fut
+    val () = Futhark.Int32Array1.free res_fut
+  in
+    Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
+  end
 
 fun semihullGPU points_fut (idxs, l, r) =
   let
-    val idxs' = Array.tabulate (Seq.length idxs, Int32.fromInt o Seq.nth idxs)
+    val idxs' = SeqBasis.tabulate 5000 (0, Seq.length idxs)
+      (Int32.fromInt o Seq.nth idxs)
+    (* val idxs' = Array.tabulate (Seq.length idxs, Int32.fromInt o Seq.nth idxs) *)
     val idxs_fut =
       Futhark.Int32Array1.new ctx (ArraySlice.full idxs') (Seq.length idxs)
     val res_fut =
@@ -49,8 +67,18 @@ fun semihullGPU points_fut (idxs, l, r) =
     Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
   end
 
+fun minMaxPointsInRange points_fut (lo, hi) =
+  let
+    val (min, max) =
+      Futhark.Entry.min_max_point_in_range ctx
+        (points_fut, Int64.fromInt lo, Int64.fromInt hi)
+  in
+    (Int64.toInt min, Int64.toInt max)
+  end
+
 fun quickhullHybrid points points_fut =
-  Quickhull.hull true (semihullGPU points_fut) points
+  Quickhull.hull true (minMaxPointsInRange points_fut)
+    (filterThenSemihullGPU points_fut) (semihullGPU points_fut) points
 
 fun quickhullGPU points_fut =
   let
@@ -61,18 +89,20 @@ fun quickhullGPU points_fut =
     Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
   end
 
-fun futharkPoints points =
+fun futharkPoints (points: FlatPointSeq.t) =
   let
-    val points_arr = Array.tabulate (Seq.length points * 2, fn i =>
-      let val (x, y) = Seq.nth points (i div 2)
-      in if i mod 2 = 0 then x else y
-      end)
+  (* val points_arr = SeqBasis.tabulate 5000 (0, Seq.length points * 2) (fn i =>
+    let val (x, y) = Seq.nth points (i div 2)
+    in if i mod 2 = 0 then x else y
+    end) *)
   in
-    Futhark.Real64Array2.new ctx (ArraySlice.full points_arr)
-      (Seq.length points, 2)
+    Futhark.Real64Array2.new ctx (FlatPointSeq.viewData points)
+      (FlatPointSeq.length points, 2)
   end
 
-val points_fut = futharkPoints points
+val points = FlatPointSeq.fromArraySeq points
+val (points_fut, tm) = Util.getTime (fn _ => futharkPoints points)
+val _ = print ("copied points to GPU in " ^ Time.fmt 4 tm ^ "s\n")
 
 val bench =
   case impl of
@@ -86,4 +116,4 @@ val result = Benchmark.run ("quickhull " ^ impl) bench
 val () = Futhark.Real64Array2.free points_fut
 val () = Futhark.Context.free ctx
 val () = print
-  ("Points in convex hull: " ^ Int.toString (Seq.length result)^ "\n")
+  ("Points in convex hull: " ^ Int.toString (Seq.length result) ^ "\n")

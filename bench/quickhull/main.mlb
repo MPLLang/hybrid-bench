@@ -2,6 +2,7 @@
 futhark/quickhull.sig
 futhark/quickhull.sml
 
+sml/FlatPointSeq.sml
 sml/ParseFile.sml
 sml/Split.sml
 sml/TreeSeq.sml
