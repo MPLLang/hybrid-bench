@@ -1,13 +1,13 @@
 structure Quickhull:
 sig
 
-  val hull_cpu: FlatPointSeq.t -> int Seq.t
+  val hull_cpu: FlatPointSeq.t -> Int32.int Seq.t
 
-  val hull_gpu: Futhark.ctx -> Futhark.Real64Array2.array -> int Seq.t
+  val hull_gpu: Futhark.ctx -> Futhark.Real64Array2.array -> Int32.int Seq.t
 
   val hull_hybrid: Futhark.ctx
                    -> FlatPointSeq.t * Futhark.Real64Array2.array
-                   -> int Seq.t
+                   -> Int32.int Seq.t
 end =
 struct
 
@@ -31,7 +31,8 @@ struct
 
   fun hull_cpu pts =
     let
-      fun pt i = FlatPointSeq.nth pts i
+      fun pt i =
+        FlatPointSeq.nth pts (Int32.toInt i)
       fun dist p q i =
         G.Point.triArea (p, q, pt i)
       fun max ((i, di), (j, dj)) =
@@ -51,7 +52,7 @@ struct
       fun aboveLine p q i =
         (dist p q i > 0.0)
 
-      fun parHull idxs l r =
+      fun parHull (idxs: Int32.int Seq.t) l r =
         if Seq.length idxs < 2 then
           Tree.fromArraySeq idxs
         else
@@ -103,7 +104,7 @@ struct
 
       val (l, r) =
         SeqBasis.reduce 5000 minmax (0, 0) (0, FlatPointSeq.length pts) (fn i =>
-          (i, i))
+          (Int32.fromInt i, Int32.fromInt i))
 
       val tm = tick tm "endpoints"
 
@@ -114,7 +115,7 @@ struct
         Seq.tabulate
           (fn i =>
              let
-               val d = dist lp rp i
+               val d = dist lp rp (Int32.fromInt i)
              in
                if d > 0.0 then 0w0 : Word8.word
                else if d < 0.0 then 0w1
@@ -127,12 +128,12 @@ struct
         ForkJoin.par
           ( fn _ =>
               ArraySlice.full
-                (SeqBasis.filter 2000 (0, FlatPointSeq.length pts) (fn i => i)
-                   (fn i => Seq.nth flags i = 0w0))
+                (SeqBasis.filter 2000 (0, FlatPointSeq.length pts)
+                   (fn i => Int32.fromInt i) (fn i => Seq.nth flags i = 0w0))
           , fn _ =>
               ArraySlice.full
-                (SeqBasis.filter 2000 (0, FlatPointSeq.length pts) (fn i => i)
-                   (fn i => Seq.nth flags i = 0w1))
+                (SeqBasis.filter 2000 (0, FlatPointSeq.length pts)
+                   (fn i => Int32.fromInt i) (fn i => Seq.nth flags i = 0w1))
           )
 
       val _ = print
@@ -173,29 +174,22 @@ struct
   fun filterThenSemihullGPU ctx points_fut (l, r) =
     let
       val res_fut =
-        Futhark.Entry.top_level_filter_then_semihull ctx
-          (points_fut, Int32.fromInt l, Int32.fromInt r)
+        Futhark.Entry.top_level_filter_then_semihull ctx (points_fut, l, r)
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
     in
-      Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
+      ArraySlice.full res
     end
 
   fun semihullGPU ctx points_fut (idxs, l, r) =
     let
-      val idxs' = SeqBasis.tabulate 5000 (0, Seq.length idxs)
-        (Int32.fromInt o Seq.nth idxs)
-      (* val idxs' = Array.tabulate (Seq.length idxs, Int32.fromInt o Seq.nth idxs) *)
-      val idxs_fut =
-        Futhark.Int32Array1.new ctx (ArraySlice.full idxs') (Seq.length idxs)
-      val res_fut =
-        Futhark.Entry.semihull ctx
-          (points_fut, Int32.fromInt l, Int32.fromInt r, idxs_fut)
+      val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
+      val res_fut = Futhark.Entry.semihull ctx (points_fut, l, r, idxs_fut)
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
       val () = Futhark.Int32Array1.free idxs_fut
     in
-      Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
+      ArraySlice.full res
     end
 
   fun minMaxPointsInRange ctx points_fut (lo, hi) =
@@ -204,7 +198,18 @@ struct
         Futhark.Entry.min_max_point_in_range ctx
           (points_fut, Int64.fromInt lo, Int64.fromInt hi)
     in
-      (Int64.toInt min, Int64.toInt max)
+      (min, max)
+    end
+
+  fun point_furthest_from_line_gpu ctx points_fut (l, r, idxs) :
+    Int32.int * Real64.real =
+    let
+      val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
+      val (i, dist) =
+        Futhark.Entry.point_furthest_from_line ctx (points_fut, l, r, idxs_fut)
+      val () = Futhark.Int32Array1.free idxs_fut
+    in
+      (i, dist)
     end
 
   fun hull_gpu ctx points_fut =
@@ -213,7 +218,7 @@ struct
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
     in
-      Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
+      Seq.fromArraySeq (ArraySlice.full res)
     end
 
 
@@ -250,7 +255,8 @@ struct
 
   fun hull_hybrid ctx (pts, points_fut) =
     let
-      fun pt i = FlatPointSeq.nth pts i
+      fun pt i =
+        FlatPointSeq.nth pts (Int32.toInt i)
       fun dist p q i =
         G.Point.triArea (p, q, pt i)
       fun max ((i, di), (j, dj)) =
@@ -267,7 +273,7 @@ struct
         (dist p q i > 0.0)
 
 
-      fun parHull idxs l r =
+      fun parHull (idxs: Int32.int Seq.t) l r =
         if Seq.length idxs < 2 then
           Tree.fromArraySeq idxs
         else
@@ -278,8 +284,16 @@ struct
               dist lp rp i
 
             val (mid, _) =
-              SeqBasis.reduce 5000 max (~1, Real.negInf) (0, Seq.length idxs)
-                (fn i => (Seq.nth idxs i, d (Seq.nth idxs i)))
+              reduce_hybrid 5000 max (~1, Real.negInf) (0, Seq.length idxs)
+                ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
+                , fn (lo, hi) =>
+                    let
+                      val (i, _) = point_furthest_from_line_gpu ctx points_fut
+                        (l, r, Seq.subseq idxs (lo, hi - lo))
+                    in
+                      (i, d i)
+                    end
+                )
 
             val midp = pt mid
 
@@ -336,15 +350,16 @@ struct
 
           val flags =
             Seq.tabulate
-              (fn i => if dist lp rp i > 0.0 then (0w1 : Word8.word) else 0w0)
-              (FlatPointSeq.length pts)
+              (fn i =>
+                 if dist lp rp (Int32.fromInt i) > 0.0 then (0w1 : Word8.word)
+                 else 0w0) (FlatPointSeq.length pts)
 
           val tm = tick tm "cpu flags"
 
           val above =
             ArraySlice.full
-              (SeqBasis.filter 2000 (0, FlatPointSeq.length pts) (fn i => i)
-                 (fn i => Seq.nth flags i = 0w1))
+              (SeqBasis.filter 2000 (0, FlatPointSeq.length pts)
+                 (fn i => Int32.fromInt i) (fn i => Seq.nth flags i = 0w1))
 
           val tm = tick tm "cpu filter"
 
@@ -367,7 +382,7 @@ struct
 
       val (l, r) =
         reduce_hybrid 5000 minmax (0, 0) (0, FlatPointSeq.length pts)
-          ( fn i => (i, i)
+          ( fn i => (Int32.fromInt i, Int32.fromInt i)
           , fn (lo, hi) => minMaxPointsInRange ctx points_fut (lo, hi)
           )
 
