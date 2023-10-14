@@ -1,8 +1,9 @@
 structure Quickhull:
 sig
   val hull: bool
-            -> (int Split.seq * int * int -> int Split.seq)
-            -> (real * real) Seq.t
+            -> (int * int -> int Seq.t)
+            -> (int Seq.t * int * int -> int Seq.t)
+            -> FlatPointSeq.t
             -> int Seq.t
 end =
 struct
@@ -21,9 +22,9 @@ struct
       tm'
     end
 
-  fun hull hybrid doGpu pts =
+  fun hull hybrid topDoGpu doGpu pts =
     let
-      fun pt i = Seq.nth pts i
+      fun pt i = FlatPointSeq.nth pts i
       fun dist p q i =
         G.Point.triArea (p, q, pt i)
       fun max ((i, di), (j, dj)) =
@@ -106,6 +107,42 @@ struct
             , prefer_gpu = fn () => Tree.fromArraySeq (doGpu (idxs, l, r))
             }
 
+
+      fun top_level_filter_then_semihull l r =
+        let
+          val lp = pt l
+          val rp = pt r
+
+          val tm = startTiming ()
+
+          val flags =
+            Seq.tabulate
+              (fn i => if dist lp rp i > 0.0 then (0w1 : Word8.word) else 0w0)
+              (FlatPointSeq.length pts)
+
+          val tm = tick tm "cpu flags"
+
+          val above =
+            ArraySlice.full
+              (SeqBasis.filter 2000 (0, FlatPointSeq.length pts) (fn i => i)
+                 (fn i => Seq.nth flags i = 0w1))
+
+          val tm = tick tm "cpu filter"
+
+          val above = parHull above l r
+
+          val tm = tick tm "cpu semihull"
+        in
+          above
+        end
+
+
+      fun top_level_filter_then_semihull_choose l r =
+        ForkJoin.choice
+          { prefer_cpu = fn _ => top_level_filter_then_semihull l r
+          , prefer_gpu = fn _ => Tree.fromArraySeq (topDoGpu (l, r))
+          }
+
       (*
       in
         if Seq.length idxs < 2 then
@@ -137,71 +174,91 @@ struct
       val (l, r) =
         SeqBasis.reduce 5000
           (fn ((l1, r1), (l2, r2)) => (min_by x l1 l2, max_by x r1 r2)) (0, 0)
-          (0, Seq.length pts) (fn i => (i, i))
+          (0, FlatPointSeq.length pts) (fn i => (i, i))
 
       val tm = tick tm "endpoints"
 
       val lp = pt l
       val rp = pt r
 
-      fun flag i =
+      (* fun flag i =
         let
           val d = dist lp rp i
         in
           if d > 0.0 then Split.Left
           else if d < 0.0 then Split.Right
           else Split.Throwaway
-        end
+        end *)
       (* val (above, below) = *)
       (* Split.parSplit allIdx (DS.force (DS.map flag allIdx)) *)
       (* Split.parSplit (Seq.tabulate (fn i => i) (Seq.length pts))
         (Seq.tabulate flag (Seq.length pts)) *)
 
 
-      val flags =
-        Seq.tabulate
-          (fn i =>
-             let
-               val d = dist lp rp i
-             in
-               if d > 0.0 then 0w0 : Word8.word
-               else if d < 0.0 then 0w1
-               else 0w2
-             end) (Seq.length pts)
+      val (above, below, tm) =
+        if hybrid then
+          let
+            val (above, below) =
+              ForkJoin.par
+                ( fn _ => top_level_filter_then_semihull_choose l r
+                , fn _ => top_level_filter_then_semihull_choose r l
+                )
 
-      val (above, below) =
-        ForkJoin.par
-          ( fn _ =>
-              ArraySlice.full
-                (SeqBasis.filter 2000 (0, Seq.length pts) (fn i => i) (fn i =>
-                   Seq.nth flags i = 0w0))
-          , fn _ =>
-              ArraySlice.full
-                (SeqBasis.filter 2000 (0, Seq.length pts) (fn i => i) (fn i =>
-                   Seq.nth flags i = 0w1))
-          )
+            val tm = tick tm "quickhull"
+          in
+            (above, below, tm)
+          end
 
+        else
+          let
+            val flags =
+              Seq.tabulate
+                (fn i =>
+                   let
+                     val d = dist lp rp i
+                   in
+                     if d > 0.0 then 0w0 : Word8.word
+                     else if d < 0.0 then 0w1
+                     else 0w2
+                   end) (FlatPointSeq.length pts)
 
-      val _ = print
-        ("above "
-         ^
-         Real.fmt (StringCvt.FIX (SOME 1))
-           (100.0 * Real.fromInt (Seq.length above)
-            / Real.fromInt (Seq.length pts)) ^ "%\n")
-      val _ = print
-        ("below "
-         ^
-         Real.fmt (StringCvt.FIX (SOME 1))
-           (100.0 * Real.fromInt (Seq.length below)
-            / Real.fromInt (Seq.length pts)) ^ "%\n")
+            val tm = tick tm "above/below flags"
 
-      val tm = tick tm "above/below filter"
+            val (above, below) =
+              ForkJoin.par
+                ( fn _ =>
+                    ArraySlice.full
+                      (SeqBasis.filter 2000 (0, FlatPointSeq.length pts)
+                         (fn i => i) (fn i => Seq.nth flags i = 0w0))
+                , fn _ =>
+                    ArraySlice.full
+                      (SeqBasis.filter 2000 (0, FlatPointSeq.length pts)
+                         (fn i => i) (fn i => Seq.nth flags i = 0w1))
+                )
 
-      val (above, below) =
-        ForkJoin.par (fn _ => parHull_choose above l r, fn _ =>
-          parHull below r l)
+            val _ = print
+              ("above "
+               ^
+               Real.fmt (StringCvt.FIX (SOME 1))
+                 (100.0 * Real.fromInt (Seq.length above)
+                  / Real.fromInt (FlatPointSeq.length pts)) ^ "%\n")
+            val _ = print
+              ("below "
+               ^
+               Real.fmt (StringCvt.FIX (SOME 1))
+                 (100.0 * Real.fromInt (Seq.length below)
+                  / Real.fromInt (FlatPointSeq.length pts)) ^ "%\n")
 
-      val tm = tick tm "quickhull"
+            val tm = tick tm "above/below filter"
+
+            val (above, below) =
+              ForkJoin.par (fn _ => parHull_choose above l r, fn _ =>
+                parHull below r l)
+
+            val tm = tick tm "quickhull"
+          in
+            (above, below, tm)
+          end
 
       val hullt = Tree.append
         (Tree.append (Tree.$ l, above), Tree.append (Tree.$ r, below))
