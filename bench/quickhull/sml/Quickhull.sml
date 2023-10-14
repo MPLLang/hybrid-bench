@@ -74,22 +74,12 @@ struct
             val rp = pt r
             fun d i =
               dist lp rp i
-            (* val idxs = DS.fromArraySeq idxs *)
 
             val (mid, _) =
               SeqBasis.reduce 5000 max (~1, Real.negInf) (0, Seq.length idxs)
                 (fn i => (Seq.nth idxs i, d (Seq.nth idxs i)))
-            (* val distances = DS.map (fn i => (i, d i)) idxs
-            val (mid, _) = DS.reduce max (~1, Real.negInf) distances *)
 
             val midp = pt mid
-
-            fun flag i =
-              if aboveLine lp midp i then Split.Left
-              else if aboveLine midp rp i then Split.Right
-              else Split.Throwaway
-            (* val (left, right) = Split.parSplit idxs (Seq.map flag idxs) *)
-            (* (DS.force (DS.map flag idxs)) *)
 
             fun flag i =
               if aboveLine lp midp i then 0w0
@@ -169,33 +159,7 @@ struct
           , prefer_gpu = fn _ => Tree.fromArraySeq (topDoGpu (l, r))
           }
 
-      (*
-      in
-        if Seq.length idxs < 2 then
-          Tree.fromArraySeq idxs
-        (* if DS.length idxs <= 2048 then
-           seqHull idxs l r *)
-        else if hybrid then
-          ForkJoin.choice
-            { prefer_cpu = doCpu
-            , prefer_gpu = fn () => Tree.fromArraySeq (doGpu (idxs, l, r))
-            }
-        else
-          doCpu ()
-      end
-      *)
-
       val tm = startTiming ()
-
-      (* val allIdx = DS.tabulate (fn i => i) (Seq.length pts) *)
-
-      (* This is faster than doing two reduces *)
-      (* val (l, r) = DS.reduce
-        (fn ((l1, r1), (l2, r2)) =>
-          (if x l1 < x l2 then l1 else l2,
-           if x r1 > x r2 then r1 else r2))
-        (0, 0)
-        (DS.map (fn i => (i, i)) allIdx) *)
 
       val (l, r) =
         if hybrid then
@@ -208,20 +172,6 @@ struct
 
       val lp = pt l
       val rp = pt r
-
-      (* fun flag i =
-        let
-          val d = dist lp rp i
-        in
-          if d > 0.0 then Split.Left
-          else if d < 0.0 then Split.Right
-          else Split.Throwaway
-        end *)
-      (* val (above, below) = *)
-      (* Split.parSplit allIdx (DS.force (DS.map flag allIdx)) *)
-      (* Split.parSplit (Seq.tabulate (fn i => i) (Seq.length pts))
-        (Seq.tabulate flag (Seq.length pts)) *)
-
 
       val (above, below, tm) =
         if hybrid then
