@@ -32,8 +32,12 @@ val ctx = Futhark.Context.new
 val () = print "Done!\n"
 
 fun quickhullCPU points =
-  Quickhull.hull false (fn _ => raise Fail "No GPU for you")
-    (fn _ => raise Fail "No GPU for you") points
+  let
+    fun fail () = raise Fail "No GPU for you"
+  in
+    Quickhull.hull false (fn _ => fail ()) (fn _ => fail ()) (fn _ => fail ())
+      points
+  end
 
 fun filterThenSemihullGPU points_fut (l, r) =
   let
@@ -63,9 +67,18 @@ fun semihullGPU points_fut (idxs, l, r) =
     Seq.map Int32.toInt (Seq.fromArraySeq (ArraySlice.full res))
   end
 
+fun minMaxPointsInRange points_fut (lo, hi) =
+  let
+    val (min, max) =
+      Futhark.Entry.min_max_point_in_range ctx
+        (points_fut, Int64.fromInt lo, Int64.fromInt hi)
+  in
+    (Int64.toInt min, Int64.toInt max)
+  end
+
 fun quickhullHybrid points points_fut =
-  Quickhull.hull true (filterThenSemihullGPU points_fut)
-    (semihullGPU points_fut) points
+  Quickhull.hull true (minMaxPointsInRange points_fut)
+    (filterThenSemihullGPU points_fut) (semihullGPU points_fut) points
 
 fun quickhullGPU points_fut =
   let

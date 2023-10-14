@@ -136,6 +136,9 @@ module mk_quickhull (S : euclidean_space) = {
   def pmin p q = if point_less p q then p else q
   def pmax p q = if point_less p q then q else p
 
+  def min_max_point ps =
+    (reduce pmin ps[0] ps, reduce pmax ps[0] ps)
+
   def compute (ps : []point) =
     if length ps <= 3 then (ps, []) else
     let leftmost = reduce pmin ps[0] ps
@@ -164,6 +167,12 @@ entry semihull points l r idxs =
   in naive_quickhull.semihull start end (map p idxs)
      |> map (.1)
      |> filter (!=l) -- Remove starting point.
+
+entry min_max_point_in_range [k] (points: [k][2]f64) lo hi : (i64, i64) =
+  let ps = take (hi-lo) (drop lo points)
+  let ps = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 (lo + i))) (indices ps) ps
+  let (min, max) = naive_quickhull.min_max_point ps
+  in (i64.i32 min.1, i64.i32 max.1)
 
 -- select points above the line (l, r) and then compute the semihull of these
 entry top_level_filter_then_semihull points (l: i32) (r : i32) : []i32 =

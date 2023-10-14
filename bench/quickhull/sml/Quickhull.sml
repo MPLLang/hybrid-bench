@@ -1,6 +1,7 @@
 structure Quickhull:
 sig
   val hull: bool
+            -> (int * int -> int * int)
             -> (int * int -> int Seq.t)
             -> (int Seq.t * int * int -> int Seq.t)
             -> FlatPointSeq.t
@@ -22,7 +23,7 @@ struct
       tm'
     end
 
-  fun hull hybrid topDoGpu doGpu pts =
+  fun hull hybrid minMaxPointsGpu topDoGpu doGpu pts =
     let
       fun pt i = FlatPointSeq.nth pts i
       fun dist p q i =
@@ -35,6 +36,31 @@ struct
         if f x < f y then x else y
       fun max_by f x y =
         if f x > f y then x else y
+
+
+      fun minmax ((l1, r1), (l2, r2)) =
+        (min_by x l1 l2, max_by x r1 r2)
+
+      fun endpoints lo hi =
+        if hi - lo <= 5000 then
+          SeqBasis.reduce 5000 minmax (lo, lo) (lo, hi) (fn i => (i, i))
+        else
+          let
+            val mid = lo + (hi - lo) div 2
+          in
+            minmax (ForkJoin.par (fn _ => endpoints_choose lo mid, fn _ =>
+              endpoints mid hi))
+          end
+
+      and endpoints_choose lo hi =
+        if hi - lo <= 5000 then
+          endpoints lo hi
+        else
+          ForkJoin.choice
+            { prefer_cpu = fn _ => endpoints lo hi
+            , prefer_gpu = fn _ => minMaxPointsGpu (lo, hi)
+            }
+
 
       fun aboveLine p q i =
         (dist p q i > 0.0)
@@ -172,9 +198,11 @@ struct
         (DS.map (fn i => (i, i)) allIdx) *)
 
       val (l, r) =
-        SeqBasis.reduce 5000
-          (fn ((l1, r1), (l2, r2)) => (min_by x l1 l2, max_by x r1 r2)) (0, 0)
-          (0, FlatPointSeq.length pts) (fn i => (i, i))
+        if hybrid then
+          endpoints 0 (FlatPointSeq.length pts)
+        else
+          SeqBasis.reduce 5000 minmax (0, 0) (0, FlatPointSeq.length pts)
+            (fn i => (i, i))
 
       val tm = tick tm "endpoints"
 
