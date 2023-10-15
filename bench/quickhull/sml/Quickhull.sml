@@ -168,6 +168,29 @@ struct
    * gpu code
    *)
 
+  fun flags_above_gpu ctx (points_fut, idxs, l, r, output) =
+    let
+      val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
+      val res_fut = Futhark.Entry.flags_above ctx (points_fut, idxs_fut, l, r)
+      val _ = Futhark.Word8Array1.values_into res_fut output
+      val _ = Futhark.Word8Array1.free res_fut
+      val _ = Futhark.Int32Array1.free idxs_fut
+    in
+      ()
+    end
+
+
+  fun top_level_flags_above_in_range_gpu ctx (points_fut, lo, hi, l, r, output) =
+    let
+      val res_fut = Futhark.Entry.top_level_flags_above_in_range ctx
+        (points_fut, lo, hi, l, r)
+      val _ = Futhark.Word8Array1.values_into res_fut output
+      val _ = Futhark.Word8Array1.free res_fut
+    in
+      ()
+    end
+
+
   fun top_level_filter_then_semihull_gpu ctx points_fut (l, r) =
     let
       val res_fut =
@@ -237,8 +260,9 @@ struct
 
 
   (* ========================================================================
-   * hybrid
+   * hybrid utilities
    *)
+
 
   fun reduce_hybrid grain combine z (lo, hi) (f, g) =
     let
@@ -265,6 +289,41 @@ struct
     in
       loop lo hi
     end
+
+
+  fun tabulate_hybrid grain (lo, hi) (f, g) =
+    let
+      val data = ForkJoin.alloc (hi - lo)
+
+      fun loop i j =
+        if j - i <= grain then
+          Util.for (i, j) (fn k => Array.update (data, k, f (lo + k)))
+        else
+          let val mid = i + (j - i) div 2
+          in ForkJoin.par (fn _ => loop_choose i mid, fn _ => loop mid j); ()
+          end
+
+      and loop_choose i j =
+        if j - i <= grain then
+          loop i j
+        else
+          ForkJoin.choice
+            { prefer_cpu = fn _ => loop i j
+            , prefer_gpu = fn _ =>
+                g (lo + i, lo + j, ArraySlice.slice (data, i, SOME (j - i)))
+            }
+    in
+      loop 0 (hi - lo);
+      ArraySlice.full data
+    end
+
+
+  (* fun filter_hybrid grain (lo, hi) (f, g) = *)
+
+
+  (* ========================================================================
+   * hybrid hull
+   *)
 
 
   fun hull_hybrid ctx (pts, points_fut) =
@@ -338,10 +397,18 @@ struct
           val rp = pt r
           fun flag i =
             if aboveLine lp rp i then 0w1 : Word8.word else 0w0
-          val flags = Seq.map flag idxs
+
+          val flags =
+            tabulate_hybrid 5000 (0, Seq.length idxs)
+              ( fn i => flag (Seq.nth idxs i)
+              , fn (lo, hi, output) =>
+                  flags_above_gpu ctx
+                    (points_fut, Seq.subseq idxs (lo, hi - lo), l, r, output)
+              )
+
           val idxs' =
             ArraySlice.full
-              (SeqBasis.filter 2000 (0, Seq.length idxs) (Seq.nth idxs) (fn i =>
+              (SeqBasis.filter 5000 (0, Seq.length idxs) (Seq.nth idxs) (fn i =>
                  Seq.nth flags i = 0w1))
         in
           semihull idxs' l r
@@ -367,16 +434,21 @@ struct
           val tm = startTiming ()
 
           val flags =
-            Seq.tabulate
-              (fn i =>
-                 if dist lp rp (Int32.fromInt i) > 0.0 then (0w1 : Word8.word)
-                 else 0w0) (FlatPointSeq.length pts)
+            tabulate_hybrid 5000 (0, FlatPointSeq.length pts)
+              ( fn i =>
+                  if dist lp rp (Int32.fromInt i) > 0.0 then (0w1 : Word8.word)
+                  else 0w0
+              , fn (lo, hi, output) =>
+                  top_level_flags_above_in_range_gpu ctx
+                    (points_fut, lo, hi, l, r, output)
+              )
+
 
           val tm = tick tm "cpu flags"
 
           val above =
             ArraySlice.full
-              (SeqBasis.filter 2000 (0, FlatPointSeq.length pts)
+              (SeqBasis.filter 5000 (0, FlatPointSeq.length pts)
                  (fn i => Int32.fromInt i) (fn i => Seq.nth flags i = 0w1))
 
           val tm = tick tm "cpu filter"

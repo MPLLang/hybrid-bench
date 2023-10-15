@@ -169,6 +169,7 @@ type point = space.point
 import "lib/github.com/diku-dk/sorts/radix_sort"
 def sort_by f = radix_sort_float_by_key f f64.num_bits f64.get_bit
 
+
 entry semihull points l r idxs =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
   let start = p l
@@ -176,6 +177,7 @@ entry semihull points l r idxs =
   in naive_quickhull.semihull start end (map p idxs)
      |> map (.1)
      |> filter (!=l) -- Remove starting point.
+
 
 entry filter_then_semihull points l r idxs =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
@@ -185,16 +187,19 @@ entry filter_then_semihull points l r idxs =
      |> map (.1)
      |> filter (!=l)
 
+
 entry point_furthest_from_line [k] (points: [k][2]f64) (l: i32) (r: i32) (idxs: []i32) : (i32, f64) =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
   let ((_, i), d) = naive_quickhull.point_furthest_from_line (p l) (p r) (map p idxs)
   in (i, space.dist_to_f64 d)
+
 
 entry min_max_point_in_range [k] (points: [k][2]f64) lo hi : (i32, i32) =
   let ps = take (hi-lo) (drop lo points)
   let ps = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 (lo + i))) (indices ps) ps
   let (min, max) = naive_quickhull.min_max_point ps
   in (min.1, max.1)
+
 
 -- select points above the line (l, r) and then compute the semihull of these
 entry top_level_filter_then_semihull points (l: i32) (r : i32) : []i32 =
@@ -204,6 +209,34 @@ entry top_level_filter_then_semihull points (l: i32) (r : i32) : []i32 =
   in naive_quickhull.filter_then_semihull start end (map p (indices points))
      |> map (.1)
      |> filter (!=l)
+
+
+-- returns 1 for points above, 0 for points below
+entry top_level_flags_above_in_range [k] (points : [k][2]f64) (lo:i64) (hi:i64) (l:i32) (r:i32) : []u8 =
+  let pt pa = {x=pa[0], y=pa[1]}
+  let flag p =
+    if naive_space.dist_less
+      naive_space.zero_dist
+      (naive_space.signed_dist_to_line (pt points[l]) (pt points[r]) (pt p))
+    then 1:u8
+    else 0
+  let flags = map flag (take (hi-lo) (drop lo points))
+  -- let count = reduce (+) 0 (map i32.u8 flags)
+  -- in (flags, i64.i32 count)
+  in flags
+
+
+entry flags_above [k] (points : [k][2]f64) (idxs: []i32) (l:i32) (r:i32) : []u8 =
+  let p i = {x=points[i,0], y=points[i,1]}
+  let flag i =
+    if naive_space.dist_less
+      naive_space.zero_dist
+      (naive_space.signed_dist_to_line (p l) (p r) (p i))
+    then 1:u8
+    else 0
+  let flags = map flag idxs
+  in flags
+
 
 entry quickhull [k] (ps : [k][2]f64) : []i32 =
   let ps' = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 i))
