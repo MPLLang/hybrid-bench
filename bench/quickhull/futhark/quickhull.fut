@@ -177,6 +177,14 @@ entry semihull points l r idxs =
      |> map (.1)
      |> filter (!=l) -- Remove starting point.
 
+entry filter_then_semihull points l r idxs =
+  let p i = ({x=points[i,0], y=points[i,1]}, i)
+  let start = p l
+  let end = p r
+  in naive_quickhull.filter_then_semihull start end (map p idxs)
+     |> map (.1)
+     |> filter (!=l)
+
 entry point_furthest_from_line [k] (points: [k][2]f64) (l: i32) (r: i32) (idxs: []i32) : (i32, f64) =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
   let ((_, i), d) = naive_quickhull.point_furthest_from_line (p l) (p r) (map p idxs)
