@@ -59,7 +59,7 @@ struct
       fun aboveLine p q i =
         (dist p q i > 0.0)
 
-      fun parHull (idxs: Int32.int Seq.t) l r =
+      fun semihull (idxs: Int32.int Seq.t) l r =
         if Seq.length idxs < 2 then
           Tree.fromArraySeq idxs
         else
@@ -95,9 +95,9 @@ struct
                 )
 
             fun doLeft () =
-              parHull left l mid
+              semihull left l mid
             fun doRight () =
-              parHull right mid r
+              semihull right mid r
             val (leftHull, rightHull) =
               if Seq.length left + Seq.length right <= 1000 then
                 (doLeft (), doRight ())
@@ -148,8 +148,8 @@ struct
 
       val tm = tick tm "above/below filter"
 
-      val (above, below) = ForkJoin.par (fn _ => parHull above l r, fn _ =>
-        parHull below r l)
+      val (above, below) = ForkJoin.par (fn _ => semihull above l r, fn _ =>
+        semihull below r l)
 
       val tm = tick tm "quickhull"
 
@@ -287,7 +287,7 @@ struct
         (dist p q i > 0.0)
 
 
-      fun parHull (idxs: Int32.int Seq.t) l r =
+      fun semihull (idxs: Int32.int Seq.t) l r =
         if Seq.length idxs < 2 then
           Tree.fromArraySeq idxs
         else
@@ -310,9 +310,9 @@ struct
                 )
 
             fun doLeft () =
-              filter_then_parhull_choose idxs l mid
+              filter_then_semihull_choose idxs l mid
             fun doRight () =
-              filter_then_parhull idxs mid r
+              filter_then_semihull idxs mid r
 
             val (leftHull, rightHull) =
               if Seq.length idxs <= 1000 then (doLeft (), doRight ())
@@ -322,17 +322,17 @@ struct
           end
 
 
-      and parHull_choose idxs l r =
+      and semihull_choose idxs l r =
         if Seq.length idxs < 1000 then
-          parHull idxs l r
+          semihull idxs l r
         else
           ForkJoin.choice
-            { prefer_cpu = fn () => parHull idxs l r
+            { prefer_cpu = fn () => semihull idxs l r
             , prefer_gpu = fn () => semihull_gpu ctx points_fut (idxs, l, r)
             }
 
 
-      and filter_then_parhull idxs l r =
+      and filter_then_semihull idxs l r =
         let
           val lp = pt l
           val rp = pt r
@@ -344,16 +344,16 @@ struct
               (SeqBasis.filter 2000 (0, Seq.length idxs) (Seq.nth idxs) (fn i =>
                  Seq.nth flags i = 0w1))
         in
-          parHull idxs' l r
+          semihull idxs' l r
         end
 
 
-      and filter_then_parhull_choose idxs l r =
+      and filter_then_semihull_choose idxs l r =
         if Seq.length idxs <= 1000 then
-          filter_then_parhull idxs l r
+          filter_then_semihull idxs l r
         else
           ForkJoin.choice
-            { prefer_cpu = fn _ => filter_then_parhull idxs l r
+            { prefer_cpu = fn _ => filter_then_semihull idxs l r
             , prefer_gpu = fn _ =>
                 filter_then_semihull_gpu ctx points_fut (l, r, idxs)
             }
@@ -381,7 +381,7 @@ struct
 
           val tm = tick tm "cpu filter"
 
-          val above = parHull above l r
+          val above = semihull above l r
 
           val tm = tick tm "cpu semihull"
         in
