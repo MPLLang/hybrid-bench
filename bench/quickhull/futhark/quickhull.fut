@@ -11,6 +11,7 @@ module type euclidean_space = {
   type dist
   type point
 
+  val dist_to_f64 : dist -> f64
   val zero_dist : dist
   val dist_less : dist -> dist -> bool
 
@@ -35,6 +36,8 @@ module naive_space : euclidean_space with point = {x:f64, y:f64} = {
   def zero_dist = 0f64
   def dist_less (x : dist) (y : dist) = x < y
 
+  def dist_to_f64 x = x
+
   def point_eq (p : point) (q : point) =
     p.x == q.x && p.y == q.y
   def point_less (p : point) (q : point) =
@@ -58,6 +61,8 @@ module indexed_space (S: euclidean_space)
 
   def zero_dist = S.zero_dist
   def dist_less = S.dist_less
+
+  def dist_to_f64 = S.dist_to_f64
 
   def point_eq (a: point) (b: point) = S.point_eq a.0 b.0
   def point_less (a: point) (b: point) = S.point_less a.0 b.0
@@ -139,6 +144,10 @@ module mk_quickhull (S : euclidean_space) = {
   def min_max_point ps =
     (reduce pmin ps[0] ps, reduce pmax ps[0] ps)
 
+  def point_furthest_from_line l r pts =
+    let with_dist = map (\p -> (p, signed_dist_to_line l r p)) pts
+    in reduce (\a b -> if dist_less a.1 b.1 then b else a) with_dist[0] with_dist
+
   def compute (ps : []point) =
     if length ps <= 3 then (ps, []) else
     let leftmost = reduce pmin ps[0] ps
@@ -160,6 +169,7 @@ type point = space.point
 import "lib/github.com/diku-dk/sorts/radix_sort"
 def sort_by f = radix_sort_float_by_key f f64.num_bits f64.get_bit
 
+
 entry semihull points l r idxs =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
   let start = p l
@@ -168,11 +178,28 @@ entry semihull points l r idxs =
      |> map (.1)
      |> filter (!=l) -- Remove starting point.
 
-entry min_max_point_in_range [k] (points: [k][2]f64) lo hi : (i64, i64) =
+
+entry filter_then_semihull points l r idxs =
+  let p i = ({x=points[i,0], y=points[i,1]}, i)
+  let start = p l
+  let end = p r
+  in naive_quickhull.filter_then_semihull start end (map p idxs)
+     |> map (.1)
+     |> filter (!=l)
+
+
+entry point_furthest_from_line [k] (points: [k][2]f64) (l: i32) (r: i32) (idxs: []i32) : i32 =
+  let p i = ({x=points[i,0], y=points[i,1]}, i)
+  let ((_, i), _) = naive_quickhull.point_furthest_from_line (p l) (p r) (map p idxs)
+  in i
+
+
+entry min_max_point_in_range [k] (points: [k][2]f64) lo hi : (i32, i32) =
   let ps = take (hi-lo) (drop lo points)
   let ps = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 (lo + i))) (indices ps) ps
   let (min, max) = naive_quickhull.min_max_point ps
-  in (i64.i32 min.1, i64.i32 max.1)
+  in (min.1, max.1)
+
 
 -- select points above the line (l, r) and then compute the semihull of these
 entry top_level_filter_then_semihull points (l: i32) (r : i32) : []i32 =
@@ -182,6 +209,27 @@ entry top_level_filter_then_semihull points (l: i32) (r : i32) : []i32 =
   in naive_quickhull.filter_then_semihull start end (map p (indices points))
      |> map (.1)
      |> filter (!=l)
+
+
+entry top_level_points_above_in_range [k] (points: [k][2]f64) (lo:i64) (hi:i64) (l:i32) (r:i32) : []i32 =
+  let p i = {x=points[i,0], y=points[i,1]}
+  let keep (i: i32) =
+    naive_space.dist_less
+      naive_space.zero_dist
+      (naive_space.signed_dist_to_line (p l) (p r) (p i))
+  let lo = i32.i64 lo
+  let hi = i32.i64 hi
+  in filter keep (lo...(hi-1))
+
+
+entry points_above [k] (points: [k][2]f64) (idxs: []i32) (l:i32) (r:i32) : []i32 =
+  let p i = {x=points[i,0], y=points[i,1]}
+  let keep (i: i32) =
+    naive_space.dist_less
+      naive_space.zero_dist
+      (naive_space.signed_dist_to_line (p l) (p r) (p i))
+  in filter keep idxs
+
 
 entry quickhull [k] (ps : [k][2]f64) : []i32 =
   let ps' = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 i))
