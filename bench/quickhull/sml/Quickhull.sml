@@ -168,26 +168,27 @@ struct
    * gpu code
    *)
 
-  fun flags_above_gpu ctx (points_fut, idxs, l, r, output) =
+
+  fun top_level_points_above_in_range_gpu ctx points_fut (lo, hi, l, r) =
     let
-      val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
-      val res_fut = Futhark.Entry.flags_above ctx (points_fut, idxs_fut, l, r)
-      val _ = Futhark.Word8Array1.values_into res_fut output
-      val _ = Futhark.Word8Array1.free res_fut
-      val _ = Futhark.Int32Array1.free idxs_fut
+      val res_fut = Futhark.Entry.top_level_points_above_in_range ctx
+        (points_fut, lo, hi, l, r)
+      val res = Futhark.Int32Array1.values res_fut
+      val () = Futhark.Int32Array1.free res_fut
     in
-      ()
+      ArraySlice.full res
     end
 
 
-  fun top_level_flags_above_in_range_gpu ctx (points_fut, lo, hi, l, r, output) =
+  fun points_above_gpu ctx (points_fut, idxs, l, r) =
     let
-      val res_fut = Futhark.Entry.top_level_flags_above_in_range ctx
-        (points_fut, lo, hi, l, r)
-      val _ = Futhark.Word8Array1.values_into res_fut output
-      val _ = Futhark.Word8Array1.free res_fut
+      val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
+      val res_fut = Futhark.Entry.points_above ctx (points_fut, idxs_fut, l, r)
+      val res = Futhark.Int32Array1.values res_fut
+      val () = Futhark.Int32Array1.free res_fut
+      val () = Futhark.Int32Array1.free idxs_fut
     in
-      ()
+      ArraySlice.full res
     end
 
 
@@ -237,15 +238,14 @@ struct
     end
 
 
-  fun point_furthest_from_line_gpu ctx points_fut (l, r, idxs) :
-    Int32.int * Real64.real =
+  fun point_furthest_from_line_gpu ctx points_fut (l, r, idxs) : Int32.int =
     let
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
-      val (i, dist) =
+      val i =
         Futhark.Entry.point_furthest_from_line ctx (points_fut, l, r, idxs_fut)
       val () = Futhark.Int32Array1.free idxs_fut
     in
-      (i, dist)
+      i
     end
 
 
@@ -271,7 +271,8 @@ struct
 
       fun loop lo hi =
         if hi - lo <= grain then
-          base lo hi
+          ForkJoin.choice
+            {prefer_cpu = fn _ => base lo hi, prefer_gpu = fn _ => g (lo, hi)}
         else
           let
             val mid = lo + (hi - lo) div 2
@@ -281,11 +282,8 @@ struct
           end
 
       and loop_choose lo hi =
-        if hi - lo <= grain then
-          base lo hi
-        else
-          ForkJoin.choice
-            {prefer_cpu = fn _ => loop lo hi, prefer_gpu = fn _ => g (lo, hi)}
+        ForkJoin.choice
+          {prefer_cpu = fn _ => loop lo hi, prefer_gpu = fn _ => g (lo, hi)}
     in
       loop lo hi
     end
@@ -295,30 +293,71 @@ struct
     let
       val data = ForkJoin.alloc (hi - lo)
 
+      fun gpu i j =
+        g (lo + i, lo + j, ArraySlice.slice (data, i, SOME (j - i)))
+
       fun loop i j =
         if j - i <= grain then
-          Util.for (i, j) (fn k => Array.update (data, k, f (lo + k)))
+          ForkJoin.choice
+            { prefer_cpu = fn _ =>
+                Util.for (i, j) (fn k => Array.update (data, k, f (lo + k)))
+            , prefer_gpu = fn _ => gpu i j
+            }
         else
           let val mid = i + (j - i) div 2
           in ForkJoin.par (fn _ => loop_choose i mid, fn _ => loop mid j); ()
           end
 
       and loop_choose i j =
-        if j - i <= grain then
-          loop i j
-        else
-          ForkJoin.choice
-            { prefer_cpu = fn _ => loop i j
-            , prefer_gpu = fn _ =>
-                g (lo + i, lo + j, ArraySlice.slice (data, i, SOME (j - i)))
-            }
+        ForkJoin.choice
+          {prefer_cpu = fn _ => loop i j, prefer_gpu = fn _ => gpu i j}
     in
       loop 0 (hi - lo);
       ArraySlice.full data
     end
 
 
-  (* fun filter_hybrid grain (lo, hi) (f, g) = *)
+  fun filter_hybrid grain (lo, hi)
+    (f_elem: int -> 'a, f_keep: int -> bool, g: (int * int) -> 'a Seq.t) =
+    let
+      val n = hi - lo
+
+      fun gpu i j =
+        Tree.fromArraySeq (g (i, j))
+
+      fun base i j =
+        let
+          val flags: Word8.word array = ForkJoin.alloc (j - i)
+          val num_keep = Util.loop (0, j - i) 0 (fn (count, k) =>
+            if f_keep (i + k) then (Array.update (flags, k, 0w1); count + 1)
+            else (Array.update (flags, k, 0w0); count))
+          val output: 'a array = ForkJoin.alloc num_keep
+        in
+          Util.loop (0, j - i) 0 (fn (count, k) =>
+            if Array.sub (flags, k) = 0w0 then count
+            else (Array.update (output, count, f_elem (i + k)); count + 1));
+
+          Tree.fromArraySeq (ArraySlice.full output)
+        end
+
+      fun loop i j =
+        if j - i <= grain then
+          ForkJoin.choice
+            {prefer_cpu = fn _ => base i j, prefer_gpu = fn _ => gpu i j}
+        else
+          let
+            val mid = i + (j - i) div 2
+          in
+            Tree.append (ForkJoin.par (fn _ => loop_choose i mid, fn _ =>
+              loop mid j))
+          end
+
+      and loop_choose i j =
+        ForkJoin.choice
+          {prefer_cpu = fn _ => loop i j, prefer_gpu = fn _ => gpu i j}
+    in
+      Tree.toArraySeq (loop lo hi)
+    end
 
 
   (* ========================================================================
@@ -361,7 +400,7 @@ struct
                 ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
                 , fn (lo, hi) =>
                     let
-                      val (i, _) = point_furthest_from_line_gpu ctx points_fut
+                      val i = point_furthest_from_line_gpu ctx points_fut
                         (l, r, Seq.subseq idxs (lo, hi - lo))
                     in
                       (i, d i)
@@ -382,7 +421,7 @@ struct
 
 
       and semihull_choose idxs l r =
-        if Seq.length idxs < 1000 then
+        if Seq.length idxs < 500 then
           semihull idxs l r
         else
           ForkJoin.choice
@@ -395,28 +434,22 @@ struct
         let
           val lp = pt l
           val rp = pt r
-          fun flag i =
-            if aboveLine lp rp i then 0w1 : Word8.word else 0w0
-
-          val flags =
-            tabulate_hybrid 5000 (0, Seq.length idxs)
-              ( fn i => flag (Seq.nth idxs i)
-              , fn (lo, hi, output) =>
-                  flags_above_gpu ctx
-                    (points_fut, Seq.subseq idxs (lo, hi - lo), l, r, output)
-              )
 
           val idxs' =
-            ArraySlice.full
-              (SeqBasis.filter 5000 (0, Seq.length idxs) (Seq.nth idxs) (fn i =>
-                 Seq.nth flags i = 0w1))
+            filter_hybrid 5000 (0, Seq.length idxs)
+              ( fn i => Seq.nth idxs i
+              , fn i => aboveLine lp rp (Seq.nth idxs i)
+              , fn (lo, hi) =>
+                  points_above_gpu ctx
+                    (points_fut, Seq.subseq idxs (lo, hi - lo), l, r)
+              )
         in
-          semihull idxs' l r
+          semihull_choose idxs' l r
         end
 
 
       and filter_then_semihull_choose idxs l r =
-        if Seq.length idxs <= 1000 then
+        if Seq.length idxs <= 500 then
           filter_then_semihull idxs l r
         else
           ForkJoin.choice
@@ -433,29 +466,20 @@ struct
 
           val tm = startTiming ()
 
-          val flags =
-            tabulate_hybrid 5000 (0, FlatPointSeq.length pts)
-              ( fn i =>
-                  if dist lp rp (Int32.fromInt i) > 0.0 then (0w1 : Word8.word)
-                  else 0w0
-              , fn (lo, hi, output) =>
-                  top_level_flags_above_in_range_gpu ctx
-                    (points_fut, lo, hi, l, r, output)
+          val above =
+            filter_hybrid 5000 (0, FlatPointSeq.length pts)
+              ( fn i => Int32.fromInt i
+              , fn i => dist lp rp (Int32.fromInt i) > 0.0
+              , fn (lo, hi) =>
+                  top_level_points_above_in_range_gpu ctx points_fut
+                    (lo, hi, l, r)
               )
 
+          val tm = tick tm "top-level filter"
 
-          val tm = tick tm "cpu flags"
+          val above = semihull_choose above l r
 
-          val above =
-            ArraySlice.full
-              (SeqBasis.filter 5000 (0, FlatPointSeq.length pts)
-                 (fn i => Int32.fromInt i) (fn i => Seq.nth flags i = 0w1))
-
-          val tm = tick tm "cpu filter"
-
-          val above = semihull above l r
-
-          val tm = tick tm "cpu semihull"
+          val tm = tick tm "top-level semihull"
         in
           above
         end
@@ -480,7 +504,7 @@ struct
 
       val (above, below) =
         ForkJoin.par (fn _ => top_level_filter_then_semihull_choose l r, fn _ =>
-          top_level_filter_then_semihull_choose r l)
+          top_level_filter_then_semihull r l)
 
       val tm = tick tm "quickhull"
 

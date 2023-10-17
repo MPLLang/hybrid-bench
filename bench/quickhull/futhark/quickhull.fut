@@ -188,10 +188,10 @@ entry filter_then_semihull points l r idxs =
      |> filter (!=l)
 
 
-entry point_furthest_from_line [k] (points: [k][2]f64) (l: i32) (r: i32) (idxs: []i32) : (i32, f64) =
+entry point_furthest_from_line [k] (points: [k][2]f64) (l: i32) (r: i32) (idxs: []i32) : i32 =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
-  let ((_, i), d) = naive_quickhull.point_furthest_from_line (p l) (p r) (map p idxs)
-  in (i, space.dist_to_f64 d)
+  let ((_, i), _) = naive_quickhull.point_furthest_from_line (p l) (p r) (map p idxs)
+  in i
 
 
 entry min_max_point_in_range [k] (points: [k][2]f64) lo hi : (i32, i32) =
@@ -211,31 +211,24 @@ entry top_level_filter_then_semihull points (l: i32) (r : i32) : []i32 =
      |> filter (!=l)
 
 
--- returns 1 for points above, 0 for points below
-entry top_level_flags_above_in_range [k] (points : [k][2]f64) (lo:i64) (hi:i64) (l:i32) (r:i32) : []u8 =
-  let pt pa = {x=pa[0], y=pa[1]}
-  let flag p =
-    if naive_space.dist_less
-      naive_space.zero_dist
-      (naive_space.signed_dist_to_line (pt points[l]) (pt points[r]) (pt p))
-    then 1:u8
-    else 0
-  let flags = map flag (take (hi-lo) (drop lo points))
-  -- let count = reduce (+) 0 (map i32.u8 flags)
-  -- in (flags, i64.i32 count)
-  in flags
-
-
-entry flags_above [k] (points : [k][2]f64) (idxs: []i32) (l:i32) (r:i32) : []u8 =
+entry top_level_points_above_in_range [k] (points: [k][2]f64) (lo:i64) (hi:i64) (l:i32) (r:i32) : []i32 =
   let p i = {x=points[i,0], y=points[i,1]}
-  let flag i =
-    if naive_space.dist_less
+  let keep (i: i32) =
+    naive_space.dist_less
       naive_space.zero_dist
       (naive_space.signed_dist_to_line (p l) (p r) (p i))
-    then 1:u8
-    else 0
-  let flags = map flag idxs
-  in flags
+  let lo = i32.i64 lo
+  let hi = i32.i64 hi
+  in filter keep (lo...(hi-1))
+
+
+entry points_above [k] (points: [k][2]f64) (idxs: []i32) (l:i32) (r:i32) : []i32 =
+  let p i = {x=points[i,0], y=points[i,1]}
+  let keep (i: i32) =
+    naive_space.dist_less
+      naive_space.zero_dist
+      (naive_space.signed_dist_to_line (p l) (p r) (p i))
+  in filter keep idxs
 
 
 entry quickhull [k] (ps : [k][2]f64) : []i32 =
