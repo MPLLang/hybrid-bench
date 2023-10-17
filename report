@@ -871,6 +871,7 @@ speedupPlot("figures/sort-speedups.pdf", "mergesort")
 speedupPlot("figures/interval-tree-speedups.pdf", "interval-tree")
 speedupPlot("figures/primes-batched-speedups.pdf", "primes")
 speedupPlot("figures/primes-new-speedups.pdf", "new-primes")
+speedupPlot("figures/quickhull-speedups.pdf", "quickhull")
 
 # ============================================================================
 # ============================================================================

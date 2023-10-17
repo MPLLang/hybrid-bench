@@ -73,6 +73,18 @@ def new_primes(procs, impl):
   return row
 
 
+def quickhull(procs, impl):
+  row = {
+    "tag": "quickhull",
+    "cwd": "bench/quickhull",
+    "cmd": cmd(procs, impl, "-points /home/ec2-user/geom-data/uniform-circle-10M"),
+    "procs": procs,
+    "impl": impl
+  }
+  return row
+
+
+
 # ============================================================================
 
 
@@ -105,7 +117,7 @@ def filter_gpu_procs(row):
 
 tests = [
   add_extra(filter_gpu_procs(filter_unique(make_row(procs, impl))))
-  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes]
+  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull]
   for procs in [1,2,4,6,8,12,16,24,30,32]
   for impl in ["hybrid","cpu","gpu"]
 ]
