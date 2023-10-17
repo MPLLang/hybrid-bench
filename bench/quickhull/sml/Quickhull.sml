@@ -356,6 +356,11 @@ struct
         ForkJoin.choice
           {prefer_cpu = fn _ => loop i j, prefer_gpu = fn _ => gpu i j}
     in
+      (* TODO (maybe): use Tree.toBlocks here instead? This would avoid the
+       * full copy for Tree.toArraySeq. But, it's not so straightforward,
+       * because eventually we would need to copy to the GPU at which point
+       * we would need to flatten anyway. Hmmm....
+       *)
       Tree.toArraySeq (loop lo hi)
     end
 
