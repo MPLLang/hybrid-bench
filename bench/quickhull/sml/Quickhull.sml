@@ -169,7 +169,7 @@ struct
    *)
 
 
-  fun top_level_points_above_in_range_gpu ctx points_fut (lo, hi, l, r) =
+  fun top_level_points_above_in_range_gpu ctx (points_fut, lo, hi, l, r) =
     let
       val res_fut = Futhark.Entry.top_level_points_above_in_range ctx
         (points_fut, lo, hi, l, r)
@@ -192,7 +192,7 @@ struct
     end
 
 
-  fun top_level_filter_then_semihull_gpu ctx points_fut (l, r) =
+  fun top_level_filter_then_semihull_gpu ctx (points_fut, l, r) =
     let
       val res_fut =
         Futhark.Entry.top_level_filter_then_semihull ctx (points_fut, l, r)
@@ -203,7 +203,7 @@ struct
     end
 
 
-  fun filter_then_semihull_gpu ctx points_fut (l, r, idxs) =
+  fun filter_then_semihull_gpu ctx (points_fut, l, r, idxs) =
     let
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
       val res_fut =
@@ -216,7 +216,7 @@ struct
     end
 
 
-  fun semihull_gpu ctx points_fut (idxs, l, r) =
+  fun semihull_gpu ctx (points_fut, idxs, l, r) =
     let
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
       val res_fut = Futhark.Entry.semihull ctx (points_fut, l, r, idxs_fut)
@@ -228,7 +228,7 @@ struct
     end
 
 
-  fun min_max_point_in_range_gpu ctx points_fut (lo, hi) =
+  fun min_max_point_in_range_gpu ctx (points_fut, lo, hi) =
     let
       val (min, max) =
         Futhark.Entry.min_max_point_in_range ctx
@@ -238,7 +238,7 @@ struct
     end
 
 
-  fun point_furthest_from_line_gpu ctx points_fut (l, r, idxs) : Int32.int =
+  fun point_furthest_from_line_gpu ctx (points_fut, l, r, idxs) : Int32.int =
     let
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
       val i =
@@ -400,8 +400,8 @@ struct
                 ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
                 , fn (lo, hi) =>
                     let
-                      val i = point_furthest_from_line_gpu ctx points_fut
-                        (l, r, Seq.subseq idxs (lo, hi - lo))
+                      val i = point_furthest_from_line_gpu ctx
+                        (points_fut, l, r, Seq.subseq idxs (lo, hi - lo))
                     in
                       (i, d i)
                     end
@@ -426,7 +426,7 @@ struct
         else
           ForkJoin.choice
             { prefer_cpu = fn () => semihull idxs l r
-            , prefer_gpu = fn () => semihull_gpu ctx points_fut (idxs, l, r)
+            , prefer_gpu = fn () => semihull_gpu ctx (points_fut, idxs, l, r)
             }
 
 
@@ -455,7 +455,7 @@ struct
           ForkJoin.choice
             { prefer_cpu = fn _ => filter_then_semihull idxs l r
             , prefer_gpu = fn _ =>
-                filter_then_semihull_gpu ctx points_fut (l, r, idxs)
+                filter_then_semihull_gpu ctx (points_fut, l, r, idxs)
             }
 
 
@@ -471,8 +471,8 @@ struct
               ( fn i => Int32.fromInt i
               , fn i => dist lp rp (Int32.fromInt i) > 0.0
               , fn (lo, hi) =>
-                  top_level_points_above_in_range_gpu ctx points_fut
-                    (lo, hi, l, r)
+                  top_level_points_above_in_range_gpu ctx
+                    (points_fut, lo, hi, l, r)
               )
 
           val tm = tick tm "top-level filter"
@@ -489,7 +489,7 @@ struct
         ForkJoin.choice
           { prefer_cpu = fn _ => top_level_filter_then_semihull l r
           , prefer_gpu = fn _ =>
-              top_level_filter_then_semihull_gpu ctx points_fut (l, r)
+              top_level_filter_then_semihull_gpu ctx (points_fut, l, r)
           }
 
       val tm = startTiming ()
@@ -497,7 +497,7 @@ struct
       val (l, r) =
         reduce_hybrid 5000 minmax (0, 0) (0, FlatPointSeq.length pts)
           ( fn i => (Int32.fromInt i, Int32.fromInt i)
-          , fn (lo, hi) => min_max_point_in_range_gpu ctx points_fut (lo, hi)
+          , fn (lo, hi) => min_max_point_in_range_gpu ctx (points_fut, lo, hi)
           )
 
       val tm = tick tm "endpoints"
