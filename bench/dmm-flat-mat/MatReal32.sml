@@ -54,9 +54,14 @@ struct
 
   val leafSize = CommandLineArgs.parseInt "leaf-size" 256
   val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 512
+  val split_frac = CommandLineArgs.parseReal "split" 0.75
 
   val _ = print ("leaf-size " ^ Int.toString leafSize ^ "\n")
   val _ = print ("gpu-thresh " ^ Int.toString gpuThresh ^ "\n")
+  val _ = print ("split " ^ Real.toString split_frac ^ "\n")
+
+  fun split n =
+    Real.ceil (split_frac * Real.fromInt n)
 
   exception MatrixFormat
 
@@ -81,17 +86,15 @@ struct
     Slice {mat = mat, top = top, left = left, width = width, height = height} *)
 
 
-  fun splitHorizontal (Slice {left, top, height, width, mat}) =
+  fun splitHorizontal (Slice {left, top, height, width, mat}) {half_height} =
     let
-      val h2 = height div 2
-
       val upper = Slice
-        {left = left, top = top, height = h2, width = width, mat = mat}
+        {left = left, top = top, height = half_height, width = width, mat = mat}
 
       val lower = Slice
         { left = left
-        , top = top + h2
-        , height = height - h2
+        , top = top + half_height
+        , height = height - half_height
         , width = width
         , mat = mat
         }
@@ -100,18 +103,16 @@ struct
     end
 
 
-  fun splitVertical (Slice {left, top, height, width, mat}) =
+  fun splitVertical (Slice {left, top, height, width, mat}) {half_width} =
     let
-      val w2 = width div 2
-
       val first = Slice
-        {left = left, top = top, height = height, width = w2, mat = mat}
+        {left = left, top = top, height = height, width = half_width, mat = mat}
 
       val second = Slice
-        { left = left + w2
+        { left = left + half_width
         , top = top
         , height = height
-        , width = width - w2
+        , width = width - half_width
         , mat = mat
         }
     in
@@ -411,8 +412,8 @@ struct
         else if maxdim = m then
           (* split a horizontally *)
           let
-            val (a1, a2) = splitHorizontal a
-            val (c1, c2) = splitHorizontal c
+            val (a1, a2) = splitHorizontal a {half_height = height a div 2}
+            val (c1, c2) = splitHorizontal c {half_height = height c div 2}
           (* val _ = print ("SPLIT HORIZONTAL   *)
           in
             par
@@ -426,8 +427,8 @@ struct
         else if maxdim = n then
           (* split b vertically *)
           let
-            val (b1, b2) = splitVertical b
-            val (c1, c2) = splitVertical c
+            val (b1, b2) = splitVertical b {half_width = width b div 2}
+            val (c1, c2) = splitVertical c {half_width = width c div 2}
           in
             par
               ( fn _ => cpu_multiply_nonsquare_inplace outputMode (a, b1, c1)
@@ -440,8 +441,8 @@ struct
         else
           (* split a vertically and b horizontally *)
           let
-            val (a1, a2) = splitVertical a
-            val (b1, b2) = splitHorizontal b
+            val (a1, a2) = splitVertical a {half_width = width a div 2}
+            val (b1, b2) = splitHorizontal b {half_height = height b div 2}
           in
             cpu_multiply_nonsquare_inplace outputMode (a1, b1, c);
             cpu_multiply_nonsquare_inplace Accumulate (a2, b2, c)
@@ -602,8 +603,8 @@ struct
       else if maxdim = m then
         (* split a horizontally *)
         let
-          val (a1, a2) = splitHorizontal a
-          val (c1, c2) = splitHorizontal c
+          val (a1, a2) = splitHorizontal a {half_height = split (height a)}
+          val (c1, c2) = splitHorizontal c {half_height = split (height c)}
         (* val _ = print ("SPLIT HORIZONTAL   *)
         in
           par
@@ -621,8 +622,8 @@ struct
       else if maxdim = n then
         (* split b vertically *)
         let
-          val (b1, b2) = splitVertical b
-          val (c1, c2) = splitVertical c
+          val (b1, b2) = splitVertical b {half_width = split (width b)}
+          val (c1, c2) = splitVertical c {half_width = split (width c)}
         in
           par
             ( fn _ =>
@@ -639,8 +640,8 @@ struct
       else
         (* split a vertically and b horizontally *)
         let
-          val (a1, a2) = splitVertical a
-          val (b1, b2) = splitHorizontal b
+          val (a1, a2) = splitVertical a {half_width = width a div 2}
+          val (b1, b2) = splitHorizontal b {half_height = height b div 2}
         in
           hybrid_multiply_nonsquare_inplace outputMode (da, db) (a1, b1, c);
           hybrid_multiply_nonsquare_inplace Accumulate (da, db) (a2, b2, c)
