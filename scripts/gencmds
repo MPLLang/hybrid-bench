@@ -54,7 +54,7 @@ def raytracer(procs, impl):
 def mergesort(procs, impl):
   row = {
     "tag": "mergesort",
-    "cwd": "bench/sort",
+    "cwd": "bench/mergesort",
     "cmd": cmd(procs, impl, "-n 10000000"),
     "procs": procs,
     "impl": impl
