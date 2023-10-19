@@ -12,6 +12,16 @@ struct
       ArraySlice.full sorted
     end
 
+  val sort_gpu = fn ctx =>
+    fn seq =>
+      let
+        val n = Seq.length seq
+        val (result, tm) = Util.getTime (fn _ => sort_gpu ctx seq)
+      in
+        print ("sort_gpu (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm ^ "s\n");
+        result
+      end
+
 
   fun sort_cpu xs =
     if Seq.length xs < 1000 then
@@ -27,32 +37,39 @@ struct
       end
 
 
-  val quickThresh = CommandLineArgs.parseInt "quick-thresh" 5000
-  val gpuMinThresh = CommandLineArgs.parseInt "gpu-min-thresh" 100000
-  val split_frac = CommandLineArgs.parseReal "split" 0.33
+  val grain = CommandLineArgs.parseInt "grain" 5000
+  val sort_split = CommandLineArgs.parseReal "sort-split" 0.36
 
   fun split n =
-    Real.ceil (split_frac * Real.fromInt n)
+    Real.ceil (sort_split * Real.fromInt n)
 
-  fun sort ctx (xs: Int32.int Seq.t) =
-    if Seq.length xs <= quickThresh then
-      Quicksort.sort Int32.compare xs
-    else
-      let
-        val half = split (Seq.length xs)
-        val left = Seq.take xs half
-        val right = Seq.drop xs half
-        val (left', right') =
-          ForkJoin.par (fn _ => sort_choose ctx left, fn _ => sort ctx right)
-      in
-        Merge.merge Int32.compare (left', right')
-      end
+  fun sort ctx input =
+    let
+      val n = Seq.length input
 
-  and sort_choose ctx xs =
-    if Seq.length xs >= gpuMinThresh then
-      ForkJoin.choice
-        {prefer_cpu = fn _ => sort ctx xs, prefer_gpu = fn _ => sort_gpu ctx xs}
-    else
-      sort ctx xs
+      fun base xs = Quicksort.sort Int32.compare xs
+
+      fun loop (xs: Int32.int Seq.t) =
+        if Seq.length xs <= grain then
+          ForkJoin.choice
+            {prefer_cpu = fn _ => base xs, prefer_gpu = fn _ => sort_gpu ctx xs}
+        else
+          let
+            val half = split (Seq.length xs)
+            val left = Seq.take xs half
+            val right = Seq.drop xs half
+            val (left', right') =
+              ForkJoin.par (fn _ => loop_choose left, fn _ => loop right)
+          in
+            HybridMerge.merge ctx (left', right')
+          end
+
+      and loop_choose xs =
+        ForkJoin.choice
+          {prefer_cpu = fn _ => loop xs, prefer_gpu = fn _ => sort_gpu ctx xs}
+
+    in
+      loop input
+    end
 
 end

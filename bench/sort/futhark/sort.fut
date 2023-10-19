@@ -12,3 +12,7 @@ def radix_sort_int [n] 't (num_bits: i32) (get_bit: i32 -> t -> i32)
 -- entry sort [n] (xs: [n]i32) : [n]i32 = merge_sort (\a b -> a <= b) xs
 
 entry sort [n] (xs: [n]i32) : [n]i32 = radix_sort_int 32 i32.get_bit xs
+
+-- TODO: actually do a proper parallel merge 
+entry merge [n] [m] (xs: [n]i32) (ys: [m]i32) : []i32 =
+  sort (xs ++ ys)

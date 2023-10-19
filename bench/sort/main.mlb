@@ -1,5 +1,6 @@
 ../../dep/dep.mlb
 futhark/sort.sig
 futhark/sort.sml
+HybridMerge.sml
 HybridSort.sml
 main.sml
