@@ -1,8 +1,8 @@
-futsort/lib/
-futsort/sort.c
-futsort/sort.h
-futsort/sort.json
-futsort/sort.sig
-futsort/sort.sml
-futsort/sort.smlfut.c
+futhark/lib/
+futhark/sort.c
+futhark/sort.h
+futhark/sort.json
+futhark/sort.sig
+futhark/sort.sml
+futhark/sort.smlfut.c
 futhark.cache

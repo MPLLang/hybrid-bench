@@ -1,19 +1,21 @@
 include ../config.mk
 
-main.mpl.bin: phony futsort/sort.sml
-	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb futsort/sort.c futsort/sort.smlfut.c
+FDIR=futhark
 
-futsort/sort.sml: futsort/sort.fut futsort/lib
-	futhark $(FUTHARK_BACKEND) --library futsort/sort.fut
-	smlfut -o futsort --poly-arrays  --structure=FutharkSort --signature=FUTHARK_SORT futsort/sort.json
+main.mpl.bin: phony $(FDIR)/sort.sml
+	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb $(FDIR)/sort.c $(FDIR)/sort.smlfut.c
 
-futsort/lib:
-	(cd futsort; futhark pkg sync)
+$(FDIR)/sort.sml: $(FDIR)/sort.fut $(FDIR)/lib
+	futhark $(FUTHARK_BACKEND) --library $(FDIR)/sort.fut
+	smlfut -o $(FDIR) --poly-arrays  --structure=FutharkSort --signature=FUTHARK_SORT $(FDIR)/sort.json
+
+$(FDIR)/lib:
+	(cd $(FDIR); futhark pkg sync)
 
 clean:
-	rm -f futsort/sort.json futsort/sort.c futsort/sort.h futsort/sort.sml futsort/sort.sig \
-	  futsort/sort.smlfut.c futhark.cache main.mpl.bin
-	rm -rf futsort/lib
+	rm -f $(FDIR)/sort.json $(FDIR)/sort.c $(FDIR)/sort.h $(FDIR)/sort.sml $(FDIR)/sort.sig \
+	  $(FDIR)/sort.smlfut.c futhark.cache main.mpl.bin
+	rm -rf $(FDIR)/lib
 
 .PHONY: phony
 phony:

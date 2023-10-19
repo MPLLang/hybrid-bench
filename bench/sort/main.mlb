@@ -1,5 +1,5 @@
 ../../dep/dep.mlb
-futsort/sort.sig
-futsort/sort.sml
+futhark/sort.sig
+futhark/sort.sml
 HybridSort.sml
 main.sml
