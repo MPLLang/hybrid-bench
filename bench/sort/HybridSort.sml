@@ -1,7 +1,19 @@
 structure HybridSort =
 struct
 
-  fun cpuOnlySort xs =
+  fun sort_gpu ctx seq : Int32.int Seq.t =
+    let
+      val seq_fut = FutharkSort.Int32Array1.new ctx seq (Seq.length seq)
+      val sorted_fut = FutharkSort.Entry.sort ctx seq_fut
+      val sorted = FutharkSort.Int32Array1.values sorted_fut
+      val () = FutharkSort.Int32Array1.free seq_fut
+      val () = FutharkSort.Int32Array1.free sorted_fut
+    in
+      ArraySlice.full sorted
+    end
+
+
+  fun sort_cpu xs =
     if Seq.length xs < 1000 then
       Quicksort.sort Int32.compare xs
     else
@@ -10,38 +22,36 @@ struct
         val left = Seq.take xs half
         val right = Seq.drop xs half
       in
-        Merge.merge Int32.compare
-          (ForkJoin.par (fn _ => cpuOnlySort left, fn _ => cpuOnlySort right))
+        Merge.merge Int32.compare (ForkJoin.par (fn _ => sort_cpu left, fn _ =>
+          sort_cpu right))
       end
-
-
-  fun gpuOnlySort ctx xs = FutSort.sort ctx xs
 
 
   val quickThresh = CommandLineArgs.parseInt "quick-thresh" 5000
   val gpuMinThresh = CommandLineArgs.parseInt "gpu-min-thresh" 100000
-  val split = CommandLineArgs.parseReal "split" 0.66
+  val split_frac = CommandLineArgs.parseReal "split" 0.33
+
+  fun split n =
+    Real.ceil (split_frac * Real.fromInt n)
 
   fun sort ctx (xs: Int32.int Seq.t) =
     if Seq.length xs <= quickThresh then
       Quicksort.sort Int32.compare xs
     else
       let
-        val half = Real.ceil (split * Real.fromInt (Seq.length xs))
+        val half = split (Seq.length xs)
         val left = Seq.take xs half
         val right = Seq.drop xs half
-        val (left', right') = ForkJoin.par (fn _ => sort ctx left, fn _ =>
-          sortChoose ctx right)
+        val (left', right') =
+          ForkJoin.par (fn _ => sort_choose ctx left, fn _ => sort ctx right)
       in
         Merge.merge Int32.compare (left', right')
       end
 
-  and sortChoose ctx xs =
+  and sort_choose ctx xs =
     if Seq.length xs >= gpuMinThresh then
       ForkJoin.choice
-        { prefer_cpu = fn _ => sort ctx xs
-        , prefer_gpu = fn _ => FutSort.sort ctx xs
-        }
+        {prefer_cpu = fn _ => sort ctx xs, prefer_gpu = fn _ => sort_gpu ctx xs}
     else
       sort ctx xs
 
