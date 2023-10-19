@@ -127,7 +127,7 @@ def displayTag(t):
   if t == "primes":
     return "primes-batched"
   if t == "new-primes":
-    return "primes-new"
+    return "primes"
   if t == "mergesort":
     return "sort"
   return t
@@ -539,7 +539,12 @@ foundProcs = set()
 foundTags = set()
 
 def keepTag(t):
-  return True
+  # NOTE: primes is an old tag! we have a new tag: primes-new
+  # and, we use displayTag("primes-new") = "primes"
+  # this is confusing, but oh well
+  return t not in ["primes"]
+
+orderedTags = [t for t in orderedTags if keepTag(t)]
 
 # ===========================================================================
 
@@ -869,8 +874,7 @@ speedupPlot("figures/raytracer-speedups.pdf", "raytracer")
 speedupPlot("figures/mandelbrot-speedups.pdf", "mandelbrot")
 speedupPlot("figures/sort-speedups.pdf", "mergesort")
 speedupPlot("figures/interval-tree-speedups.pdf", "interval-tree")
-speedupPlot("figures/primes-batched-speedups.pdf", "primes")
-speedupPlot("figures/primes-new-speedups.pdf", "new-primes")
+speedupPlot("figures/primes-speedups.pdf", "new-primes")
 speedupPlot("figures/quickhull-speedups.pdf", "quickhull")
 
 # ============================================================================
