@@ -1,16 +1,27 @@
 structure HybridSort =
 struct
 
+  val gpu_sort_name = CommandLineArgs.parseString "gpu-sort" "radix"
+  val futhark_sort =
+    case gpu_sort_name of
+      "radix" => FutharkSort.Entry.radix_sort_i32
+    | "merge" => FutharkSort.Entry.merge_sort_i32
+    | "bitonic" => FutharkSort.Entry.bitonic_merge_sort_i32
+    | _ => Util.die ("unknown -gpu-sort " ^ gpu_sort_name)
+
+
   fun sort_gpu ctx seq : Int32.int Seq.t =
     let
       val seq_fut = FutharkSort.Int32Array1.new ctx seq (Seq.length seq)
-      val sorted_fut = FutharkSort.Entry.sort ctx seq_fut
+      val sorted_fut = futhark_sort ctx seq_fut
       val sorted = FutharkSort.Int32Array1.values sorted_fut
       val () = FutharkSort.Int32Array1.free seq_fut
       val () = FutharkSort.Int32Array1.free sorted_fut
     in
       ArraySlice.full sorted
     end
+    handle FutharkSort.error msg => Util.die ("Futhark error: " ^ msg)
+
 
   val sort_gpu = fn ctx =>
     fn seq =>

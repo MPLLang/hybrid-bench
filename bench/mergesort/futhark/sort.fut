@@ -1,5 +1,9 @@
--- import "lib/github.com/diku-dk/sorts/merge_sort"
+import "lib/github.com/diku-dk/sorts/insertion_sort"
+import "lib/github.com/diku-dk/sorts/merge_sort"
 import "lib/github.com/diku-dk/sorts/radix_sort"
+
+def bitonic_merge_sort [n] 't (leq: t -> t -> bool) (xs: [n]t): *[n]t =
+  merge_sort leq xs
 
 def radix_sort_int [n] 't (num_bits: i32) (get_bit: i32 -> t -> i32)
                           (xs: [n]t): [n]t =
@@ -77,7 +81,7 @@ def split_count 'a (leq: a -> a -> bool) (s: []a) (t: []a) k : (i64, i64) =
 
 ------------------------------------------------------------------------------
 
-def merge_sequential 'a (leq: a -> a -> bool) (s: []a) (t: []a) n : [n]a =
+def merge_sequential 'a (leq: a -> a -> bool) (s: []a) (t: []a) n : *[n]a =
   let dummy = if length s > 0 then head s else head t
   let (_, data) =
     loop (i, data) = (0, replicate n dummy) for k < n do
@@ -118,14 +122,94 @@ def merge 'a (leq: a -> a -> bool) (s: []a) (t: []a) : []a =
 
 -----------------------------------------------------------------------------
 
+-- requires n = mid+mid
+-- requires n divisible by block_size
+def merge_adjacent 'a [n] (leq: a -> a -> bool) (s: [n]a) mid block_size : *[n]a =
+  if n < 10 then
+    merge_sequential leq s[:mid] s[mid:] n
+  else
+  let num_blocks = assert (n % block_size == 0) (n / block_size)
+  let splitters =
+    tabulate (1+num_blocks) (\i -> split_count leq s[:mid] s[mid:] (i * block_size))
+  let block b : [block_size]a =
+    let (slo, tlo) = splitters[b]
+    let (shi, thi) = splitters[b+1]
+    in merge_sequential leq s[slo:shi] s[mid+tlo:mid+thi] block_size
+  in
+  take n (flatten (tabulate num_blocks block))
 
--- def merge_sort 'a (leq: a -> a -> bool) (s: [n]a) : [n]a =
-   
+-----------------------------------------------------------------------------
+
+
+def small_insertion_sort 't [n] (leq: t -> t -> bool) (s: *[n]t) : *[n]t =
+  if n <= 1 then s else
+  let gt x y = !(leq x y)
+  in
+  loop s for i in 0...(n-2) do
+    let (s, _) =
+      loop (s, j) = (s, i)
+      while j >= 0 && gt s[j] s[j+1] do
+        let tmp = copy s[j]
+        let s = s with [j] = copy s[j+1]
+        let s = s with [j+1] = tmp
+        in
+        (s, j-1)
+    in
+    s
 
 
 -----------------------------------------------------------------------------
 
-entry sort [n] (xs: [n]i32) : [n]i32 = radix_sort_int 32 i32.get_bit xs
+
+def smallest_pow_2_geq_than k =
+  loop (x: i64) = 1 while x < k do 2*x
+
+
+def merge_sort [n] 't (leq: t -> t -> bool) (s: [n]t) : [n]t =
+  if length s <= 1 then s else
+  let max_block_size = 8
+  let min_num_blocks = 1 + (n-1) / max_block_size
+  let num_blocks = smallest_pow_2_geq_than min_num_blocks
+  let block_size = 1 + (n-1) / num_blocks
+  let padded_n = block_size * num_blocks
+
+  let max_elem = reduce (\a b -> if leq a b then b else a) s[0] s
+
+  let sorted_blocks =
+    flatten (tabulate num_blocks (\i ->
+      let block = tabulate block_size (\j ->
+        let k = i*block_size + j
+        in if k < n then s[k] else max_elem)
+      in
+      small_insertion_sort leq block))
+
+  let (data, _) =
+    loop (data, stride) = (sorted_blocks, block_size)
+    while stride < padded_n do
+      let next_stride = 2 * stride
+      let num_merges = padded_n / next_stride
+      let data =
+        flatten (tabulate num_merges (\mi ->
+          let start = mi * next_stride
+          let piece = take next_stride (drop start data)
+          in
+          merge_adjacent leq piece stride block_size))
+      in
+      (data, next_stride)
+
+  in
+  take n data
+
+-----------------------------------------------------------------------------
+
+entry radix_sort_i32 [n] (xs: [n]i32) : []i32 =
+  radix_sort_int 32 i32.get_bit xs
+
+entry merge_sort_i32 [n] (xs: [n]i32) : []i32 =
+  merge_sort (<=) xs
+
+entry bitonic_merge_sort_i32 [n] (xs: [n]i32) : []i32 =
+  bitonic_merge_sort (<=) xs
 
 entry merge_i32 [n] [m] (xs: [n]i32) (ys: [m]i32) : []i32 =
   merge (<=) xs ys
