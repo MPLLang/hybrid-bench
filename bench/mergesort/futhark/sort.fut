@@ -15,7 +15,23 @@ def radix_sort_int [n] 't (num_bits: i32) (get_bit: i32 -> t -> i32)
 
 -----------------------------------------------------------------------------
 
-
+-- Split sorted sequences s and t into (s1, s2) and (t1, t2) such that the
+-- largest items of s1 and t1 are smaller than the smallest items of s2 and t2.
+-- The desired output size |s1|+|t1| is given as a parameter.
+--
+-- Specifically, `split_count leq s t k` returns `(m, n)` where:
+--   (s1, s2) = (s[:m], s[m:])
+--   (t1, t2) = (t[:n], t[n:])
+--   m+n = k
+--   max(s1) <= min(t2)
+--   max(t1) <= min(s2)
+--
+-- Note that there are many possible solutions, so we also mandate that `m`
+-- should be minimized.
+--
+-- Work: O(log(|s|+|t|))
+-- Span: O(log(|s|+|t|))
+--
 def split_count 'a (leq: a -> a -> bool) (s: []a) (t: []a) k : (i64, i64) =
   let normalize ((slo, shi), (tlo, thi), count) =
     let slo_orig = slo
