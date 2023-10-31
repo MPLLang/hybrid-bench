@@ -6,7 +6,7 @@ struct
    *   (1) decreased theoretical work, but also worse data locality
    *   (2) less parallelism
    *)
-  val blockSizeFactor = CommandLineArgs.parseReal "primes-block-size-factor" 1.0
+  val blockSizeFactor = CommandLineArgs.parseReal "primes-block-size-factor" 8.0
   val _ = print
     ("primes-block-size-factor " ^ Real.toString blockSizeFactor ^ "\n")
 
@@ -77,7 +77,7 @@ struct
   (* val hybrid_depth = CommandLineArgs.parseInt "hybrid-depth" 2
   val _ = print ("hybrid-depth " ^ Int.toString hybrid_depth ^ "\n") *)
 
-  val hybrid_gpu_split = CommandLineArgs.parseReal "hybrid-gpu-split" 0.1
+  val hybrid_gpu_split = CommandLineArgs.parseReal "hybrid-gpu-split" 0.02
   val _ = print
     ("hybrid-gpu-split " ^ Real.toString hybrid_gpu_split
      ^ " (fraction of segments given to gpu choice points)\n")
@@ -192,7 +192,7 @@ struct
             end
 
         and loopChoose lob hib =
-          if blockRangeSize lob hib < 1000000 then
+          if blockRangeSize lob hib < 500000 then
             ForkJoin.parfor 1 (lob, hib) doBlock
           else
             ForkJoin.choice
