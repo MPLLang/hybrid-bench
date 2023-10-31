@@ -6,15 +6,18 @@ def ceil_div (n: i64) k = 1 + (n-1)/k
 
 -- compute all primes in the range [lo, hi), except multiples of 2 and 3
 --   (this is a classic trick: special case the small primes for performance)
--- output: array of flags, length hi-lo
---   output[lo+i] = 1 means that i is either prime or a multiple of {2,3}
---   output[lo+i] = 0 means that i is composite
--- requires that seed_primes contains all primes p for 5 <= p <= sqrt(hi)
+-- output: array of flags, length count (requires count >= hi-lo)
+--   for 0 <= i < hi-lo:
+--     output[i] = 1 means that lo+i is either prime or a multiple of {2,3}
+--     output[i] = 0 means that lo+i is composite
+--   for hi-lo <= i < count: output is garbage
+-- requires: count >= hi-lo
+-- requires: seed_primes contains all primes p for 5 <= p <= sqrt(hi)
 --   Note: it's okay for seed_primes to be larger than this, but we need it
---   to _at least_ go up to sqrt(hi). It's also okay for 2 and 3 to be in
+--   to _at least_ go up to sqrt(lo+count). It's also okay for 2 and 3 to be in
 --   seed_primes, but this is not necessary for correctness and will only slow
 --   us down.
-entry sieve_segment_except_multiples_of_2_3 (seed_primes: []i64) (lo: i64) (hi: i64) : []u8 =
+entry sieve_segment_except_multiples_of_2_3 (seed_primes: []i64) (lo: i64) (hi: i64) (count: i64) : [count]u8 =
 
   -- how many multiples p of fall into the range [lo, hi) ?
   let num_multiples_in_range p =
@@ -40,7 +43,7 @@ entry sieve_segment_except_multiples_of_2_3 (seed_primes: []i64) (lo: i64) (hi: 
   let update_positions =
     map2 update_position (indices spread_prime_indices) spread_prime_indices
 
-  in spread (hi - lo) (1: u8) update_positions (map (\_ -> 0) update_positions)
+  in spread count (1: u8) update_positions (map (\_ -> 0) update_positions)
 
 
 -- num_flags should be >= hi-lo
@@ -74,7 +77,7 @@ entry sieve_segmented_segment (seed_primes: []i64) block_size (lo: i64) (hi: i64
 entry sieve_primes (seed_primes: []i64) (lo: i64) (hi: i64) : []i64 =
   let seed_primes_except_2_3 =
     if length seed_primes < 2 then [] else seed_primes[2:]
-  let flags = sieve_segment_except_multiples_of_2_3 seed_primes_except_2_3 lo hi
+  let flags = sieve_segment_except_multiples_of_2_3 seed_primes_except_2_3 lo hi (hi-lo)
   let ps = filter (\i -> flags[i-lo] == 1 && i%2 != 0 && i%3 != 0) (lo...(hi-1))
   in
   if lo <= 2 && 3 < hi then
@@ -83,6 +86,82 @@ entry sieve_primes (seed_primes: []i64) (lo: i64) (hi: i64) : []i64 =
     [2] ++ ps
   else
     ps
+
+
+
+entry sieve_primes_segmented (seed_primes: []i64) block_size (lo: i64) (hi: i64) : []i64 =
+  let seed_primes_except_2_3 =
+    if length seed_primes < 2 then [] else seed_primes[2:]
+
+  let num_flags = hi-lo
+  let num_blocks = ceil_div num_flags block_size
+  let do_block b : [block_size]u8 =
+    let lo' = lo + b*block_size
+    let hi' = i64.min (lo' + block_size) hi
+    in sieve_segment_except_multiples_of_2_3 seed_primes_except_2_3 lo' hi' block_size
+
+  let flags: *[num_blocks][block_size]u8 =
+    replicate num_blocks (replicate block_size 0u8)
+  let flags =
+    loop flags for b in 0...(num_blocks-1) do
+      flags with [b] = do_block b
+
+  let flags = flatten flags
+
+  let ps = filter (\i -> flags[i-lo] == 1 && i%2 != 0 && i%3 != 0) (lo...(hi-1))
+  in
+  if lo <= 2 && 3 < hi then
+    [2,3] ++ ps
+  else if lo <= 2 && 2 < hi then
+    [2] ++ ps
+  else
+    ps
+
+------------------------------------------------------------------------------
+-- This next bit was an attempt at optimizing the bounds-squaring loop by
+-- ensuring that the bounds we choose are exactly:
+--   [..., sqrt(sqrt(n)), sqrt(n), n]
+-- this would match the normal recursive algorithm, where primes(n) is
+-- computed recursively in terms of primes(sqrt(n))
+--
+-- however, I wasn't able to get any performance improvement from this...
+------------------------------------------------------------------------------
+
+-- local
+-- def desired_sizes n =
+--   let (smallest_size, count) =
+--     loop (n, count) = (n, 1) while n > 3 do
+--       let n' = i64.f64 (f64.floor (f64.sqrt (f64.i64 n)))
+--       in
+--       (n', count+1)
+--   let (_, _, sizes) =
+--     loop (n, i, sizes: *[count]i64) = (n, count, replicate count smallest_size)
+--     while n > 3 do
+--       let n' = i64.f64 (f64.floor (f64.sqrt (f64.i64 n)))
+--       let sizes' = sizes with [i-1] = n
+--       in
+--       (n', i-1, sizes')
+--   in
+--   sizes
+
+
+-- entry primes (n: i64) : []i64 =
+--   if n < 2 then [] else
+--   if n == 2 then [2] else
+--   if n < 5 then [2,3] else
+  
+--   let sizes = desired_sizes n
+--   let sizes = assert (head sizes <= 3) sizes
+--   let primes = [2,3]
+--   in
+--   loop primes for i in 1...(length sizes - 1) do
+--     let bound = sizes[i-1]
+--     let bound' = sizes[i]
+--     in
+--     sieve_primes_segmented primes (bound*4) 2 (bound'+1)
+
+------------------------------------------------------------------------------
+
 
 entry primes (n: i64) : []i64 =
 
