@@ -164,16 +164,17 @@ struct
 
             val t0 = Time.now ()
             val gpuPrimes =
-              FutharkPrimes.Entry.sieve_primes ctx
-                (sqrtPrimesOnGpu, blockSize, lo, hi)
+              FutharkPrimes.Entry.sieve_primes ctx (sqrtPrimesOnGpu, lo, hi)
             val _ = FutharkPrimes.Context.sync ctx
+            val t1 = Time.now ()
             val _ = Array.update
               (outputBlocks, lob, FutharkPrimes.Int64Array1.values gpuPrimes)
-            val t1 = Time.now ()
+            val t2 = Time.now ()
           in
             print
               ("gpu sieve (" ^ Int.toString (hi - lo) ^ "): "
-               ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n");
+               ^ Time.fmt 4 (Time.- (t1, t0)) ^ "+"
+               ^ Time.fmt 4 (Time.- (t2, t1)) ^ "s\n");
             FutharkPrimes.Int64Array1.free gpuPrimes
           end
 
