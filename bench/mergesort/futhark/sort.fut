@@ -113,14 +113,13 @@ def merge_sequential 'a (leq: a -> a -> bool) (s: []a) (t: []a) n : *[n]a =
   data
 
 
-def merge 'a (leq: a -> a -> bool) (s: []a) (t: []a) : []a =
+def merge 'a block_size (leq: a -> a -> bool) (s: []a) (t: []a) : []a =
   if length s == 0 then
     t
   else if length t == 0 then
     s
   else
   let n = length s + length t
-  let block_size = i64.max 100 (i64.f64 (f64.ceil (f64.sqrt (f64.i64 n))) / 2)
   let num_blocks = 1 + (n-1) / block_size
 
   let padding = (block_size * (num_blocks-1) - n) % block_size
@@ -227,5 +226,5 @@ entry merge_sort_i32 [n] (xs: [n]i32) : []i32 =
 entry bitonic_merge_sort_i32 [n] (xs: [n]i32) : []i32 =
   bitonic_merge_sort (<=) xs
 
-entry merge_i32 [n] [m] (xs: [n]i32) (ys: [m]i32) : []i32 =
-  merge (<=) xs ys
+entry merge_i32 [n] [m] block_size (xs: [n]i32) (ys: [m]i32) : []i32 =
+  merge block_size (<=) xs ys

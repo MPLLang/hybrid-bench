@@ -4,12 +4,15 @@ struct
   fun slice_idxs s i j =
     ArraySlice.subslice (s, i, SOME (j - i))
 
+  val gpu_merge_block = CommandLineArgs.parseInt "gpu-merge-block" 8
 
   fun write_merge_gpu ctx (xs, ys) output =
     let
       val xs_fut = FutharkSort.Int32Array1.new ctx xs (Seq.length xs)
       val ys_fut = FutharkSort.Int32Array1.new ctx ys (Seq.length ys)
-      val sorted_fut = FutharkSort.Entry.merge_i32 ctx (xs_fut, ys_fut)
+      val sorted_fut =
+        FutharkSort.Entry.merge_i32 ctx
+          (Int64.fromInt gpu_merge_block, xs_fut, ys_fut)
       val () = FutharkSort.Int32Array1.values_into sorted_fut output
       val () = FutharkSort.Int32Array1.free xs_fut
       val () = FutharkSort.Int32Array1.free ys_fut
@@ -35,7 +38,7 @@ struct
         end
 
 
-  val merge_grain = CommandLineArgs.parseInt "merge-grain" 250000
+  val merge_grain = CommandLineArgs.parseInt "merge-grain" 1500000
   val merge_split = CommandLineArgs.parseReal "merge-split" 0.15
 
   fun split n =
@@ -75,10 +78,13 @@ struct
 
 
   and write_merge_choose ctx (s1, s2) t =
-    ForkJoin.choice
-      { prefer_cpu = fn _ => write_merge ctx (s1, s2) t
-      , prefer_gpu = fn _ => write_merge_gpu ctx (s1, s2) t
-      }
+    if ArraySlice.length t <= merge_grain then
+      write_merge ctx (s1, s2) t
+    else
+      ForkJoin.choice
+        { prefer_cpu = fn _ => write_merge ctx (s1, s2) t
+        , prefer_gpu = fn _ => write_merge_gpu ctx (s1, s2) t
+        }
 
 
   fun merge ctx (s1, s2) =

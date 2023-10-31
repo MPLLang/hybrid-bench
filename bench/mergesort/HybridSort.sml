@@ -34,11 +34,11 @@ struct
       end
 
 
-  val sort_grain = CommandLineArgs.parseInt "sort-grain" 100000
+  val qsort_grain = CommandLineArgs.parseInt "qsort-grain" 100000
 
 
   fun sort_cpu xs =
-    if Seq.length xs <= sort_grain then
+    if Seq.length xs <= qsort_grain then
       Quicksort.sort Int32.compare xs
     else
       let
@@ -52,6 +52,7 @@ struct
 
 
   val sort_split = CommandLineArgs.parseReal "sort-split" 0.36
+  val sort_grain = CommandLineArgs.parseInt "sort-grain" 1500000
 
   fun split n =
     Real.ceil (sort_split * Real.fromInt n)
@@ -65,7 +66,9 @@ struct
       fun loop (xs: Int32.int Seq.t) =
         if Seq.length xs <= sort_grain then
           ForkJoin.choice
-            {prefer_cpu = fn _ => base xs, prefer_gpu = fn _ => sort_gpu ctx xs}
+            { prefer_cpu = fn _ => sort_cpu xs
+            , prefer_gpu = fn _ => sort_gpu ctx xs
+            }
         else
           let
             val half = split (Seq.length xs)
@@ -78,8 +81,11 @@ struct
           end
 
       and loop_choose xs =
-        ForkJoin.choice
-          {prefer_cpu = fn _ => loop xs, prefer_gpu = fn _ => sort_gpu ctx xs}
+        if Seq.length xs <= sort_grain then
+          loop xs
+        else
+          ForkJoin.choice
+            {prefer_cpu = fn _ => loop xs, prefer_gpu = fn _ => sort_gpu ctx xs}
 
     in
       loop input
