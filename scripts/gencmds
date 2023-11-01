@@ -3,7 +3,7 @@ import json
 
 
 def cmd(procs, impl, args):
-  cmd_template = "/usr/bin/time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 set-affinity -- -warmup 5 -repeat 20 -impl {} {}"
+  cmd_template = "/usr/bin/env time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 set-affinity -- -warmup 5 -repeat 20 -impl {} {}"
   return cmd_template.format(str(procs), impl, args)
 
 
