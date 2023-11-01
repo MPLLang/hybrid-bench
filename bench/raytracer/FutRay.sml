@@ -4,8 +4,9 @@ struct
   type fut_context = Ray.ctx
 
   fun init () =
-      let val () = "Initialising Futhark context... "
-          val ctx = Ray.Config.cache (SOME "futhark.cache") Ray.Config.default
+      let val () = print "Initialising Futhark context... "
+          val cfg = Ray.Config.cache (SOME "futhark.cache") Ray.Config.default
+          val ctx = Ray.Context.new cfg
           val () = print "Done!\n"
       in ctx end
 
