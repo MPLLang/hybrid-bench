@@ -1,6 +1,31 @@
 structure SegmentedPrimes =
 struct
 
+  (* ==========================================================================
+   * primes on gpu
+   *)
+
+  fun primes_gpu ctx n : Int64.int array =
+    let
+      val t0 = Time.now ()
+      val farr = FutharkPrimes.Entry.primes ctx n
+      val t1 = Time.now ()
+      val output = FutharkPrimes.Int64Array1.values farr
+      val _ = FutharkPrimes.Int64Array1.free farr
+      val t2 = Time.now ()
+    in
+      print
+        ("gpu primes (" ^ Int.toString n ^ "): " ^ Time.fmt 4 (Time.- (t1, t0))
+         ^ "+" ^ Time.fmt 4 (Time.- (t2, t1)) ^ "s\n");
+      output
+    end
+
+
+  (* ==========================================================================
+   * primes on cpu
+   *)
+
+
   (* NOTE: Could tune by playing with this. Increasing blockSizeFactor will
    * use larger blocks, which has all of the following effects on performance:
    *   (1) decreased theoretical work, but also worse data locality
@@ -72,12 +97,11 @@ struct
       end
 
 
-  (* ====================================================================== *)
+  (* ==========================================================================
+   * hybrid primes
+   *)
 
-  (* val hybrid_depth = CommandLineArgs.parseInt "hybrid-depth" 2
-  val _ = print ("hybrid-depth " ^ Int.toString hybrid_depth ^ "\n") *)
-
-  val hybrid_gpu_split = CommandLineArgs.parseReal "hybrid-gpu-split" 0.02
+  val hybrid_gpu_split = CommandLineArgs.parseReal "hybrid-gpu-split" 0.025
   val _ = print
     ("hybrid-gpu-split " ^ Real.toString hybrid_gpu_split
      ^ " (fraction of segments given to gpu choice points)\n")
@@ -165,7 +189,6 @@ struct
             val t0 = Time.now ()
             val gpuPrimes =
               FutharkPrimes.Entry.sieve_primes ctx (sqrtPrimesOnGpu, lo, hi)
-            val _ = FutharkPrimes.Context.sync ctx
             val t1 = Time.now ()
             val _ = Array.update
               (outputBlocks, lob, FutharkPrimes.Int64Array1.values gpuPrimes)

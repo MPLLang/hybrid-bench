@@ -4,3 +4,4 @@ futhark-primes.json
 futhark-primes.sig
 futhark-primes.sml
 futhark-primes.smlfut.c
+futhark.cache

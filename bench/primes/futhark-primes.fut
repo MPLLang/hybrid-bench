@@ -17,7 +17,8 @@ def ceil_div (n: i64) k = 1 + (n-1)/k
 --   to _at least_ go up to sqrt(lo+count). It's also okay for 2 and 3 to be in
 --   seed_primes, but this is not necessary for correctness and will only slow
 --   us down.
-entry sieve_segment_except_multiples_of_2_3 (seed_primes: []i64) (lo: i64) (hi: i64) (count: i64) : [count]u8 =
+entry sieve_segment_except_multiples_of_2_3
+  (seed_primes: []i64) (lo: i64) (hi: i64) (count: i64) : [count]u8 =
 
   -- how many multiples p of fall into the range [lo, hi) ?
   let num_multiples_in_range p =
@@ -48,30 +49,30 @@ entry sieve_segment_except_multiples_of_2_3 (seed_primes: []i64) (lo: i64) (hi: 
 
 -- num_flags should be >= hi-lo
 -- the extra flags will just be a bunch of 1s
-entry sieve_segment' (seed_primes: []i64) (lo: i64) (hi: i64) (num_flags: i64) : *[num_flags]u8 =
-  let init_flags = tabulate num_flags (\_ -> 1: u8)
-  let (flags, _) =
-    loop (flags: *[num_flags]u8, i) = (init_flags, 0)
-    while i < length seed_primes && 2*seed_primes[i] < hi do
-      let p = seed_primes[i]
-      let lom = i64.max 2 (ceil_div lo p)
-      let him = ceil_div hi p
-      let num_multiples = i64.max 0 (him-lom)
-      let indices = tabulate num_multiples (\k -> (lom+k)*p - lo)
-      let flags' = scatter flags indices (replicate num_multiples (0: u8))
-      in (flags', i+1)
-  in flags
+-- entry sieve_segment' (seed_primes: []i64) (lo: i64) (hi: i64) (num_flags: i64) : *[num_flags]u8 =
+--   let init_flags = tabulate num_flags (\_ -> 1: u8)
+--   let (flags, _) =
+--     loop (flags: *[num_flags]u8, i) = (init_flags, 0)
+--     while i < length seed_primes && 2*seed_primes[i] < hi do
+--       let p = seed_primes[i]
+--       let lom = i64.max 2 (ceil_div lo p)
+--       let him = ceil_div hi p
+--       let num_multiples = i64.max 0 (him-lom)
+--       let indices = tabulate num_multiples (\k -> (lom+k)*p - lo)
+--       let flags' = scatter flags indices (replicate num_multiples (0: u8))
+--       in (flags', i+1)
+--   in flags
 
 
-entry sieve_segmented_segment (seed_primes: []i64) block_size (lo: i64) (hi: i64) : []u8 =
-  let num_flags = hi-lo
-  let num_blocks = ceil_div num_flags block_size
-  let do_block b =
-    let lo' = lo + b*block_size
-    let hi' = i64.min (lo' + block_size) hi
-    in sieve_segment' seed_primes lo' hi' block_size
-  in
-  take num_flags (flatten (tabulate num_blocks do_block))
+-- entry sieve_segmented_segment (seed_primes: []i64) block_size (lo: i64) (hi: i64) : []u8 =
+--   let num_flags = hi-lo
+--   let num_blocks = ceil_div num_flags block_size
+--   let do_block b =
+--     let lo' = lo + b*block_size
+--     let hi' = i64.min (lo' + block_size) hi
+--     in sieve_segment' seed_primes lo' hi' block_size
+--   in
+--   take num_flags (flatten (tabulate num_blocks do_block))
 
 
 entry sieve_primes (seed_primes: []i64) (lo: i64) (hi: i64) : []i64 =
@@ -100,10 +101,14 @@ entry sieve_primes_segmented (seed_primes: []i64) block_size (lo: i64) (hi: i64)
     let hi' = i64.min (lo' + block_size) hi
     in sieve_segment_except_multiples_of_2_3 seed_primes_except_2_3 lo' hi' block_size
 
-  let flags: *[num_blocks][block_size]u8 =
-    replicate num_blocks (replicate block_size 0u8)
   let flags =
-    loop flags for b in 0...(num_blocks-1) do
+    -- This is equivalent to
+    --   tabulate num_blocks do_block
+    -- However, doing it this way, with a sequential loop, comes out to be
+    -- **significantly** faster... about 36x faster on my machine.
+    loop flags : *[num_blocks][block_size]u8 =
+      replicate num_blocks (replicate block_size 0u8)
+    for b in 0...(num_blocks-1) do
       flags with [b] = do_block b
 
   let flags = flatten flags
@@ -176,6 +181,6 @@ entry primes (n: i64) : []i64 =
   let (ps, _) =
     loop (seeds, bound) = (init_seeds, init_bound) while bound < n do
       let bound' = i64.min (bound*bound) n
-      let seeds' = sieve_primes seeds 2 (bound'+1)
+      let seeds' = sieve_primes_segmented seeds (bound*4) 2 (bound'+1)
       in (seeds', bound')
   in ps

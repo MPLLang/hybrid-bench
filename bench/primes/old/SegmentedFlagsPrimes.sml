@@ -1,25 +1,6 @@
 structure SegmentedFlagsPrimes =
 struct
 
-  (* ==========================================================================
-  * primes on gpu
-  *)
-
-  fun primes_gpu ctx n : Int64.int array =
-    let
-      val t0 = Time.now ()
-      val farr = FutharkPrimes.Entry.primes ctx n
-      val _ = FutharkPrimes.Context.sync ctx
-      val t1 = Time.now ()
-      val _ = print ("gpu primes " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n")
-      val output = FutharkPrimes.Int64Array1.values farr
-      val _ = FutharkPrimes.Int64Array1.free farr
-      val t2 = Time.now ()
-      val _ = print ("gpu copy back " ^ Time.fmt 4 (Time.- (t2, t1)) ^ "s\n")
-    in
-      output
-    end
-
 
   (* ==========================================================================
    * primes on cpu
@@ -136,7 +117,8 @@ struct
           end
 
         val (sqrtPrimesOnGpu, tm) = Util.getTime (fn _ =>
-          FutharkPrimes.Int64Array1.new ctx (ArraySlice.full sqrtPrimes) (Array.length sqrtPrimes))
+          FutharkPrimes.Int64Array1.new ctx (ArraySlice.full sqrtPrimes)
+            (Array.length sqrtPrimes))
         val _ = print
           ("copy sqrtPrimes (n=" ^ Int.toString n ^ ") to gpu: " ^ Time.fmt 4 tm
            ^ "s\n")
