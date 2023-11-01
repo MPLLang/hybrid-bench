@@ -5,4 +5,5 @@ quickhull.sml
 futhark/*.c
 futhark/*.h
 futhark/*.json
+futhark.cache
 
