@@ -152,7 +152,7 @@ struct
       val toks = tokens Char.isSpace (RF.contentsSeq filename)
       fun tok i = DS.nth toks i
       val _ =
-        if eqStr "pbbs_sequenceDouble" (tok 0) then ()
+        if eqStr "sequenceDouble" (tok 0) then ()
         else raise Fail (filename ^ " wrong file type")
 
       val n = DS.length toks - 1
