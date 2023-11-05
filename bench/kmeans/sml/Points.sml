@@ -11,6 +11,8 @@ sig
   val length: t -> int
   val nth: t -> int -> point
   val take: t -> int -> t
+  val scale: real -> t -> t
+  val slice: t -> int * int -> t
 end =
 struct
   type point = real Seq.t
@@ -26,4 +28,8 @@ struct
     (d, Seq.take s (d * n))
   fun dims (d, s) = d
   fun length (d, s) = Seq.length s div d
+  fun scale (x: real) (d, s) =
+    (d, Seq.map (fn y => y * x) s)
+  fun slice (d, s) (i, n) =
+    (d, Seq.subseq s (i * d, n * d))
 end

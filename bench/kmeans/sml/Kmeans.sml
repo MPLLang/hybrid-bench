@@ -109,6 +109,27 @@ struct
       end
   end
 
+  fun newCentroidsChunked points weight centroids (i, j) =
+    let
+      val chunk_size = 1000
+      val n = Points.length points
+      val d = Points.dims points
+      val k = Points.length centroids
+      val num_chunks = (n + chunk_size - 1) div chunk_size
+      val chunk_means = ForkJoin.alloc (k * d)
+      fun onChunk i =
+        let
+          val start = i * chunk_size
+          val len = Int.min (n - start, chunk_size)
+          val weight = real len / real n
+        in
+          Array.update (chunk_means, i, Points.scale weight
+            (newCentroids (Points.slice points (start, len)) centroids))
+        end
+    in
+      ForkJoin.parfor 1 (0, num_chunks) onChunk
+    end
+
   fun converge k points max_iterations iterations centroids =
     if iterations >= max_iterations then
       (iterations, centroids)
