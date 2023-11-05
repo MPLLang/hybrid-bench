@@ -1,4 +1,4 @@
-BENCHMARKS=mandelbrot raytracer primes quickhull build-intervaltree
+BENCHMARKS=mandelbrot raytracer primes quickhull build-intervaltree kmeans
 
 all: $(BENCHMARKS:=/main.mpl.bin)
 
