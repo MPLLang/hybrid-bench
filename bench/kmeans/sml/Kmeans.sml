@@ -1,6 +1,6 @@
 structure Kmeans:
 sig
-  val kmeans: int -> Points.t -> int -> int * Points.t
+  val kmeans: int -> int -> Points.t -> int * Points.t
 end =
 struct
   fun distance x y =
@@ -76,7 +76,7 @@ struct
 
       val () = addPoints 0
     in
-      Points.fromArraySeq d (Seq.fromArraySeq (ArraySlice.full cluster_means))
+      Points.fromSeq d (Seq.fromArraySeq (ArraySlice.full cluster_means))
     end
 
   fun converge k points max_iterations iterations centroids membership =
@@ -96,7 +96,7 @@ struct
             new_membership
       end
 
-  fun kmeans k points max_iterations =
+  fun kmeans k max_iterations points =
     let
       val num_points = Points.length points
       (* Take the first k points as cluster centroids. *)

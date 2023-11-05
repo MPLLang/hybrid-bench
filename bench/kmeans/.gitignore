@@ -1,0 +1,7 @@
+main.mpl.bin
+kmeans.smlfut.c
+kmeans.sig
+kmeans.sml
+futhark/*.c
+futhark/*.h
+futhark/*.json
