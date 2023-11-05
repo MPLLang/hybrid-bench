@@ -22,6 +22,13 @@ def centroids_of [n][d] (k: i64) (points: [n][d]f64) (membership: [n]i32): [k][d
   in map2 (\point n -> map (/f64.i32 (if n == 0 then 1 else n)) point)
           cluster_sums points_in_clusters
 
+entry centroids_chunk [k][n][d] (start: i64) (len: i64) (points: [n][d]f64) (centroids: [k][d]f64) =
+  let points' = points[start:start+len]
+  let new_membership = map (find_nearest_point centroids) points'
+  let new_centres = centroids_of k points' new_membership
+  let weight = f64.i64 len / f64.i64 n
+  in map (map (*weight)) new_centres
+
 entry kmeans [n][d]
         (k: i32) (max_iterations: i32)
         (points: [n][d]f64): (i32, [][]f64) =

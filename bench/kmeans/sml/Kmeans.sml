@@ -1,5 +1,11 @@
 structure Kmeans:
 sig
+  val centroidsChunkCPU: Points.t -> int * int * Points.t -> Points.t
+  val kmeansHybrid: (int * int * Points.t -> Points.t)
+                    -> int
+                    -> int
+                    -> Points.t
+                    -> int * Points.t
   val kmeans: int -> int -> Points.t -> int * Points.t
 end =
 struct
@@ -109,47 +115,58 @@ struct
       end
   end
 
-  fun newCentroidsChunked points weight centroids (i, j) =
+  fun newCentroidsChunked (centroidsChunk: (int * int * Points.t -> Points.t)) n
+    centroids =
     let
-      val chunk_size = 1000
-      val n = Points.length points
-      val d = Points.dims points
+      val chunk_size = 10000
+      val d = Points.dims centroids
       val k = Points.length centroids
       val num_chunks = (n + chunk_size - 1) div chunk_size
-      val chunk_means = ForkJoin.alloc (k * d)
+      val chunk_means: Points.t array = ForkJoin.alloc num_chunks
       fun onChunk i =
         let
           val start = i * chunk_size
           val len = Int.min (n - start, chunk_size)
-          val weight = real len / real n
         in
-          Array.update (chunk_means, i, Points.scale weight
-            (newCentroids (Points.slice points (start, len)) centroids))
+          Array.update (chunk_means, i, centroidsChunk (start, len, centroids))
         end
     in
-      ForkJoin.parfor 1 (0, num_chunks) onChunk
+      ForkJoin.parfor 1 (0, num_chunks) onChunk;
+      (Seq.reduce Points.add (Points.zero (d, k))
+         (Seq.fromArraySeq (ArraySlice.full chunk_means)))
     end
 
-  fun converge k points max_iterations iterations centroids =
+  fun converge (centroidsChunk: (int * int * Points.t -> Points.t)) n k
+    max_iterations iterations centroids =
     if iterations >= max_iterations then
       (iterations, centroids)
     else
       let
-        val new_centroids = newCentroids points centroids
+        val new_centroids = newCentroidsChunked centroidsChunk n centroids
       in
         if
           Seq.equal closeEnough
             (Points.toSeq centroids, Points.toSeq new_centroids)
-        then (iterations + 1, new_centroids)
-        else converge k points max_iterations (iterations + 1) new_centroids
+        then
+          (iterations + 1, new_centroids)
+        else
+          converge centroidsChunk n k max_iterations (iterations + 1)
+            new_centroids
       end
 
-  fun kmeans k max_iterations points =
-    let
-      val num_points = Points.length points
-      (* Take the first k points as cluster centroids. *)
-      val centroids = Points.take points k
-    in
-      converge k points max_iterations 0 centroids
+  fun kmeansHybrid centroidsChunk k max_iterations points =
+    let val n = Points.length points
+    in converge centroidsChunk n k max_iterations 0 (Points.take points k)
     end
+
+  fun centroidsChunkCPU points (start, len, centroids) =
+    let
+      val weight = real len / real (Points.length points)
+    in
+      Points.scale weight
+        (newCentroids (Points.slice points (start, len)) centroids)
+    end
+
+  fun kmeans k max_iterations points =
+    kmeansHybrid (centroidsChunkCPU points) k max_iterations points
 end

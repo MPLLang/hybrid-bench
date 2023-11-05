@@ -60,7 +60,31 @@ val bench =
                (ArraySlice.full (Futhark.Real64Array2.values centroids_fut)))
            ) before Futhark.Real64Array2.free centroids_fut
          end)
-  | "hybrid" => raise Fail "hybrid"
+  | "hybrid" =>
+      (fn () =>
+         let
+           fun centroidsChunk (start, len, centroids) =
+             let
+               val centroids_fut =
+                 Futhark.Real64Array2.new ctx (Points.toSeq centroids)
+                   (Points.length centroids, d)
+               val new_centroids_fut =
+                 Futhark.Entry.centroids_chunk ctx
+                   ( Int64.fromInt start
+                   , Int64.fromInt len
+                   , points_fut
+                   , centroids_fut
+                   )
+             in
+               Points.fromSeq d (Seq.fromArraySeq
+                 (ArraySlice.full
+                    (Futhark.Real64Array2.values new_centroids_fut)))
+               before Futhark.Real64Array2.free centroids_fut
+               before Futhark.Real64Array2.free new_centroids_fut
+             end
+         in
+           Kmeans.kmeansHybrid centroidsChunk k max_iterations points
+         end)
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val (kmeans_iters, kmeans_res) = Benchmark.run ("kmeans " ^ impl) bench
