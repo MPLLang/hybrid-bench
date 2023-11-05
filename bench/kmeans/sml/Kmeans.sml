@@ -38,13 +38,25 @@ struct
   (* This function is completely sequential, but you can apply it to
   different chunks of the input and combine the partial results, as
   long as you remember to weigh the results appropriately.*)
-  fun centroidsOf k points membership =
+  fun centroidsOf points k membership =
     let
       val d = Points.dims points
+      val n = Points.length points
 
       val cluster_sizes = Array.array (k, 0)
-      val () = Seq.applyIdx membership (fn (_, c) =>
-        Array.update (cluster_sizes, c, 1 + Array.sub (cluster_sizes, c)))
+
+      fun countPoint c =
+        Array.update (cluster_sizes, c, 1 + Array.sub (cluster_sizes, c))
+
+      fun countPoints i =
+        if i = n then
+          ()
+        else
+          let val c = Seq.nth membership i
+          in countPoint c; countPoints (i + 1)
+          end
+
+      val () = countPoints 0
 
       val cluster_means = Array.array (k * d, 0.0)
 
@@ -67,7 +79,7 @@ struct
         end
 
       fun addPoints i =
-        if i = Points.length points then
+        if i = n then
           ()
         else
           ( addPoint (Seq.nth membership i) (Points.nth points i)
@@ -87,7 +99,7 @@ struct
         val num_points = Points.length points
         val new_membership =
           Seq.tabulate (findNearestPoint points centroids) num_points
-        val new_centroids = centroidsOf k points new_membership
+        val new_centroids = centroidsOf points k new_membership
       in
         if Seq.equal op= (membership, new_membership) then
           (iterations + 1, new_centroids)
