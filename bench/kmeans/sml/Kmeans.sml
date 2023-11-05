@@ -17,6 +17,12 @@ struct
       loop 0.0 0
     end
 
+  (* Our convergence criterion is that the centroids don't change too
+  much anymore. *)
+  val tolerance = 0.001
+  fun closeEnough (x, y) =
+    Real.abs (x - y) < tolerance
+
   fun findNearestPoint points centroids point_i =
     let
       val k = Points.length centroids
@@ -101,7 +107,10 @@ struct
           Seq.tabulate (findNearestPoint points centroids) num_points
         val new_centroids = centroidsOf points k new_membership
       in
-        if Seq.equal op= (membership, new_membership) then
+        if
+          Seq.equal closeEnough
+            (Points.toSeq centroids, Points.toSeq new_centroids)
+        then
           (iterations + 1, new_centroids)
         else
           converge k points max_iterations (iterations + 1) new_centroids
