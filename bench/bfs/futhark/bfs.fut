@@ -4,62 +4,67 @@
 -- function `expand` from: 
 import "lib/github.com/diku-dk/segmented/segmented"
 
-type queuePair = {vertex: i32, parent: i32}
+type vertex = i32
+type graph [n] [m] = {offsets: [n]i32, edges: [m]vertex}
+type tree_edge = {vertex: vertex, parent: vertex}
 
-def remove_duplicates [nQueue]  (nVerts) (queue: [nQueue]queuePair): []queuePair = 
+
+def remove_duplicates [k] n (queue: [k]tree_edge): []tree_edge = 
   let verts = map (\q -> i64.i32 q.vertex) queue
-  let indexes = iota nQueue 
-  let H = hist i64.min nQueue nVerts verts indexes
+  let indexes = iota k 
+  let H = hist i64.min k n verts indexes
   in map2 (\i j -> H[i] == j) verts indexes 
     |> zip queue
     |> filter (.1)
     |> map (.0)
 
--- Set the parent of each vertex in the queue. The queue must not contain duplicates
-def update_parents [nVerts] (parents: *[nVerts]i32) (queue: []queuePair): *[nVerts]i32 =
-  let qVerts = map (\q -> i64.i32 q.vertex) queue
-  let qParents = map (\q -> q.parent) queue
+
+def update_parents [n] (parents: *[n]vertex) (selected_edges: []tree_edge): *[n]vertex =
+  let qVerts = map (\q -> i64.i32 q.vertex) selected_edges
+  let qParents = map (\q -> q.parent) selected_edges
   in scatter parents qVerts qParents
 
-def edges_of_vertex (verts: []i32) (nEdges: i32) (edge: queuePair): i64 =
-  let extended = verts ++ [nEdges]
+
+def edges_of_vertex [n] [m] (g: graph[n][m]) (edge: tree_edge): i64 =
+  let extended = g.offsets ++ [i32.i64 m]
   in i64.i32 (extended[edge.vertex + 1] - extended[edge.vertex])
 
-def get_ith_edge_from_vert (verts: []i32) (edges: []i32) (parents: []i32) (q: queuePair) (i: i64) : queuePair =
-  -- Get the i'th vertex of the edge
-  let currentVert = edges[i64.i32 verts[q.vertex] + i]
-  -- If it's an unseen vertex, add it to the queue with the current vertex being the parent
-  -- Else return a placeholder that we filter later
-  in if (parents[currentVert] == -1)
+
+def get_ith_edge_from_vert [n] [m] (g: graph[n][m]) is_visited (q: tree_edge) (i: i64) : tree_edge =
+  let currentVert = g.edges[i64.i32 g.offsets[q.vertex] + i]
+  in if !(is_visited currentVert)
   then {vertex = currentVert, parent = q.vertex}
   else {vertex = -1, parent = -1}
 
 
 def bfs_round [n] [m]
-    (vert_offsets: [n]i32) (edges: [m]i32)
-    (parents: *[n]i32, frontier: *[]queuePair) : (*[n]i32, *[]queuePair) =
+    (g: graph[n][m])
+    (is_visited: vertex -> bool)
+    (frontier: *[]tree_edge) : (*[]tree_edge) =
 
-  -- Setup a function that takes a queuePair, and returns how many vertexes goes out of it
-  let get_edges_of_vert_fun = edges_of_vertex vert_offsets (i32.i64 m)
-  -- Setup a function that takes a queuePair and an int i, and returns the vertex pointed to by the i'th edge
-  let get_ith_edge_from_vert_fun = get_ith_edge_from_vert vert_offsets edges parents
+  let new_frontier = expand
+    (\edge -> edges_of_vertex g edge)
+    (\i -> get_ith_edge_from_vert g is_visited i)
+    frontier
 
-  -- Get the vertexes in the next layer
-  let new_frontier = expand (get_edges_of_vert_fun) (get_ith_edge_from_vert_fun) frontier
-  -- Remove empty placeholders ({-1, -1} queuePairs)
   let filtered_new_frontier = filter (\q -> q.parent != -1) new_frontier
-  -- Remove duplicates from the queue
   let deduplicated_new_frontier = remove_duplicates n filtered_new_frontier
 
-  in (update_parents parents deduplicated_new_frontier, deduplicated_new_frontier)
+  in deduplicated_new_frontier
 
 
-def bfs_loop [nVerts] [nEdges] (verts: [nVerts]i32) (edges: [nEdges]i32) (parents: *[nVerts]i32) (queue: *[]queuePair): [nVerts]i32 =
+def bfs_loop [n] [m]
+  (g: graph[n][m])
+  (parents: *[n]vertex)
+  (queue: *[]tree_edge): [n]vertex
+  =
   -- Loop until we get an empty queue
   let (parents, _) =
-    loop (parents, queue)
+    loop (parents: *[n]vertex, queue)
     while length queue > 0 do
-    bfs_round verts edges (parents, queue)
+      let queue = bfs_round g (\v -> parents[v] != -1) queue
+      let parents = update_parents parents queue
+      in (parents, queue)
   in parents
 
 
@@ -67,9 +72,18 @@ def bfs_loop [nVerts] [nEdges] (verts: [nVerts]i32) (edges: [nEdges]i32) (parent
 
 
 
-entry bfs [nVerts] [nEdges] (vertexes_enc: [nVerts]i32) (edges_enc: [nEdges]i32) start =
-  let parents = replicate nVerts (-1)
+entry bfs [n] [m] (g: graph[n][m]) start =
+  let parents = replicate n (-1)
   let queue = [{vertex = start, parent = start}]
   let parents = update_parents parents queue
 
-  in bfs_loop vertexes_enc edges_enc parents queue
+  in bfs_loop g parents queue
+
+
+-- visited[v] = 0 if unvisited, 1 if already visited
+-- frontier = [v1, v2, ...]: vertices to expand now
+-- entry bfs_round_kernel [n] [m]
+--   (offsets: [n]i32) (edges: [m]vertex)
+--   (visited: [n]u8) (frontier: []vertex) : []tree_edge
+--   =
+--   let 

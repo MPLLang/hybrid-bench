@@ -43,10 +43,12 @@ struct
       val offsets_i32 = Seq.map Int32.fromInt offsets
       val offsets_fut = Futhark.Int32Array1.new ctx offsets_i32 n
       val edges_fut = Futhark.Int32Array1.new ctx edges m
+      val graph_fut =
+        Futhark.Opaque.graph.new ctx {offsets = offsets_fut, edges = edges_fut}
 
       val t1 = Time.now ()
 
-      val parents_fut = Futhark.Entry.bfs ctx (offsets_fut, edges_fut, s)
+      val parents_fut = Futhark.Entry.bfs ctx (graph_fut, s)
 
       val t2 = Time.now ()
 
@@ -54,6 +56,7 @@ struct
       val _ = Futhark.Int32Array1.free offsets_fut
       val _ = Futhark.Int32Array1.free edges_fut
       val _ = Futhark.Int32Array1.free parents_fut
+      val _ = Futhark.Opaque.graph.free graph_fut
 
       val t3 = Time.now ()
 
