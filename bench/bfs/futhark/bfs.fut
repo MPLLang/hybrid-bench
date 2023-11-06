@@ -19,7 +19,7 @@ def remove_duplicates [k] n (queue: [k]tree_edge): []tree_edge =
     |> map (.0)
 
 
-def update_parents [n] (parents: *[n]vertex) (selected_edges: []tree_edge): *[n]vertex =
+def update_parents [n] [k] (parents: *[n]vertex) (selected_edges: [k]tree_edge): *[n]vertex =
   let qVerts = map (\q -> i64.i32 q.vertex) selected_edges
   let qParents = map (\q -> q.parent) selected_edges
   in scatter parents qVerts qParents
@@ -30,6 +30,12 @@ def vertex_degree [n] [m] (g: graph[n][m]) (v: vertex): i64 =
   in i64.i32 (extended[v + 1] - extended[v])
 
 
+def vertex_neighbors [n] [m] (g: graph[n][m]) (v: vertex): []vertex =
+  let lo = i64.i32 g.offsets[v]
+  let hi = lo + vertex_degree g v
+  in g.edges[lo:hi]
+
+
 def get_ith_neighbor_cancel_visited [n] [m] (g: graph[n][m]) is_visited (v: vertex) (i: i64) : tree_edge =
   let neighbor = g.edges[i64.i32 g.offsets[v] + i]
   in if !(is_visited neighbor)
@@ -37,10 +43,10 @@ def get_ith_neighbor_cancel_visited [n] [m] (g: graph[n][m]) is_visited (v: vert
   else {vertex = -1, parent = -1}
 
 
-def bfs_round [n] [m]
+def bfs_round_sparse [n] [m]
     (g: graph[n][m])
     (is_visited: vertex -> bool)
-    (frontier: []vertex) : (*[]tree_edge) =
+    (frontier: []vertex) : *[]tree_edge =
   let new_frontier = expand
     (\v -> vertex_degree g v)
     (\v i -> get_ith_neighbor_cancel_visited g is_visited v i)
@@ -50,13 +56,49 @@ def bfs_round [n] [m]
   in deduplicated_new_frontier
 
 
-def bfs_loop [n] [m] (g: graph[n][m]) (parents: *[n]vertex) (frontier: *[]vertex): [n]vertex =
+def bfs_round_dense [n] [m]
+    (g: graph [n][m])
+    (is_visited: vertex -> bool)
+    (frontier: []vertex) : *[]tree_edge =
+  let in_frontier =
+    scatter (replicate n false) (map i64.i32 frontier) (map (\_ -> true) frontier)
+  let select_edge_for_vertex v : tree_edge =
+    if is_visited v then {vertex = -1, parent = -1} else
+    let best_in_neighbor =
+      vertex_neighbors g v
+      |> map (\u -> if in_frontier[u] then u else -1i32)
+      |> reduce i32.max (-1i32)
+    in
+    {vertex = v, parent = best_in_neighbor}
+  
+  let es = tabulate n (\v -> select_edge_for_vertex (i32.i64 v))
+  let es: *[]tree_edge = filter (\e -> e.vertex != -1) es
+  in
+  es 
+
+
+def bfs_round [n] [m]
+    (g: graph[n][m])
+    (is_visited: vertex -> bool)
+    (frontier: []vertex) : *[]tree_edge =
+  -- let threshold = m / 20
+  -- let edges_count = reduce (+) 0 (map (vertex_degree g) frontier)
+  -- in 
+  -- if n + edges_count > threshold then
+  --   bfs_round_dense g is_visited frontier
+  -- else
+    bfs_round_sparse g is_visited frontier
+
+
+def bfs_loop [n] [m] (g: graph[n][m]) (parents: *[n]vertex) (frontier: []vertex): [n]vertex =
   let (parents, _) =
-    loop (parents: *[n]vertex, frontier)
+    loop (parents: *[n]vertex, frontier: []vertex)
     while length frontier > 0 do
-      let selected_edges = bfs_round g (\v -> parents[v] != -1) frontier
+      let selected_edges =
+        bfs_round g (\v -> parents[v] != -1) frontier
       let parents = update_parents parents selected_edges
-      in (parents, map (.vertex) selected_edges)
+      let frontier' = map (.vertex) selected_edges
+      in (parents, frontier')
   in parents
 
 
@@ -72,5 +114,11 @@ entry bfs [n] [m] (g: graph[n][m]) start =
 
 -- visited[v] = 0 if unvisited, 1 if already visited
 -- frontier = [v1, v2, ...]: vertices to expand now
-entry bfs_round_kernel [n] [m] (g: graph[n][m]) (visited: [n]u8) (frontier: []vertex) : []tree_edge = 
-  bfs_round g (\v -> visited[v] == 1) frontier
+
+entry bfs_round_sparse_kernel [n] [m] (g: graph[n][m]) (visited: [n]u8) (frontier: []vertex) : ([]vertex, []vertex) =
+  let selected_edges = bfs_round_sparse g (\v -> visited[v] == 1) frontier
+  in (map (.vertex) selected_edges, map (.parent) selected_edges)
+
+entry bfs_round_dense_kernel [n] [m] (g: graph[n][m]) (visited: [n]u8) (frontier: []vertex) : ([]vertex, []vertex) =
+  let selected_edges = bfs_round_dense g (\v -> visited[v] == 1) frontier
+  in (map (.vertex) selected_edges, map (.parent) selected_edges)
