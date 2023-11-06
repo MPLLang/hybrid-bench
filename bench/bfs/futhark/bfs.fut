@@ -61,32 +61,60 @@ def bfs_round_dense [n] [m]
     (is_visited: vertex -> bool)
     (frontier: []vertex) : *[]tree_edge =
   let in_frontier =
-    scatter (replicate n false) (map i64.i32 frontier) (map (\_ -> true) frontier)
+    spread n false (map i64.i32 frontier) (map (\_ -> true) frontier)
   let select_edge_for_vertex v : tree_edge =
-    if is_visited v then {vertex = -1, parent = -1} else
+    if is_visited v then {vertex = v, parent = -1} else
     let best_in_neighbor =
       vertex_neighbors g v
       |> map (\u -> if in_frontier[u] then u else -1i32)
       |> reduce i32.max (-1i32)
     in
     {vertex = v, parent = best_in_neighbor}
-  
-  let es = tabulate n (\v -> select_edge_for_vertex (i32.i64 v))
-  let es: *[]tree_edge = filter (\e -> e.vertex != -1) es
   in
-  es 
+  tabulate n (\v -> select_edge_for_vertex (i32.i64 v))
+  |> filter (\e -> e.parent != -1)
+
+
+
+-- -- this works, but is slow...
+-- def bfs_round_dense [n] [m]
+--     (g: graph[n][m])
+--     (is_visited: vertex -> bool)
+--     (frontier: []vertex) : *[]tree_edge =
+--   let in_frontier =
+--     spread n false (map i64.i32 frontier) (map (\_ -> true) frontier)
+--   let unvisited_nonisolated =
+--     filter (\v -> vertex_degree g v > 0 && !(is_visited v))
+--       (map i32.i64 (iota n))
+--   let count = length unvisited_nonisolated
+--   let unvisited_nonisolated = sized count unvisited_nonisolated
+--   let parents =
+--     expand_reduce
+--       (\v -> vertex_degree g v)
+--       (\v i ->
+--         let neighbor = g.edges[i64.i32 g.offsets[v] + i]
+--         in
+--         if in_frontier[neighbor] then neighbor else -1i32)
+--       i32.max
+--       (-1i32)
+--       unvisited_nonisolated
+--   let parents = sized count parents
+--   in
+--   zip unvisited_nonisolated parents
+--   |> map (\(v,p) -> {vertex = v, parent = p})
+--   |> filter (\e -> e.parent != -1)
 
 
 def bfs_round [n] [m]
     (g: graph[n][m])
     (is_visited: vertex -> bool)
     (frontier: []vertex) : *[]tree_edge =
-  -- let threshold = m / 20
-  -- let edges_count = reduce (+) 0 (map (vertex_degree g) frontier)
-  -- in 
-  -- if n + edges_count > threshold then
-  --   bfs_round_dense g is_visited frontier
-  -- else
+  let threshold = m / 4
+  let edges_count = reduce (+) 0 (map (vertex_degree g) frontier)
+  in 
+  if n + edges_count > threshold then
+    bfs_round_dense g is_visited frontier
+  else
     bfs_round_sparse g is_visited frontier
 
 
