@@ -1,1 +1,8 @@
 futhark/lib/
+futhark/bfs.c
+futhark/bfs.h
+futhark/bfs.json
+futhark/bfs.sig
+futhark/bfs.sml
+futhark/bfs.smlfut.c
+futhark.cache

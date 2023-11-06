@@ -54,7 +54,7 @@ def bfs_round [n] [m]
   in (update_parents parents deduplicated_new_frontier, deduplicated_new_frontier)
 
 
-def BFS [nVerts] [nEdges] (verts: [nVerts]i32) (edges: [nEdges]i32) (parents: *[nVerts]i32) (queue: *[]queuePair): [nVerts]i32 =
+def bfs_loop [nVerts] [nEdges] (verts: [nVerts]i32) (edges: [nEdges]i32) (parents: *[nVerts]i32) (queue: *[]queuePair): [nVerts]i32 =
   -- Loop until we get an empty queue
   let (parents, _) =
     loop (parents, queue)
@@ -67,9 +67,9 @@ def BFS [nVerts] [nEdges] (verts: [nVerts]i32) (edges: [nEdges]i32) (parents: *[
 
 
 
-def main [nVerts] [nEdges] (vertexes_enc: [nVerts]i32) (edges_enc: [nEdges]i32) start =
+entry bfs [nVerts] [nEdges] (vertexes_enc: [nVerts]i32) (edges_enc: [nEdges]i32) start =
   let parents = replicate nVerts (-1)
   let queue = [{vertex = start, parent = start}]
   let parents = update_parents parents queue
 
-  in BFS vertexes_enc edges_enc parents queue
+  in bfs_loop vertexes_enc edges_enc parents queue
