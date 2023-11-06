@@ -118,7 +118,7 @@ struct
   fun newCentroidsChunked (centroidsChunk: (int * int * Points.t -> Points.t)) n
     centroids =
     let
-      val chunk_size = 10000
+      val chunk_size = 100000
       val d = Points.dims centroids
       val k = Points.length centroids
       val num_chunks = (n + chunk_size - 1) div chunk_size

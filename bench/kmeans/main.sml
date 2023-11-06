@@ -63,7 +63,7 @@ val bench =
   | "hybrid" =>
       (fn () =>
          let
-           fun centroidsChunk (start, len, centroids) =
+           fun centroidsChunkGPU (start, len, centroids) =
              let
                val centroids_fut =
                  Futhark.Real64Array2.new ctx (Points.toSeq centroids)
@@ -82,6 +82,11 @@ val bench =
                before Futhark.Real64Array2.free centroids_fut
                before Futhark.Real64Array2.free new_centroids_fut
              end
+           fun centroidsChunk arg =
+             ForkJoin.choice
+               { prefer_cpu = fn () => Kmeans.centroidsChunkCPU points arg
+               , prefer_gpu = fn () => centroidsChunkGPU arg
+               }
          in
            Kmeans.kmeansHybrid centroidsChunk k max_iterations points
          end)
