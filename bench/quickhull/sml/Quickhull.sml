@@ -178,6 +178,7 @@ struct
     in
       ArraySlice.full res
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun points_above_gpu ctx (points_fut, idxs, l, r) =
@@ -190,6 +191,7 @@ struct
     in
       ArraySlice.full res
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun top_level_filter_then_semihull_gpu ctx (points_fut, l, r) =
@@ -201,6 +203,7 @@ struct
     in
       Tree.fromArraySeq (ArraySlice.full res)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun filter_then_semihull_gpu ctx (points_fut, l, r, idxs) =
@@ -214,6 +217,7 @@ struct
     in
       Tree.fromArraySeq (ArraySlice.full res)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun semihull_gpu ctx (points_fut, idxs, l, r) =
@@ -226,6 +230,7 @@ struct
     in
       Tree.fromArraySeq (ArraySlice.full res)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun min_max_point_in_range_gpu ctx (points_fut, lo, hi) =
@@ -236,6 +241,7 @@ struct
     in
       (min, max)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun point_furthest_from_line_gpu ctx (points_fut, l, r, idxs) : Int32.int =
@@ -247,6 +253,7 @@ struct
     in
       i
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun hull_gpu ctx points_fut =
@@ -257,6 +264,7 @@ struct
     in
       Seq.fromArraySeq (ArraySlice.full res)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   (* ========================================================================

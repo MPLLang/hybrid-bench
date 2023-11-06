@@ -20,7 +20,7 @@ struct
     in
       ArraySlice.full sorted
     end
-    handle FutharkSort.error msg => Util.die ("Futhark error: " ^ msg)
+    handle FutharkSort.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   val sort_gpu = fn ctx =>

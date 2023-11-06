@@ -19,6 +19,7 @@ struct
          ^ "+" ^ Time.fmt 4 (Time.- (t2, t1)) ^ "s\n");
       output
     end
+    handle FutharkPrimes.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   (* ==========================================================================
