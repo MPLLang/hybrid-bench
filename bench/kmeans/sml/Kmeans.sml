@@ -1,3 +1,42 @@
+(*
+
+K-means clustering is based on maintaining two data structures:
+
+The points: an array of n d-dimensional points. Constant throughout
+the algorithm.
+
+The centroids: an array of k d-dimensional points. Changes
+repeatedly.
+
+The algorithm proceeds as follows:
+
+  1. Assign initial arbitrary centroids (the first 'k' points is a
+     good start).
+
+  2. Compute new centroids:
+
+    2a. For each point, determine the index of the closest centroid.
+
+    2b. For each centroid index, find the points that are closest to
+        that, and compute their mean. This is essentially a kind of
+        histogram, and produces a new array of centroids.
+
+  3. Repeat steps 2-3 until some convergence criterion is reached.
+
+As 'k' is usually much less than 'n', the trick that allows efficient
+hybridization is to keep the points on both the CPU and GPU at all
+times, and only pass the much smaller centroids array around.
+Specifically, in step 2 we divide the points into an arbitrary number
+of chunks, compute the centroids for each chunk separately, then
+combine them at the end. (This works because the centroids are just
+averages, and computing an average is a near-homomorphism.)
+
+The algorithm has some reasonable assumptions: there are no duplicate
+points, and no clusters are ever empty. (The last is guaranteed by
+initialising the centroids to be specific points.)
+
+*)
+
 structure Kmeans:
 sig
   val centroidsChunkCPU: Points.t -> int * int * Points.t -> Points.t
