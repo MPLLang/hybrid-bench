@@ -625,9 +625,9 @@ for tag in orderedTags:
   thisRow = [displayTag(tag)] + [str(x) if x is not None else "--" for x in thisRow]
   tt.append(thisRow)
 
-print("RESULTS")
-print(table(tt, defaultAlign))
-print("")
+# print("RESULTS")
+# print(table(tt, defaultAlign))
+# print("")
 
 # ============================================================================
 # LaTeX figure: main comparison table
@@ -876,6 +876,7 @@ speedupPlot("figures/sort-speedups.pdf", "mergesort")
 speedupPlot("figures/interval-tree-speedups.pdf", "interval-tree")
 speedupPlot("figures/primes-speedups.pdf", "new-primes")
 speedupPlot("figures/quickhull-speedups.pdf", "quickhull")
+speedupPlot("figures/bfs-speedups.pdf", "bfs")
 
 # ============================================================================
 # ============================================================================
