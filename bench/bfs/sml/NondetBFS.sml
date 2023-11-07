@@ -32,7 +32,7 @@ struct
    * gpu-only
    *)
 
-  fun bfs_gpu ctx (g: G.graph) (s: vertex) =
+  fun bfs_gpu ctx {diropt} (g: G.graph) (s: vertex) =
     let
       val (offsets, _, edges) = g
       val n = G.numVertices g
@@ -48,7 +48,8 @@ struct
 
       val t1 = Time.now ()
 
-      val parents_fut = Futhark.Entry.bfs ctx (graph_fut, s)
+      val parents_fut = Futhark.Entry.bfs ctx
+        (if diropt then 0w1 else 0w0, graph_fut, s)
 
       val t2 = Time.now ()
 
@@ -224,5 +225,12 @@ struct
     in
       ArraySlice.full parent
     end
+
+  (* =========================================================================
+   * hybrid
+   *)
+
+  fun bfs_hybrid ctx {diropt: bool} (g: G.graph) (s: vertex) =
+    raise Fail "NondetBFS.bfs_hybrid: not yet implemented"
 
 end

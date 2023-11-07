@@ -106,24 +106,28 @@ def bfs_round_dense [n] [m]
 
 
 def bfs_round [n] [m]
+    (do_diropt: bool)
     (g: graph[n][m])
     (is_visited: vertex -> bool)
     (frontier: []vertex) : *[]tree_edge =
-  let threshold = m / 4
-  let edges_count = reduce (+) 0 (map (vertex_degree g) frontier)
-  in 
-  if n + edges_count > threshold then
+  let above_threshold () =
+    let threshold = m / 4
+    let edges_count = reduce (+) 0 (map (vertex_degree g) frontier)
+    in 
+    n + edges_count > threshold
+  in
+  if do_diropt && above_threshold () then
     bfs_round_dense g is_visited frontier
   else
     bfs_round_sparse g is_visited frontier
 
 
-def bfs_loop [n] [m] (g: graph[n][m]) (parents: *[n]vertex) (frontier: []vertex): [n]vertex =
+def bfs_loop [n] [m] (do_diropt: bool) (g: graph[n][m]) (parents: *[n]vertex) (frontier: []vertex): [n]vertex =
   let (parents, _) =
     loop (parents: *[n]vertex, frontier: []vertex)
     while length frontier > 0 do
       let selected_edges =
-        bfs_round g (\v -> parents[v] != -1) frontier
+        bfs_round do_diropt g (\v -> parents[v] != -1) frontier
       let parents = update_parents parents selected_edges
       let frontier' = map (.vertex) selected_edges
       in (parents, frontier')
@@ -134,10 +138,11 @@ def bfs_loop [n] [m] (g: graph[n][m]) (parents: *[n]vertex) (frontier: []vertex)
 
 
 
-entry bfs [n] [m] (g: graph[n][m]) start =
+-- do_diropt is 1/0 for do/don't direction-optimize
+entry bfs [n] [m] (do_diropt: u8) (g: graph[n][m]) start =
   let parents = replicate n (-1)
   let parents = parents with [start] = start
-  in bfs_loop g parents [start]
+  in bfs_loop (do_diropt == 1) g parents [start]
 
 
 -- visited[v] = 0 if unvisited, 1 if already visited

@@ -18,7 +18,8 @@ val () = print "Done!\n"
 val do_bfs =
   case impl of
     "cpu" => (fn g => fn s => BFS.bfs_cpu {diropt = diropt} g s)
-  | "gpu" => (fn g => fn s => BFS.bfs_gpu ctx g s)
+  | "gpu" => (fn g => fn s => BFS.bfs_gpu ctx {diropt = diropt} g s)
+  | "hybrid" => (fn g => fn s => BFS.bfs_hybrid ctx {diropt = diropt} g s)
   | _ => Util.die ("unknown impl: " ^ impl ^ "\n")
 
 (*
