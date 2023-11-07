@@ -27,9 +27,10 @@ As 'k' is usually much less than 'n', the trick that allows efficient
 hybridization is to keep the points on both the CPU and GPU at all
 times, and only pass the much smaller centroids array around.
 Specifically, in step 2 we divide the points into an arbitrary number
-of chunks, compute the centroids for each chunk separately, then
-combine them at the end. (This works because the centroids are just
-averages, and computing an average is a near-homomorphism.)
+of chunks (this can be done by communicating just a start index and
+length), compute the centroids for each chunk separately, then combine
+them at the end. (This works because the centroids are just averages,
+and computing an average is a near-homomorphism.)
 
 The algorithm has some reasonable assumptions: there are no duplicate
 points, and no clusters are ever empty. (The last is guaranteed by
