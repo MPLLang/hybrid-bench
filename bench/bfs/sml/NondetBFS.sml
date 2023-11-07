@@ -243,8 +243,16 @@ struct
      ^ "\n")
 
 
-  val bfs_hybrid_split = CommandLineArgs.parseReal "bfs-hybrid-split" 0.3
-  val _ = print ("bfs-hybrid-split " ^ Real.toString bfs_hybrid_split ^ "\n")
+  val bfs_dense_hybrid_split =
+    CommandLineArgs.parseReal "bfs-dense-hybrid-split" 0.3
+  val _ = print
+    ("bfs-dense-hybrid-split " ^ Real.toString bfs_dense_hybrid_split ^ "\n")
+
+
+  val bfs_sparse_hybrid_split =
+    CommandLineArgs.parseReal "bfs-sparse-hybrid-split" 0.3
+  val _ = print
+    ("bfs-sparse-hybrid-split " ^ Real.toString bfs_sparse_hybrid_split ^ "\n")
 
 
   fun bfs_hybrid ctx {diropt: bool} (g: G.graph, g_fut: Futhark.Opaque.graph.t)
@@ -327,7 +335,8 @@ struct
               end
 
           val nextFrontier =
-            HybridBasis.filter_hybrid_with_cleanup bfs_hybrid_split 10000 (0, n)
+            HybridBasis.filter_hybrid_with_cleanup bfs_dense_hybrid_split 10000
+              (0, n)
               ( fn v => itov v
 
               , fn v => keep_vertex v
@@ -436,13 +445,28 @@ struct
 
 
           fun loop i j =
-            if j - i = 0 then
+            if
+              j - i = 0
+            then
               ()
-            else if j - i = 1 then
+
+            else if
+              j - i = 1
+            then
               visitMany i (sub (offsets, i)) (sub (offsets, i + 1))
+
+            else if
+              (j - i < 10000
+               andalso sub (offsets, j) - sub (offsets, i) < 100000)
+            then
+              ForkJoin.parfor 100 (i, j) (fn k =>
+                visitMany k (sub (offsets, k)) (sub (offsets, k + 1)))
+
             else
               let
-                val mid = i + (j - i) div 2
+                val mid =
+                  i
+                  + Real.floor (Real.fromInt (j - i) * bfs_sparse_hybrid_split)
               in
                 ForkJoin.par (fn _ => loop_choose i mid, fn _ => loop mid j);
                 ()
@@ -453,7 +477,7 @@ struct
               val choice_result =
                 if
                   (j - i < 10000
-                   andalso sub (offsets, j) - sub (offsets, i) < 10000)
+                   andalso sub (offsets, j) - sub (offsets, i) < 100000)
                 then
                   (loop i j; NONE)
                 else
