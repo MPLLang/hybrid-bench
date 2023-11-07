@@ -2,6 +2,7 @@
 
 sml/ParseFile.sml
 sml/Points.sml
+sml/Hist.sml
 sml/Kmeans.sml
 
 futhark/kmeans.sig

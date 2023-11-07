@@ -48,6 +48,7 @@ val points_fut = futharkPoints points
 val bench =
   case impl of
     "cpu" => (fn () => Kmeans.kmeans k max_iterations points)
+  | "cpu-alternate" => (fn () => Kmeans.kmeans' k max_iterations points)
   | "gpu" =>
       (fn () =>
          let

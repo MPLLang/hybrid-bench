@@ -47,6 +47,7 @@ sig
                     -> Points.t
                     -> int * Points.t
   val kmeans: int -> int -> Points.t -> int * Points.t
+  val kmeans': int -> int -> Points.t -> int * Points.t
 end =
 struct
   fun distance x y =
@@ -140,6 +141,36 @@ struct
       in
         Points.fromSeq d (Seq.fromArraySeq (ArraySlice.full cluster_means))
       end
+
+
+    fun centroidsOf' points k membership =
+      let
+        val d = Points.dims points
+        val n = Points.length points
+
+        val cluster_counts =
+          Hist.hist 5000 {combine = op+, neutral = 0, num_bins = k}
+            {lo = 0, hi = n, get_bin = Seq.nth membership, get_elem = fn _ => 1}
+
+        val cluster_sums: (real Seq.t) Seq.t =
+          Hist.hist 100
+            { combine = Seq.zipWith Real.+
+            , neutral = Seq.tabulate (fn _ => 0.0) d
+            , num_bins = k
+            }
+            { lo = 0
+            , hi = n
+            , get_bin = Seq.nth membership
+            , get_elem = Points.nth points
+            }
+
+        val cluster_means =
+          Seq.zipWith (fn (count, sum) => Seq.map (fn r => r / real count) sum)
+            (cluster_counts, cluster_sums)
+      in
+        Points.fromSeq d (Seq.flatten cluster_means)
+      end
+
   in
     (* This function is completely sequential, but you can apply it to
     different chunks of the input and combine the partial results, as
@@ -152,6 +183,16 @@ struct
           Seq.tabulate (findNearestPoint points centroids) num_points
       in
         centroidsOf points k new_membership
+      end
+
+    fun newCentroids' points centroids =
+      let
+        val k = Points.length centroids
+        val num_points = Points.length points
+        val new_membership =
+          Seq.tabulate (findNearestPoint points centroids) num_points
+      in
+        centroidsOf' points k new_membership
       end
   end
 
@@ -209,4 +250,25 @@ struct
 
   fun kmeans k max_iterations points =
     kmeansHybrid (centroidsChunkCPU points) k max_iterations points
+
+
+  fun kmeans' k max_iterations points =
+    let
+      fun loop centroids i =
+        if i >= max_iterations then
+          (i, centroids)
+        else
+          let
+            (* val _ = print ("iteration " ^ Int.toString i ^ "\n") *)
+            val centroids' = newCentroids' points centroids
+          in
+            if
+              Seq.equal closeEnough
+                (Points.toSeq centroids, Points.toSeq centroids')
+            then (i + 1, centroids')
+            else loop centroids' (i + 1)
+          end
+    in
+      loop (Points.take points k) 0
+    end
 end
