@@ -56,6 +56,9 @@ def bfs_round_sparse [n] [m]
   in deduplicated_new_frontier
 
 
+-- NOTE: this only works if the graph is undirected and symmetrized. In general,
+-- we would need to use the in-neighbors of every vertex. In a symmetrized
+-- graph, the in-neighbors and out-neighbors of every vertex are the same.
 def bfs_round_dense [n] [m]
     (g: graph [n][m])
     (is_visited: vertex -> bool)
