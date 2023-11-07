@@ -244,13 +244,13 @@ struct
 
 
   val bfs_dense_hybrid_split =
-    CommandLineArgs.parseReal "bfs-dense-hybrid-split" 0.3
+    CommandLineArgs.parseReal "bfs-dense-hybrid-split" 0.25
   val _ = print
     ("bfs-dense-hybrid-split " ^ Real.toString bfs_dense_hybrid_split ^ "\n")
 
 
   val bfs_sparse_hybrid_split =
-    CommandLineArgs.parseReal "bfs-sparse-hybrid-split" 0.3
+    CommandLineArgs.parseReal "bfs-sparse-hybrid-split" 0.2
   val _ = print
     ("bfs-sparse-hybrid-split " ^ Real.toString bfs_sparse_hybrid_split ^ "\n")
 
