@@ -15,13 +15,6 @@ val ctx = Futhark.Context.new
   (Futhark.Config.cache (SOME "futhark.cache") Futhark.Config.default)
 val () = print "Done!\n"
 
-val do_bfs =
-  case impl of
-    "cpu" => (fn g => fn s => BFS.bfs_cpu {diropt = diropt} g s)
-  | "gpu" => (fn g => fn s => BFS.bfs_gpu ctx {diropt = diropt} g s)
-  | "hybrid" => (fn g => fn s => BFS.bfs_hybrid ctx {diropt = diropt} g s)
-  | _ => Util.die ("unknown impl: " ^ impl ^ "\n")
-
 (*
 val N = CLA.parseInt "N" 10000000
 val D = CLA.parseInt "D" 10
@@ -40,6 +33,29 @@ val filename =
 val (graph, tm) = Util.getTime (fn _ => G.parseFile filename)
 val _ = print ("num vertices: " ^ Int.toString (G.numVertices graph) ^ "\n")
 val _ = print ("num edges: " ^ Int.toString (G.numEdges graph) ^ "\n")
+
+val ((graph_fut, free_graph_fut), tm) = Util.getTime (fn _ =>
+  let
+    val (offsets, _, edges) = graph
+    val n = G.numVertices graph
+    val m = G.numEdges graph
+
+    val offsets_i32 = Seq.map Int32.fromInt offsets
+    val offsets_fut = Futhark.Int32Array1.new ctx offsets_i32 n
+    val edges_fut = Futhark.Int32Array1.new ctx edges m
+    val graph_fut =
+      Futhark.Opaque.graph.new ctx {offsets = offsets_fut, edges = edges_fut}
+
+    fun free () =
+      ( Futhark.Int32Array1.free offsets_fut
+      ; Futhark.Int32Array1.free edges_fut
+      ; Futhark.Opaque.graph.free graph_fut
+      )
+  in
+    (graph_fut, free)
+  end)
+val _ = print ("futhark loaded graph in " ^ Time.fmt 4 tm ^ "s\n")
+
 
 val _ =
   if not diropt then
@@ -60,8 +76,24 @@ val _ =
       ()
     end
 
-val P: G.vertex Seq.t = Benchmark.run "running bfs" (fn _ =>
-  do_bfs graph (G.Vertex.fromInt source))
+
+val do_bfs =
+  let
+    val s = G.Vertex.fromInt source
+  in
+    case impl of
+      "cpu" => (fn () => BFS.bfs_cpu {diropt = diropt} graph s)
+    | "gpu" =>
+        (fn () =>
+           BFS.bfs_gpu ctx {diropt = diropt}
+             (G.numVertices graph, G.numEdges graph, graph_fut) s)
+    | "hybrid" =>
+        (fn () => BFS.bfs_hybrid ctx {diropt = diropt} (graph, graph_fut) s)
+    | _ => Util.die ("unknown impl: " ^ impl ^ "\n")
+  end
+
+
+val P: G.vertex Seq.t = Benchmark.run "running bfs" (fn _ => do_bfs ())
 
 val numVisited = SeqBasis.reduce 10000 op+ 0 (0, Seq.length P) (fn i =>
   if Seq.nth P i >= 0 then 1 else 0)
@@ -98,3 +130,6 @@ fun check () =
   end
 
 val _ = if doCheck then check () else ()
+
+val _ = free_graph_fut ()
+val _ = Futhark.Context.free ctx
