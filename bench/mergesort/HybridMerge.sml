@@ -20,6 +20,7 @@ struct
     in
       ()
     end
+    handle FutharkSort.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   val write_merge_gpu = fn ctx =>

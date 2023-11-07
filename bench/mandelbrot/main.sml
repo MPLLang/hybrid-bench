@@ -99,7 +99,7 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
     val rows = ForkJoin.alloc h
     fun putRow y row = Array.update (rows, y, row)
 
-    fun cpuRow y () =
+    fun do_cpu_row y =
       putRow y
         (ArraySlice.full (SeqBasis.tabulate 100 (0, numBytesPerRow) (fn b =>
            let
@@ -110,7 +110,7 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
              byte
            end)))
 
-    fun gpuRows ylo yhi =
+    fun do_gpu_rows (ylo, yhi) =
       let
         val outputArr = FutMandelbrot.mandelbrot ctx ylo yhi 0 numBytesPerRow
         fun slice i =
@@ -118,26 +118,9 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
       in
         ForkJoin.parfor 1000 (0, yhi - ylo) (fn i => putRow (ylo + i) (slice i))
       end
-
-    fun loop ylo yhi =
-      if yhi - ylo = 1 then
-        cpuRow ylo ()
-      (* ForkJoin.choice {cpu = cpuRow ylo, gpu = gpuRows ylo (ylo + 1)} *)
-      else
-        let val ymid = ylo + (yhi - ylo) div 2
-        in ForkJoin.par (fn _ => loopChoose ylo ymid, fn _ => loop ymid yhi); ()
-        end
-
-    and loopChoose ylo yhi =
-      if yhi - ylo < 10 then
-        loop ylo yhi
-      else
-        ForkJoin.choice
-          { prefer_cpu = fn () => loop ylo yhi
-          , prefer_gpu = fn () => gpuRows ylo yhi
-          }
   in
-    loop 0 h;
+    HybridBasis.parfor_hybrid 0.5 10 (0, h) (do_cpu_row, do_gpu_rows);
+
     ArraySlice.full rows
   end
 

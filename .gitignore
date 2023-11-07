@@ -4,3 +4,4 @@
 objs/*
 *.o
 main.mpl.bin
+futhark.cache

@@ -178,6 +178,7 @@ struct
     in
       ArraySlice.full res
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun points_above_gpu ctx (points_fut, idxs, l, r) =
@@ -190,6 +191,7 @@ struct
     in
       ArraySlice.full res
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun top_level_filter_then_semihull_gpu ctx (points_fut, l, r) =
@@ -201,6 +203,7 @@ struct
     in
       Tree.fromArraySeq (ArraySlice.full res)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun filter_then_semihull_gpu ctx (points_fut, l, r, idxs) =
@@ -214,6 +217,7 @@ struct
     in
       Tree.fromArraySeq (ArraySlice.full res)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun semihull_gpu ctx (points_fut, idxs, l, r) =
@@ -226,6 +230,7 @@ struct
     in
       Tree.fromArraySeq (ArraySlice.full res)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun min_max_point_in_range_gpu ctx (points_fut, lo, hi) =
@@ -236,6 +241,7 @@ struct
     in
       (min, max)
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun point_furthest_from_line_gpu ctx (points_fut, l, r, idxs) : Int32.int =
@@ -247,6 +253,7 @@ struct
     in
       i
     end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   fun hull_gpu ctx points_fut =
@@ -257,112 +264,7 @@ struct
     in
       Seq.fromArraySeq (ArraySlice.full res)
     end
-
-
-  (* ========================================================================
-   * hybrid utilities
-   *)
-
-
-  fun reduce_hybrid grain combine z (lo, hi) (f, g) =
-    let
-      fun base lo hi =
-        SeqBasis.reduce grain combine z (lo, hi) f
-
-      fun loop lo hi =
-        if hi - lo <= grain then
-          ForkJoin.choice
-            {prefer_cpu = fn _ => base lo hi, prefer_gpu = fn _ => g (lo, hi)}
-        else
-          let
-            val mid = lo + (hi - lo) div 2
-          in
-            combine (ForkJoin.par (fn _ => loop_choose lo mid, fn _ =>
-              loop mid hi))
-          end
-
-      and loop_choose lo hi =
-        ForkJoin.choice
-          {prefer_cpu = fn _ => loop lo hi, prefer_gpu = fn _ => g (lo, hi)}
-    in
-      loop lo hi
-    end
-
-
-  fun tabulate_hybrid grain (lo, hi) (f, g) =
-    let
-      val data = ForkJoin.alloc (hi - lo)
-
-      fun gpu i j =
-        g (lo + i, lo + j, ArraySlice.slice (data, i, SOME (j - i)))
-
-      fun loop i j =
-        if j - i <= grain then
-          ForkJoin.choice
-            { prefer_cpu = fn _ =>
-                Util.for (i, j) (fn k => Array.update (data, k, f (lo + k)))
-            , prefer_gpu = fn _ => gpu i j
-            }
-        else
-          let val mid = i + (j - i) div 2
-          in ForkJoin.par (fn _ => loop_choose i mid, fn _ => loop mid j); ()
-          end
-
-      and loop_choose i j =
-        ForkJoin.choice
-          {prefer_cpu = fn _ => loop i j, prefer_gpu = fn _ => gpu i j}
-    in
-      loop 0 (hi - lo);
-      ArraySlice.full data
-    end
-
-
-  fun filter_hybrid grain (lo, hi)
-    (f_elem: int -> 'a, f_keep: int -> bool, g: (int * int) -> 'a Seq.t) =
-    let
-      val n = hi - lo
-
-      fun gpu i j =
-        Tree.fromArraySeq (g (i, j))
-
-      fun base i j =
-        let
-          val flags: Word8.word array = ForkJoin.alloc (j - i)
-          val num_keep = Util.loop (0, j - i) 0 (fn (count, k) =>
-            if f_keep (i + k) then (Array.update (flags, k, 0w1); count + 1)
-            else (Array.update (flags, k, 0w0); count))
-          val output: 'a array = ForkJoin.alloc num_keep
-        in
-          Util.loop (0, j - i) 0 (fn (count, k) =>
-            if Array.sub (flags, k) = 0w0 then count
-            else (Array.update (output, count, f_elem (i + k)); count + 1));
-
-          Tree.fromArraySeq (ArraySlice.full output)
-        end
-
-      fun loop i j =
-        if j - i <= grain then
-          ForkJoin.choice
-            {prefer_cpu = fn _ => base i j, prefer_gpu = fn _ => gpu i j}
-        else
-          let
-            val mid = i + (j - i) div 2
-          in
-            Tree.append (ForkJoin.par (fn _ => loop_choose i mid, fn _ =>
-              loop mid j))
-          end
-
-      and loop_choose i j =
-        ForkJoin.choice
-          {prefer_cpu = fn _ => loop i j, prefer_gpu = fn _ => gpu i j}
-    in
-      (* TODO (maybe): use Tree.toBlocks here instead? This would avoid the
-       * full copy for Tree.toArraySeq. But, it's not so straightforward,
-       * because eventually we would need to copy to the GPU at which point
-       * we would need to flatten anyway. Hmmm....
-       *)
-      Tree.toArraySeq (loop lo hi)
-    end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
   (* ========================================================================
@@ -401,7 +303,8 @@ struct
               dist lp rp i
 
             val (mid, _) =
-              reduce_hybrid 5000 max (~1, Real.negInf) (0, Seq.length idxs)
+              HybridBasis.reduce_hybrid 0.5 5000 max (~1, Real.negInf)
+                (0, Seq.length idxs)
                 ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
                 , fn (lo, hi) =>
                     let
@@ -441,7 +344,7 @@ struct
           val rp = pt r
 
           val idxs' =
-            filter_hybrid 5000 (0, Seq.length idxs)
+            HybridBasis.filter_hybrid 0.5 5000 (0, Seq.length idxs)
               ( fn i => Seq.nth idxs i
               , fn i => aboveLine lp rp (Seq.nth idxs i)
               , fn (lo, hi) =>
@@ -472,7 +375,7 @@ struct
           val tm = startTiming ()
 
           val above =
-            filter_hybrid 5000 (0, FlatPointSeq.length pts)
+            HybridBasis.filter_hybrid 0.5 5000 (0, FlatPointSeq.length pts)
               ( fn i => Int32.fromInt i
               , fn i => dist lp rp (Int32.fromInt i) > 0.0
               , fn (lo, hi) =>
@@ -500,7 +403,8 @@ struct
       val tm = startTiming ()
 
       val (l, r) =
-        reduce_hybrid 5000 minmax (0, 0) (0, FlatPointSeq.length pts)
+        HybridBasis.reduce_hybrid 0.5 5000 minmax (0, 0)
+          (0, FlatPointSeq.length pts)
           ( fn i => (Int32.fromInt i, Int32.fromInt i)
           , fn (lo, hi) => min_max_point_in_range_gpu ctx (points_fut, lo, hi)
           )
