@@ -387,19 +387,10 @@ struct
         FutRay.render ctx fut_prepared_scene (ArraySlice.slice
           (pixels, lo, SOME (hi - lo)))
 
-      fun loop lo hi =
-        if hi - lo <= 2000 then
-          ForkJoin.parfor 100 (lo, hi) writePixel
-        else
-          let val mid = calculateMid lo hi
-          in ForkJoin.par (fn _ => loopChoose lo mid, fn _ => loop mid hi); ()
-          end
-
-      and loopChoose lo hi =
-        ForkJoin.choice
-          {prefer_cpu = fn _ => loop lo hi, prefer_gpu = fn _ => gpuTask lo hi}
     in
-      loop 0 (height * width);
+      HybridBasis.parfor_hybrid renderHybridGpuSplit 2000 (0, height * width)
+        (writePixel, fn (lo, hi) => gpuTask lo hi);
+
       {width = width, height = height, pixels = pixels}
     end
 
