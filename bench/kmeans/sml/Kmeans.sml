@@ -66,7 +66,7 @@ struct
   much anymore. *)
   val tolerance = 0.001
   fun closeEnough (x, y) =
-    Real.abs (x - y) < tolerance
+    Real.abs (x - y) <= Real.abs (x * tolerance)
 
   local
     fun findNearestPoint points centroids point_i =
