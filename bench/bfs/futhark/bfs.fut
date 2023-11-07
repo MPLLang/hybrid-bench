@@ -155,6 +155,24 @@ entry bfs_round_sparse_kernel [n] [m] (g: graph[n][m]) (visited: [n]u8) (frontie
   let selected_edges = bfs_round_sparse g (\v -> visited[v] == 1) frontier
   in (map (.vertex) selected_edges, map (.parent) selected_edges)
 
-entry bfs_round_dense_kernel [n] [m] (g: graph[n][m]) (visited: [n]u8) (frontier: []vertex) : ([]vertex, []vertex) =
-  let selected_edges = bfs_round_dense g (\v -> visited[v] == 1) frontier
+-- state[v] = 0 if unvisited
+--            1 if visited in a previous round
+--            2 if in the current frontier
+entry bfs_round_dense_kernel [n] [m] (g: graph[n][m]) (state: [n]u8) (vlo: i32) (vhi: i32) : ([]vertex, []vertex) =
+  let is_visited v = state[v] != 0
+  let in_frontier v = state[v] == 2
+
+  let select_edge_for_vertex (v: vertex) : tree_edge =
+    if is_visited v then {vertex = v, parent = -1} else
+    let best_in_neighbor =
+      vertex_neighbors g v
+      |> map (\u -> if in_frontier u then u else -1i32)
+      |> reduce i32.max (-1i32)
+    in
+    {vertex = v, parent = best_in_neighbor}
+  
+  let selected_edges =
+    map select_edge_for_vertex (vlo...(vhi-1))
+    |> filter (\e -> e.parent != -1)
+
   in (map (.vertex) selected_edges, map (.parent) selected_edges)

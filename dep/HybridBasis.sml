@@ -126,4 +126,66 @@ struct
       TreeSeq.toArraySeq (loop lo hi)
     end
 
+
+  fun filter_hybrid_with_cleanup split grain (lo, hi)
+    ( f_elem: int -> 'a
+    , f_keep: int -> bool
+    , g: (int * int) -> 'b
+    , g_cleanup: 'b -> 'a Seq.t
+    ) =
+    let
+      datatype choice_result = CpuResult of 'a TreeSeq.t | GpuResult of 'b
+
+      fun fixup choice_result =
+        case choice_result of
+          CpuResult t => t
+        | GpuResult xx => TreeSeq.fromArraySeq (g_cleanup xx)
+
+      val n = hi - lo
+
+      fun gpu i j = g (i, j)
+
+      fun base i j =
+        let
+          val flags: Word8.word array = ForkJoin.alloc (j - i)
+          val num_keep = Util.loop (0, j - i) 0 (fn (count, k) =>
+            if f_keep (i + k) then (Array.update (flags, k, 0w1); count + 1)
+            else (Array.update (flags, k, 0w0); count))
+          val output: 'a array = ForkJoin.alloc num_keep
+        in
+          Util.loop (0, j - i) 0 (fn (count, k) =>
+            if Array.sub (flags, k) = 0w0 then count
+            else (Array.update (output, count, f_elem (i + k)); count + 1));
+
+          TreeSeq.fromArraySeq (ArraySlice.full output)
+        end
+
+      fun loop i j =
+        if j - i <= grain then
+          fixup (ForkJoin.choice
+            { prefer_cpu = fn _ => CpuResult (base i j)
+            , prefer_gpu = fn _ => GpuResult (gpu i j)
+            })
+        else
+          let
+            val mid = compute_mid split i j
+          in
+            TreeSeq.append (ForkJoin.par (fn _ => loop_choose i mid, fn _ =>
+              loop mid j))
+          end
+
+      and loop_choose i j =
+        fixup (ForkJoin.choice
+          { prefer_cpu = fn _ => CpuResult (loop i j)
+          , prefer_gpu = fn _ => GpuResult (gpu i j)
+          })
+    in
+      (* TODO (maybe): use TreeSeq.toBlocks here instead? This would avoid the
+       * full copy for TreeSeq.toArraySeq. But, it's not so straightforward,
+       * because eventually we would need to copy to the GPU at which point
+       * we would need to flatten anyway. Hmmm....
+       *)
+      TreeSeq.toArraySeq (loop lo hi)
+    end
+
 end

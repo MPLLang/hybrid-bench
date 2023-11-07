@@ -74,6 +74,10 @@ struct
    * cpu-only
    *)
 
+  val bfs_dense_threshold = CommandLineArgs.parseReal "bfs-dense-threshold" 0.2
+  val _ = print
+    ("bfs-dense-threshold " ^ Real.toString bfs_dense_threshold ^ "\n")
+
   fun bfs_cpu {diropt: bool} (g: G.graph) (s: vertex) =
     let
       val n = G.numVertices g
@@ -90,7 +94,8 @@ struct
       fun filterFrontier s = s
       *)
 
-      val denseThreshold = G.numEdges g div 20
+      val denseThreshold = Real.floor
+        (Real.fromInt (G.numEdges g) * bfs_dense_threshold)
 
       fun sumOfOutDegrees frontier =
         SeqBasis.reduce 10000 op+ 0 (0, Seq.length frontier)
@@ -231,6 +236,17 @@ struct
    * hybrid
    *)
 
+  val bfs_sparse_hybrid_threshold =
+    CommandLineArgs.parseReal "bfs-sparse-hybrid-threshold" 1.0
+  val _ = print
+    ("bfs-sparse-hybrid-threshold " ^ Real.toString bfs_sparse_hybrid_threshold
+     ^ "\n")
+
+
+  val bfs_hybrid_split = CommandLineArgs.parseReal "bfs-hybrid-split" 0.3
+  val _ = print ("bfs-hybrid-split " ^ Real.toString bfs_hybrid_split ^ "\n")
+
+
   fun bfs_hybrid ctx {diropt: bool} (g: G.graph, g_fut: Futhark.Opaque.graph.t)
     (s: vertex) =
     let
@@ -248,7 +264,8 @@ struct
       fun filterFrontier s = s
       *)
 
-      val denseThreshold = G.numEdges g div 20
+      val denseThreshold = Real.floor
+        (Real.fromInt (G.numEdges g) * bfs_dense_threshold)
 
       fun sumOfOutDegrees frontier =
         SeqBasis.reduce 10000 op+ 0 (0, Seq.length frontier)
@@ -267,34 +284,93 @@ struct
 
       fun bottomUp (frontier: vertex Seq.t) =
         let
-          val flags = Seq.tabulate (fn _ => false) n
-          val _ = Seq.foreach frontier (fn (_, v) =>
-            ArraySlice.update (flags, vtoi v, true))
-          fun inFrontier v =
-            Seq.nth flags (vtoi v)
+          val t0 = Time.now ()
 
-          fun processVertex v =
-            if sub (parent, v) <> ~1 then
-              NONE
+          val state =
+            Seq.map (fn v => if v = ~1 then 0w0 else 0w1 : Word8.word)
+              (ArraySlice.full parent)
+          val _ = Seq.foreach frontier (fn (_, v) =>
+            ArraySlice.update (state, vtoi v, 0w2))
+          fun inFrontier v =
+            Seq.nth state (vtoi v) = 0w2
+          fun isVisited v =
+            Seq.nth state v <> 0w0
+
+          val t1 = Time.now ()
+
+          val state_fut = Futhark.Word8Array1.new ctx state (Seq.length state)
+
+          val t2 = Time.now ()
+
+          val _ = print
+            ("prep dense state: " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "s\n")
+
+          fun keep_vertex (v: int) =
+            if isVisited v then
+              false
             else
               let
                 val nbrs = G.neighbors g (itov v)
                 val deg = ArraySlice.length nbrs
                 fun loop i =
                   if i >= deg then
-                    NONE
+                    false
                   else
                     let
                       val u = Seq.nth nbrs i
                     in
-                      if inFrontier u then (upd (parent, v, u); SOME (itov v))
+                      if inFrontier u then (upd (parent, v, u); true)
                       else loop (i + 1)
                     end
               in
                 loop 0
               end
+
+          val nextFrontier =
+            HybridBasis.filter_hybrid_with_cleanup bfs_hybrid_split 10000 (0, n)
+              ( fn v => itov v
+
+              , fn v => keep_vertex v
+
+              , fn (vlo, vhi) =>
+                  let
+                    val t0 = Time.now ()
+                    val (vertices_fut, parents_fut) =
+                      Futhark.Entry.bfs_round_dense_kernel ctx
+                        (g_fut, state_fut, itov vlo, itov vhi)
+                    val t1 = Time.now ()
+                    val vertices =
+                      ArraySlice.full (Futhark.Int32Array1.values vertices_fut)
+                    val parents =
+                      ArraySlice.full (Futhark.Int32Array1.values parents_fut)
+                    val _ = Futhark.Int32Array1.free vertices_fut
+                    val _ = Futhark.Int32Array1.free parents_fut
+                  in
+                    (vlo, vhi, vertices, parents, t0, t1)
+                  end
+
+              , fn (vlo, vhi, vertices, parents, t0, t1) =>
+                  let
+                    val t2 = Time.now ()
+                    val _ =
+                      ForkJoin.parfor 1000 (0, Seq.length vertices) (fn i =>
+                        let
+                          val v = Seq.nth vertices i
+                          val p = Seq.nth parents i
+                        in
+                          upd (parent, vtoi v, p)
+                        end)
+                    val t3 = Time.now ()
+                  in
+                    print
+                      ("gpu dense (n=" ^ Int.toString (vhi - vlo) ^ "): "
+                       ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "s\n");
+                    vertices
+                  end
+              )
         in
-          ArraySlice.full (SeqBasis.tabFilter 1000 (0, n) processVertex)
+          Futhark.Word8Array1.free state_fut;
+          nextFrontier
         end
 
 
@@ -308,14 +384,20 @@ struct
 
 
           val visited_fut =
-            if nf + mf < n div 8 then
+            if
+              nf + mf
+              < Real.floor (Real.fromInt n * bfs_sparse_hybrid_threshold)
+            then
               NONE
             else
               let
+                val t0 = Time.now ()
                 val visited =
                   Seq.map (fn v => if v = ~1 then 0w0 else 0w1 : Word8.word)
                     (ArraySlice.full parent)
+                val t1 = Time.now ()
               in
+                print ("prep sparse state: " ^ tt t0 t1 ^ "s\n");
                 SOME (Futhark.Word8Array1.new ctx visited n)
               end
 
