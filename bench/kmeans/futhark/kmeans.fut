@@ -1,3 +1,9 @@
+-- Our convergence criterion is that the centroids don't change too
+-- much anymore.
+def tolerance : f64 = 0.001
+def close x y =
+  f64.abs (x - y) <= f64.abs (x * tolerance)
+
 def euclid_dist_2 [d] (pt1: [d]f64) (pt2: [d]f64): f64 =
   f64.sum (map (\x->x*x) (map2 (-) pt1 pt2))
 
@@ -25,29 +31,24 @@ def centroids_of [n][d] (k: i64) (points: [n][d]f64) (membership: [n]i32): [k][d
 entry centroids_chunk [k][n][d] (start: i64) (len: i64) (points: [n][d]f64) (centroids: [k][d]f64) =
   let points' = points[start:start+len]
   let new_membership = map (find_nearest_point centroids) points'
-  let new_centres = centroids_of k points' new_membership
+  let new_centroids = centroids_of k points' new_membership
   let weight = f64.i64 len / f64.i64 n
-  in map (map (*weight)) new_centres
+  in map (map (*weight)) new_centroids
 
 entry kmeans [n][d]
-        (k: i32) (max_iterations: i32)
+        (k: i64) (max_iterations: i32)
         (points: [n][d]f64): (i32, [][]f64) =
-  let k = i64.i32 k
-
-  -- Assign arbitrary initial cluster centres.
-  let cluster_centres = take k points
-  -- Also assign points arbitrarily to clusters.
-  let membership = map i32.i64 (map (%k) (iota n))
+  -- Assign arbitrary initial cluster centroids.
+  let centroids = take k points
   let changed = true
   let i = 0
-  let (_,cluster_centres,_,i) =
-    loop (membership, cluster_centres, changed, i)
+  let (centroids,_,i) =
+    loop (centroids, changed, i)
     while changed && i < max_iterations do
       -- For each point, find the cluster with the closest centroid.
-      let new_membership = map (find_nearest_point cluster_centres) points
-      -- Then, find the new centres of the clusters.
-      let new_centres = centroids_of k points new_membership
-      let delta = i32.sum (map (\b -> if b then 0 else 1)
-                               (map2 (==) membership new_membership))
-      in (new_membership, new_centres, delta != 0, i+1)
-  in (i, cluster_centres)
+      let membership = map (find_nearest_point centroids) points
+      -- Then, find the new centroids of the clusters.
+      let new_centroids = centroids_of k points membership
+      let changed = not (and (map2 close (flatten centroids) (flatten new_centroids)))
+      in (new_centroids, changed, i+1)
+  in (i, centroids)

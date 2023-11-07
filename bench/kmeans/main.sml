@@ -53,7 +53,7 @@ val bench =
          let
            val (num_iters, centroids_fut) =
              Futhark.Entry.kmeans ctx
-               (Int32.fromInt k, Int32.fromInt max_iterations, points_fut)
+               (Int64.fromInt k, Int32.fromInt max_iterations, points_fut)
          in
            ( Int32.toInt num_iters
            , Points.fromSeq d (Seq.fromArraySeq
