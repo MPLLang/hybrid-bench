@@ -3,7 +3,12 @@ sig
 
   type grain = int
 
-  (* returns the result of each bin *)
+  (* returns the result of each bin
+   *
+   * the elements are: { get_elem i | lo <= i < hi }
+   * and, for each i, we use `get_bin i` to figure out which bin to add the
+   * corresponding element to.
+   *)
   val hist: grain
             -> {combine: 'a * 'a -> 'a, neutral: 'a, num_bins: int}
             -> {lo: int, hi: int, get_bin: int -> int, get_elem: int -> 'a}
@@ -28,6 +33,22 @@ sig
     grain
     -> {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins: int}
     -> {lo: int, hi: int, get_bin: int -> int, modify_bin: int -> 'a -> unit}
+    -> 'a Seq.t
+
+
+  (* nearly identical to inplace_hist, but also takes an extra argument `gpu`
+   * where `gpu(i,j)` should be equivalent to performing a full hist on the
+   * range [i,j).
+   *)
+  val inplace_hist_hybrid:
+    grain
+    -> {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins: int}
+    -> { lo: int
+       , hi: int
+       , get_bin: int -> int
+       , modify_bin: int -> 'a -> unit
+       , gpu: (int * int) -> 'a Seq.t
+       }
     -> 'a Seq.t
 
 end =
@@ -104,6 +125,56 @@ struct
            in
              block blo bhi
            end))
+    end
+
+
+  fun inplace_hist_hybrid grain
+    {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins}
+    {lo, hi, get_bin, modify_bin, gpu: int * int -> 'a Seq.t} : 'a Seq.t =
+    let
+      fun fresh_acc () =
+        Array.tabulate (num_bins, fn _ => fresh_neutral ())
+
+      fun block blo bhi =
+        let
+          val acc = fresh_acc ()
+        in
+          Util.for (blo, bhi) (fn i =>
+            let val bin = get_bin i
+            in modify_bin i (Array.sub (acc, bin))
+            end);
+          ArraySlice.full acc
+        end
+
+      fun combine_accs (acc1: 'a Seq.t, acc2: 'a Seq.t) : 'a Seq.t =
+        Seq.tabulate (fn i => combine (Seq.nth acc1 i, Seq.nth acc2 i)) num_bins
+
+      val n = hi - lo
+      val num_blocks = Util.ceilDiv n grain
+
+      (* note: could expose this as a paramter to inplace_hist_hybrid for
+       * performance tuning.
+       *)
+      val split = 0.5
+    in
+      HybridBasis.reduce_hybrid split 1 combine_accs
+        (ArraySlice.full (fresh_acc ())) (0, num_blocks)
+        ( fn b =>
+            let
+              val blo = lo + b * grain
+              val bhi = Int.min (hi, blo + grain)
+            in
+              block blo bhi
+            end
+
+        , fn (b1, b2) =>
+            let
+              val blo = lo + b1 * grain
+              val bhi = Int.min (hi, lo + b2 * grain)
+            in
+              gpu (blo, bhi)
+            end
+        )
     end
 
 end

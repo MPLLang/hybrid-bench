@@ -2,7 +2,16 @@ structure HybridBasis =
 struct
 
   fun compute_mid split lo hi =
-    lo + Real.ceil (Real.fromInt (hi - lo) * split)
+    if lo = hi then
+      lo
+    else
+      let
+        val mid = lo + Real.ceil (Real.fromInt (hi - lo) * split)
+      in
+        (* handle edge cases for nasty values of `split` *)
+        if mid = lo then lo + 1 else if mid = hi then hi - 1 else mid
+      end
+
 
   fun parfor_hybrid split grain (lo, hi) (f, g) =
     let
