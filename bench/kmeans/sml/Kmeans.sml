@@ -210,7 +210,7 @@ struct
          *   [s1/s0, s2/s0, ..., s(d)/s0]
          *)
         val cluster_results =
-          Hist.inplace_hist 5000
+          Hist.inplace_hist 1000
             { combine = Seq.zipWith Real.+
             , fresh_neutral = fn () => Seq.tabulate (fn _ => 0.0) (d + 1)
             , num_bins = k
