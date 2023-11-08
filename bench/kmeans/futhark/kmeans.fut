@@ -52,3 +52,12 @@ entry kmeans [n][d]
       let changed = not (and (map2 close (flatten centroids) (flatten new_centroids)))
       in (new_centroids, changed, i+1)
   in (i, centroids)
+
+------------------------------------------------------------------------------
+
+def kmeans_bench [n][d] (points: [n][d]f64) =
+  kmeans 5 50 points |> (.1)
+
+-- ==
+-- entry: kmeans_bench
+-- random input { [1000000][10]f64 }

@@ -48,6 +48,7 @@ sig
                     -> int * Points.t
   val kmeans: int -> int -> Points.t -> int * Points.t
   val kmeans': int -> int -> Points.t -> int * Points.t
+  val kmeans'': int -> int -> Points.t -> int * Points.t
 end =
 struct
   fun distance x y =
@@ -194,7 +195,54 @@ struct
       in
         centroidsOf' points k new_membership
       end
+
+    fun newCentroids'' points centroids =
+      let
+        val k = Points.length centroids
+        val n = Points.length points
+        val d = Points.dims points
+
+        (* Use elements of dimension d+1, and store the count in the extra
+         * dimension (specifically index 0). We can then compute the means by
+         * replacing each
+         *   [s0, s1, s2, ..., s(d)]
+         * with
+         *   [s1/s0, s2/s0, ..., s(d)/s0]
+         *)
+        val cluster_results =
+          Hist.inplace_hist 5000
+            { combine = Seq.zipWith Real.+
+            , fresh_neutral = fn () => Seq.tabulate (fn _ => 0.0) (d + 1)
+            , num_bins = k
+            }
+            { lo = 0
+            , hi = n
+            , get_bin = findNearestPoint points centroids
+            , modify_bin = fn i =>
+                fn binval =>
+                  let
+                    val pt = Points.nth points i
+                  in
+                    ArraySlice.update
+                      (binval, 0, 1.0 + ArraySlice.sub (binval, 0));
+
+                    Util.for (0, d) (fn j =>
+                      ArraySlice.update
+                        ( binval
+                        , j + 1
+                        , ArraySlice.sub (binval, j + 1) + Seq.nth pt j
+                        ))
+                  end
+            }
+
+        val means =
+          Seq.map (fn x => Seq.map (fn r => r / Seq.nth x 0) (Seq.drop x 1))
+            cluster_results
+      in
+        Points.fromSeq d (Seq.flatten means)
+      end
   end
+
 
   fun newCentroidsChunked (centroidsChunk: (int * int * Points.t -> Points.t)) n
     centroids =
@@ -252,6 +300,7 @@ struct
     kmeansHybrid (centroidsChunkCPU points) k max_iterations points
 
 
+  (* uses Hist.hist *)
   fun kmeans' k max_iterations points =
     let
       fun loop centroids i =
@@ -259,8 +308,28 @@ struct
           (i, centroids)
         else
           let
-            (* val _ = print ("iteration " ^ Int.toString i ^ "\n") *)
             val centroids' = newCentroids' points centroids
+          in
+            if
+              Seq.equal closeEnough
+                (Points.toSeq centroids, Points.toSeq centroids')
+            then (i + 1, centroids')
+            else loop centroids' (i + 1)
+          end
+    in
+      loop (Points.take points k) 0
+    end
+
+
+  (* uses Hist.inplace_hist *)
+  fun kmeans'' k max_iterations points =
+    let
+      fun loop centroids i =
+        if i >= max_iterations then
+          (i, centroids)
+        else
+          let
+            val centroids' = newCentroids'' points centroids
           in
             if
               Seq.equal closeEnough
