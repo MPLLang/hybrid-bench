@@ -53,6 +53,13 @@ entry kmeans [n][d]
       in (new_centroids, changed, i+1)
   in (i, centroids)
 
+entry histogram [k][n][d] (all_points: [n][d]f64) (centroids: [k][d]f64) (start: i64) (len: i64) : [k][1+d]f64 =
+  let points = all_points[start:start+len]
+  let membership = map (find_nearest_point centroids) points
+  in hist (map2 (+)) (replicate (1+d) 0) k
+          (map i64.i32 membership)
+          (map2 (\c p -> [f64.i32 c] ++ p) membership points)
+
 ------------------------------------------------------------------------------
 
 def kmeans_bench [n][d] (points: [n][d]f64) =

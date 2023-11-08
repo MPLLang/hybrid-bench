@@ -48,7 +48,11 @@ sig
                     -> int * Points.t
   val kmeans: int -> int -> Points.t -> int * Points.t
   val kmeans': int -> int -> Points.t -> int * Points.t
-  val kmeans'': int -> int -> Points.t -> int * Points.t
+  val kmeans'': (Points.t -> (int * int) -> real Seq.t Seq.t)
+                -> int
+                -> int
+                -> Points.t
+                -> int * Points.t
 end =
 struct
   fun distance x y =
@@ -196,7 +200,7 @@ struct
         centroidsOf' points k new_membership
       end
 
-    fun newCentroids'' points centroids =
+    fun newCentroids'' gpu points centroids =
       let
         val k = Points.length centroids
         val n = Points.length points
@@ -210,7 +214,7 @@ struct
          *   [s1/s0, s2/s0, ..., s(d)/s0]
          *)
         val cluster_results =
-          Hist.inplace_hist 1000
+          Hist.inplace_hist_hybrid 1000
             { combine = Seq.zipWith Real.+
             , fresh_neutral = fn () => Seq.tabulate (fn _ => 0.0) (d + 1)
             , num_bins = k
@@ -218,6 +222,7 @@ struct
             { lo = 0
             , hi = n
             , get_bin = findNearestPoint points centroids
+            , gpu = gpu centroids
             , modify_bin = fn i =>
                 fn binval =>
                   let
@@ -321,15 +326,15 @@ struct
     end
 
 
-  (* uses Hist.inplace_hist *)
-  fun kmeans'' k max_iterations points =
+  (* uses Hist.inplace_hist_hybrid *)
+  fun kmeans'' gpu k max_iterations points =
     let
       fun loop centroids i =
         if i >= max_iterations then
           (i, centroids)
         else
           let
-            val centroids' = newCentroids'' points centroids
+            val centroids' = newCentroids'' gpu points centroids
           in
             if
               Seq.equal closeEnough

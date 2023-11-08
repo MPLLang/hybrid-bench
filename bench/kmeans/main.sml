@@ -49,7 +49,29 @@ val bench =
   case impl of
     "cpu" => (fn () => Kmeans.kmeans k max_iterations points)
   | "cpu-alternate" => (fn () => Kmeans.kmeans' k max_iterations points)
-  | "cpu-new-alternate" => (fn () => Kmeans.kmeans'' k max_iterations points)
+  | "cpu-new-alternate" =>
+      (fn () =>
+         let
+           fun gpuHistogram centroids (start, len) =
+             let
+               val centroids_fut =
+                 Futhark.Real64Array2.new ctx (Points.toSeq centroids)
+                   (Points.length centroids, d)
+               val hist_fut =
+                 Futhark.Entry.histogram ctx
+                   (points_fut, centroids_fut, start, len)
+               val hist_arr = Futhark.Real64Array2.values hist_fut
+             in
+               Futhark.Real64Array2.free centroids_fut;
+               Futhark.Real64Array2.free hist_fut;
+               Seq.tabulate
+                 (fn c =>
+                    Seq.fromArraySeq (ArraySlice.slice
+                      (hist_arr, c * (d + 1), SOME (d + 1)))) k
+             end
+         in
+           Kmeans.kmeans'' gpuHistogram k max_iterations points
+         end)
   | "gpu" =>
       (fn () =>
          let
