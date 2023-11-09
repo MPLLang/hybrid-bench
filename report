@@ -810,8 +810,10 @@ def speedupPlot(outputName, tag):
   # set legend position
   matplotlib.rcParams['legend.loc'] = 'upper left'
 
+  ylim = 33 # upper limit of y axis
+  ystep = 5 # distance between ticks
   xticks = [1] + list(range(5, 33, 5))
-  yticks = [1] + list(range(5, 66, 5))
+  yticks = [1] + list(range(ystep, ylim*2, ystep))
 
   # plt.xlabel('Num Workers (CPU)', fontsize=fontSize)
   # plt.ylabel('Speedup', fontsize=fontSize)
@@ -819,7 +821,7 @@ def speedupPlot(outputName, tag):
   plt.yticks(yticks, fontsize=fontSize)
   plt.xticks(xticks, fontsize=fontSize)
   plt.xlim(0, 33)
-  plt.ylim(0, 2*33)
+  plt.ylim(0, 2*ylim)
   plt.gca().grid(axis='both', linestyle='dotted', linewidth=2)
   plt.gca().set_axisbelow(True)
   # plt.margins(y=10)
