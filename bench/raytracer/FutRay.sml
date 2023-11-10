@@ -1,19 +1,32 @@
 structure FutRay =
 struct
 
+  val profile = CommandLineArgs.parseFlag "profile"
+
   type fut_context = Ray.ctx
 
   fun init () =
     let
       val () = print "Initialising Futhark context... "
-      val cfg = Ray.Config.cache (SOME "futhark.cache") Ray.Config.default
+      val cfg =
+        (Ray.Config.cache (SOME "futhark.cache") o Ray.Config.profiling profile)
+          Ray.Config.default
       val ctx = Ray.Context.new cfg
       val () = print "Done!\n"
     in
       ctx
     end
 
-  fun cleanup x = Ray.Context.free x
+
+  fun writeFile fname s =
+    let val os = TextIO.openOut fname
+    in TextIO.output (os, s) before TextIO.closeOut os
+    end
+
+  fun cleanup x =
+    ( if profile then (writeFile "futhark.json" (Ray.Context.report x)) else ()
+    ; Ray.Context.free x
+    )
 
   type i64 = Int64.int
   type i32 = Int32.int

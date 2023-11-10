@@ -8,6 +8,8 @@ val d = CLA.parseInt "d" 2
 
 val k = CLA.parseInt "k" 5
 
+val profile = CommandLineArgs.parseFlag "profile"
+
 val impl = CommandLineArgs.parseString "impl" "cpu"
 
 val () = if d = ~1 then raise Fail "Need -d INT" else ()
@@ -36,7 +38,8 @@ val max_iterations = 50
 
 val () = print "Initialising Futhark context... "
 val ctx = Futhark.Context.new
-  (Futhark.Config.cache (SOME "futhark.cache") Futhark.Config.default)
+  ((Futhark.Config.cache (SOME "futhark.cache")
+    o Futhark.Config.profiling profile) Futhark.Config.default)
 val () = print "Done!\n"
 
 
@@ -97,6 +100,16 @@ val bench =
 val (kmeans_iters, kmeans_res) = Benchmark.run ("kmeans " ^ impl) bench
 
 val () = Futhark.Real64Array2.free points_fut
+
+fun writeFile fname s =
+  let val os = TextIO.openOut fname
+  in TextIO.output (os, s) before TextIO.closeOut os
+  end
+
+val () =
+  if profile then (writeFile "futhark.json" (Futhark.Context.report ctx))
+  else ()
+
 val () = Futhark.Context.free ctx
 
 val () = print ("kmeans iterations: " ^ Int.toString kmeans_iters ^ "\n")

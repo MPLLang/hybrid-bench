@@ -5,3 +5,5 @@ objs/*
 *.o
 main.mpl.bin
 futhark.cache
+futhark.json
+futhark.prof
