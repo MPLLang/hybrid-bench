@@ -1,4 +1,4 @@
-type vec3 = {x: f32, y: f32, z: f32 }
+type vec3 = {x: f64, y: f64, z: f64 }
 
 -- A convenient alias so we don't have to indicate the fields all the
 -- time.
@@ -23,7 +23,7 @@ let dot (v1: vec3) (v2: vec3) =
   let v3 = vec_mul v1 v2
   in v3.x + v3.y + v3.z
 
-let norm v = f32.sqrt (dot v v)
+let norm v = f64.sqrt (dot v v)
 
 let normalise v = scale (1.0 / norm v) v
 
@@ -36,12 +36,12 @@ let cross (v1: vec3) (v2: vec3) =
 type aabb = { min: vec3, max: vec3 }
 
 let enclosing (box0: aabb) (box1: aabb) : aabb =
-  let small = vec(f32.min box0.min.x box1.min.x,
-                  f32.min box0.min.y box1.min.y,
-                  f32.min box0.min.z box1.min.z)
-  let big = vec(f32.max box0.max.x box1.max.x,
-                f32.max box0.max.y box1.max.y,
-                f32.max box0.max.z box1.max.z)
+  let small = vec(f64.min box0.min.x box1.min.x,
+                  f64.min box0.min.y box1.min.y,
+                  f64.min box0.min.z box1.min.z)
+  let big = vec(f64.max box0.max.x box1.max.x,
+                f64.max box0.max.y box1.max.y,
+                f64.max box0.max.z box1.max.z)
   in {min = small, max = big}
 
 let centre ({min, max}: aabb) =
