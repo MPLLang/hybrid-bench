@@ -757,14 +757,16 @@ def speedupPlot(outputName, tag):
   # plt.plot([0,maxp+1], [0,maxp+1], marker="", color="grey", linewidth=0.8)
   lines = []
 
-  xlim = 33 # upper limit of x axis
-  xstep = 5 # distance between ticks
+  maxP = max(*P)
+
+  xlim = maxP+1 # upper limit of x axis
+  xstep = int(maxP/8) # distance between ticks
   ylim = 33 # upper limit of y axis
   ystep = 5 # distance between ticks
 
   try:
     gpu_su = this_su('gpu', 1)
-    lines.append(plt.plot([0,40], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color='darkviolet', alpha=0.8))
+    lines.append(plt.plot([0,maxP], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color='darkviolet', alpha=0.8))
     if gpu_su > ylim:
       sys.stderr.write('[WARN] {}: \'gpu\' speedup {} exceeds ylim of {}\n'.format(tag, int(gpu_su), ylim))
   except Exception as e:
@@ -829,8 +831,8 @@ def speedupPlot(outputName, tag):
   plt.title(displayTag(tag), fontsize=fontSize)
   plt.yticks(yticks, fontsize=fontSize)
   plt.xticks(xticks, fontsize=fontSize)
-  plt.xlim(0, 33)
-  plt.ylim(0, 2*ylim)
+  plt.xlim(0, xlim)
+  plt.ylim(0, ylim)
   plt.gca().grid(axis='both', linestyle='dotted', linewidth=2)
   plt.gca().set_axisbelow(True)
   # plt.margins(y=10)
