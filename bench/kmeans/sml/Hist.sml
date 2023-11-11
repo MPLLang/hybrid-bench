@@ -41,7 +41,9 @@ sig
    * range [i,j).
    *)
   val inplace_hist_hybrid:
-    grain
+    grain (* cpu grain *)
+    -> grain (* gpu grain *)
+    -> real (* gpu split *)
     -> {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins: int}
     -> { lo: int
        , hi: int
@@ -128,15 +130,15 @@ struct
     end
 
 
-  fun inplace_hist_hybrid grain
-    {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins}
+  fun inplace_hist_hybrid cpu_grain gpu_grain gpu_split
+    (hist_args as {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins})
     {lo, hi, get_bin, modify_bin, gpu: int * int -> 'a Seq.t} : 'a Seq.t =
     let
       fun fresh_acc () =
         Array.tabulate (num_bins, fn _ => fresh_neutral ())
 
-      fun block blo bhi =
-        let
+      fun big_block blo bhi =
+        (* let
           val acc = fresh_acc ()
         in
           Util.for (blo, bhi) (fn i =>
@@ -144,33 +146,30 @@ struct
             in modify_bin i (Array.sub (acc, bin))
             end);
           ArraySlice.full acc
-        end
+        end *)
+        inplace_hist cpu_grain hist_args
+          {lo = blo, hi = bhi, get_bin = get_bin, modify_bin = modify_bin}
 
       fun combine_accs (acc1: 'a Seq.t, acc2: 'a Seq.t) : 'a Seq.t =
         Seq.tabulate (fn i => combine (Seq.nth acc1 i, Seq.nth acc2 i)) num_bins
 
       val n = hi - lo
-      val num_blocks = Util.ceilDiv n grain
-
-      (* note: could expose this as a paramter to inplace_hist_hybrid for
-       * performance tuning.
-       *)
-      val split = 0.5
+      val num_big_blocks = Util.ceilDiv n gpu_grain
     in
-      HybridBasis.reduce_hybrid split 1 combine_accs
-        (ArraySlice.full (fresh_acc ())) (0, num_blocks)
+      HybridBasis.reduce_hybrid gpu_split 1 combine_accs
+        (ArraySlice.full (fresh_acc ())) (0, num_big_blocks)
         ( fn b =>
             let
-              val blo = lo + b * grain
-              val bhi = Int.min (hi, blo + grain)
+              val blo = lo + b * gpu_grain
+              val bhi = Int.min (hi, blo + gpu_grain)
             in
-              block blo bhi
+              big_block blo bhi
             end
 
         , fn (b1, b2) =>
             let
-              val blo = lo + b1 * grain
-              val bhi = Int.min (hi, lo + b2 * grain)
+              val blo = lo + b1 * gpu_grain
+              val bhi = Int.min (hi, lo + b2 * gpu_grain)
             in
               gpu (blo, bhi)
             end

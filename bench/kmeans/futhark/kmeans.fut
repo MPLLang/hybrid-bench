@@ -58,7 +58,7 @@ entry histogram [k][n][d] (all_points: [n][d]f64) (centroids: [k][d]f64) (start:
   let membership = map (find_nearest_point centroids) points
   in hist (map2 (+)) (replicate (1+d) 0) k
           (map i64.i32 membership)
-          (map2 (\c p -> [f64.i32 c] ++ p) membership points)
+          (map (\p -> [1] ++ p) points)
 
 ------------------------------------------------------------------------------
 

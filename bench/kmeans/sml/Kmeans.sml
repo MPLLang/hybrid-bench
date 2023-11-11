@@ -48,11 +48,13 @@ sig
                     -> int * Points.t
   val kmeans: int -> int -> Points.t -> int * Points.t
   val kmeans': int -> int -> Points.t -> int * Points.t
-  val kmeans'': (Points.t -> (int * int) -> real Seq.t Seq.t)
-                -> int
-                -> int
-                -> Points.t
-                -> int * Points.t
+  val kmeans'': int -> int -> Points.t -> int * Points.t
+  val kmeansNewHybrid:
+    (Points.t -> {kernel: (int * int) -> real Seq.t Seq.t, after: unit -> unit})
+    -> int
+    -> int
+    -> Points.t
+    -> int * Points.t
 end =
 struct
   fun distance x y =
@@ -200,7 +202,11 @@ struct
         centroidsOf' points k new_membership
       end
 
-    fun newCentroids'' gpu points centroids =
+
+    val hist_cpu_grain = CommandLineArgs.parseInt "hist-cpu-grain" 1000
+    val _ = print ("hist-cpu-grain " ^ Int.toString hist_cpu_grain ^ "\n")
+
+    fun newCentroids'' points centroids =
       let
         val k = Points.length centroids
         val n = Points.length points
@@ -214,7 +220,7 @@ struct
          *   [s1/s0, s2/s0, ..., s(d)/s0]
          *)
         val cluster_results =
-          Hist.inplace_hist_hybrid 1000
+          Hist.inplace_hist hist_cpu_grain
             { combine = Seq.zipWith Real.+
             , fresh_neutral = fn () => Seq.tabulate (fn _ => 0.0) (d + 1)
             , num_bins = k
@@ -222,7 +228,6 @@ struct
             { lo = 0
             , hi = n
             , get_bin = findNearestPoint points centroids
-            , gpu = gpu centroids
             , modify_bin = fn i =>
                 fn binval =>
                   let
@@ -239,6 +244,63 @@ struct
                         ))
                   end
             }
+
+        val means =
+          Seq.map (fn x => Seq.map (fn r => r / Seq.nth x 0) (Seq.drop x 1))
+            cluster_results
+      in
+        Points.fromSeq d (Seq.flatten means)
+      end
+
+    val hist_gpu_grain = CommandLineArgs.parseInt "hist-gpu-grain" 100000
+    val hist_gpu_split = CommandLineArgs.parseReal "hist-gpu-split" 0.75
+
+    val _ = print ("hist-cpu-grain " ^ Int.toString hist_gpu_grain ^ "\n")
+    val _ = print ("hist-gpu-split " ^ Real.toString hist_gpu_split ^ "\n")
+
+    fun newCentroidsHybrid gpu points centroids =
+      let
+        val k = Points.length centroids
+        val n = Points.length points
+        val d = Points.dims points
+
+        val {kernel, after} = gpu centroids
+
+        (* Use elements of dimension d+1, and store the count in the extra
+         * dimension (specifically index 0). We can then compute the means by
+         * replacing each
+         *   [s0, s1, s2, ..., s(d)]
+         * with
+         *   [s1/s0, s2/s0, ..., s(d)/s0]
+         *)
+        val cluster_results =
+          Hist.inplace_hist_hybrid hist_cpu_grain hist_gpu_grain hist_gpu_split
+            { combine = Seq.zipWith Real.+
+            , fresh_neutral = fn () => Seq.tabulate (fn _ => 0.0) (d + 1)
+            , num_bins = k
+            }
+            { lo = 0
+            , hi = n
+            , get_bin = findNearestPoint points centroids
+            , gpu = kernel
+            , modify_bin = fn i =>
+                fn binval =>
+                  let
+                    val pt = Points.nth points i
+                  in
+                    ArraySlice.update
+                      (binval, 0, 1.0 + ArraySlice.sub (binval, 0));
+
+                    Util.for (0, d) (fn j =>
+                      ArraySlice.update
+                        ( binval
+                        , j + 1
+                        , ArraySlice.sub (binval, j + 1) + Seq.nth pt j
+                        ))
+                  end
+            }
+
+        val _ = after ()
 
         val means =
           Seq.map (fn x => Seq.map (fn r => r / Seq.nth x 0) (Seq.drop x 1))
@@ -327,14 +389,35 @@ struct
 
 
   (* uses Hist.inplace_hist_hybrid *)
-  fun kmeans'' gpu k max_iterations points =
+  fun kmeans'' k max_iterations points =
     let
       fun loop centroids i =
         if i >= max_iterations then
           (i, centroids)
         else
           let
-            val centroids' = newCentroids'' gpu points centroids
+            val centroids' = newCentroids'' points centroids
+          in
+            if
+              Seq.equal closeEnough
+                (Points.toSeq centroids, Points.toSeq centroids')
+            then (i + 1, centroids')
+            else loop centroids' (i + 1)
+          end
+    in
+      loop (Points.take points k) 0
+    end
+
+
+  (* uses Hist.inplace_hist_hybrid *)
+  fun kmeansNewHybrid gpu k max_iterations points =
+    let
+      fun loop centroids i =
+        if i >= max_iterations then
+          (i, centroids)
+        else
+          let
+            val centroids' = newCentroidsHybrid gpu points centroids
           in
             if
               Seq.equal closeEnough
