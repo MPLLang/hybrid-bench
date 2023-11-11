@@ -69,10 +69,10 @@ fun tt a b =
 
 val bench =
   case impl of
-    "cpu" => (fn () => Kmeans.kmeans k max_iterations points)
+    "cpu-orig" => (fn () => Kmeans.kmeans k max_iterations points)
   | "cpu-alternate" => (fn () => Kmeans.kmeans' k max_iterations points)
-  | "cpu-new-alternate" => (fn () => Kmeans.kmeans'' k max_iterations points)
-  | "hybrid-alternate" =>
+  | "cpu" => (fn () => Kmeans.kmeans'' k max_iterations points)
+  | "hybrid" =>
       (fn () =>
          let
            fun gpuHistogram centroids =
@@ -87,6 +87,7 @@ val bench =
                      val hist_fut =
                        Futhark.Entry.histogram ctx
                          (points_fut, centroids_fut, start, stop - start)
+                     val () = Futhark.Context.sync ctx
 
                      val t2 = Time.now ()
                      val hist_arr = Futhark.Real64Array2.values hist_fut
@@ -129,7 +130,7 @@ val bench =
            print ("gpu kmeans " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "s\n");
            (Int32.toInt num_iters, result)
          end)
-  | "hybrid" =>
+  | "hybrid-orig" =>
       (fn () =>
          let
            fun centroidsChunkGPU (start, len, centroids) =

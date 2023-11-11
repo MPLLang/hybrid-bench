@@ -53,12 +53,27 @@ entry kmeans [n][d]
       in (new_centroids, changed, i+1)
   in (i, centroids)
 
+-- entry histogram [k][n][d] (all_points: [n][d]f64) (centroids: [k][d]f64) (start: i64) (len: i64) : [k][1+d]f64 =
+--   let points = all_points[start:start+len]
+--   let membership = map (find_nearest_point centroids) points
+--   in hist (map2 (+)) (replicate (1+d) 0) k
+--           (map i64.i32 membership)
+--           (map (\p -> [1] ++ p) points)
+
+
 entry histogram [k][n][d] (all_points: [n][d]f64) (centroids: [k][d]f64) (start: i64) (len: i64) : [k][1+d]f64 =
-  let points = all_points[start:start+len]
+  let points: [len][d]f64 = sized len (all_points[start:start+len])
   let membership = map (find_nearest_point centroids) points
-  in hist (map2 (+)) (replicate (1+d) 0) k
-          (map i64.i32 membership)
-          (map (\p -> [1] ++ p) points)
+
+  let points_in_clusters: [k]i64 =
+    hist (+) 0 k (map i64.i32 membership) (replicate len 1)
+
+  let cluster_sums: [k][d]f64 =
+    hist (map2 (+)) (replicate d 0) k
+         (map i64.i32 membership)
+         points
+
+  in map2 (\count sum -> [f64.i64 count] ++ sum) points_in_clusters cluster_sums
 
 ------------------------------------------------------------------------------
 
