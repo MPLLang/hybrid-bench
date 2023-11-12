@@ -354,7 +354,7 @@ struct
         val values_fut = Futhark.Real32Array1.new ctx values (Seq.length values)
         val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
         val t1 = Time.now ()
-        val (result_fut, _) =
+        val (is_single_row, first_val, result_fut, last_val) =
           Futhark.Entry.sparse_mxv ctx
             (row_indices_fut, col_indices_fut, values_fut, vec_fut)
         val _ = Futhark.Context.sync
@@ -366,10 +366,21 @@ struct
         val rhi = I.toInt (row_hi mat)
 
         val output = ArraySlice.full (ForkJoin.alloc (Seq.length vec))
+
+        val _ =
+          if is_single_row = 0w1 then
+            ArraySlice.update (output, rlo, first_val)
+          else
+            ( ArraySlice.update (output, rlo, first_val)
+            ; Futhark.Real32Array1.values_into result_fut (Seq.subseq output
+                (rlo + 1, rhi - rlo - 2))
+            ; ArraySlice.update (output, rhi - 1, last_val)
+            )
+
         val _ = ForkJoin.parfor 5000 (0, rlo) (fn r =>
           ArraySlice.update (output, r, R.fromInt 0))
-        val _ = Futhark.Real32Array1.values_into result_fut
-          (Seq.subseq output (rlo, rhi - rlo))
+        (* val _ = Futhark.Real32Array1.values_into result_fut
+          (Seq.subseq output (rlo, rhi - rlo)) *)
         val _ = ForkJoin.parfor 5000 (rhi, Seq.length vec) (fn r =>
           ArraySlice.update (output, r, R.fromInt 0))
 
@@ -383,8 +394,9 @@ struct
         val t4 = Time.now ()
       in
         print
-          ("gpu sparse-mxv: " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+"
-           ^ tt t3 t4 ^ "s\n");
+          ("gpu sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
+           ^ Int.toString (rhi - rlo) ^ "): " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+"
+           ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
         output
       end
       handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
@@ -406,7 +418,7 @@ struct
         Futhark.Int32Array1.new ctx col_indices (Seq.length col_indices)
       val values_fut = Futhark.Real32Array1.new ctx values (Seq.length values)
       val t1 = Time.now ()
-      val (result_fut, _) =
+      val (is_single_row, first_val, result_fut, last_val) =
         Futhark.Entry.sparse_mxv ctx
           (row_indices_fut, col_indices_fut, values_fut, vec_fut)
       val _ = Futhark.Context.sync
@@ -417,16 +429,12 @@ struct
       val rlo = I.toInt (row_lo mat)
       val rhi = I.toInt (row_hi mat)
 
-      (* TODO: this is wrong, because there is a race to write
-       * directly into the first and last cell of the output
-       * (which might be shared with nearby calls in parallel...
-       *
-       * So, the output will be incorrect, but the computation performed
-       * is still exactly the same. It's good enough for benchmarking, but
-       * obviously should be fixed. (And it's not a difficult fix, just annoying.)
-       *)
-      val _ = Futhark.Real32Array1.values_into result_fut
-        (Seq.subseq (ArraySlice.full output) (rlo, rhi - rlo))
+      val _ =
+        if is_single_row = 0w1 then
+          ()
+        else
+          Futhark.Real32Array1.values_into result_fut
+            (Seq.subseq (ArraySlice.full output) (rlo + 1, rhi - rlo - 2))
 
       val t3 = Time.now ()
 
@@ -438,13 +446,12 @@ struct
       val t4 = Time.now ()
     in
       print
-        ("gpu sparse-mxv (" ^ Int.toString (nnz mat) ^ "): " ^ tt t0 t1 ^ "+"
-         ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
+        ("gpu sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
+         ^ Int.toString (rhi - rlo) ^ "): " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+"
+         ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
 
-      if rlo + 1 = rhi then
-        SingleRowValue (Array.sub (output, rlo))
-      else
-        FirstLastRowValue (Array.sub (output, rlo), Array.sub (output, rhi - 1))
+      if is_single_row = 0w1 then SingleRowValue first_val
+      else FirstLastRowValue (first_val, last_val)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
@@ -482,6 +489,28 @@ struct
         }
 
 
+  fun outer_loop_hybrid ctx mat (vec, vec_fut) output (block_size, blo, bhi) =
+    if blo + 1 = bhi then
+      write_mxv_hybrid_choose ctx mat (vec, vec_fut) output
+    else
+      let
+        val bmid = blo + (bhi - blo) div 2
+        val half_elems = block_size * (bmid - blo)
+        val (m1, m2) = split_nnz half_elems mat
+        val (result1, result2) =
+          ForkJoin.par
+            ( fn _ =>
+                outer_loop_hybrid ctx m1 (vec, vec_fut) output
+                  (block_size, blo, bmid)
+            , fn _ =>
+                outer_loop_hybrid ctx m2 (vec, vec_fut) output
+                  (block_size, bmid, bhi)
+            )
+      in
+        write_mxv_combine_results (m1, m2) (result1, result2) output
+      end
+
+
   fun mxv_hybrid ctx (mat: mat) (vec: R.real Seq.t) =
     if nnz mat = 0 then
       Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
@@ -493,24 +522,9 @@ struct
         val block_size = Real.floor (hybrid_split * Real.fromInt (nnz mat))
         val num_blocks = Util.ceilDiv (nnz mat) block_size
 
-        fun do_block b =
-          let
-            val blo = block_size * b
-            val bhi = Int.min (nnz mat, blo + block_size)
-
-            val (_, m) = split_nnz blo mat
-            val (m, _) = split_nnz (bhi - blo) m
-          in
-            (m, write_mxv_hybrid_choose ctx m (vec, vec_fut) output)
-          end
-
-        val (_, result) =
-          SeqBasis.reduce 1
-            (fn ((m1, result1), (m2, result2)) =>
-               ( undo_split m1 m2
-               , write_mxv_combine_results (m1, m2) (result1, result2) output
-               )) (#1 (split_nnz 0 mat), SingleRowValue 0.0) (0, num_blocks)
-            do_block
+        val result =
+          outer_loop_hybrid ctx mat (vec, vec_fut) output
+            (block_size, 0, num_blocks)
       in
         (* print "top level: fill in front\n"; *)
         ForkJoin.parfor 5000 (0, I.toInt (row_lo mat)) (fn r =>
