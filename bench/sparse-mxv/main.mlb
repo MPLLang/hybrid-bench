@@ -1,3 +1,5 @@
 ../../dep/dep.mlb
+futhark/sparse-mxv.sig
+futhark/sparse-mxv.sml
 MatCOO.sml
 main.sml

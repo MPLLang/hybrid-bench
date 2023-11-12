@@ -13,15 +13,18 @@
  *   structure M = MatCOO(structure I = Int64
  *                        structure R = Real64)
  *)
+
+(* NOTE: requiring Int32 and Real32 for now, for compatibility with Futhark. *)
 functor MatCOO
-  (structure I: INTEGER
+  (structure I: INTEGER where type int = Int32.int
    structure R:
    sig
      include REAL
      structure W: WORD
      val castFromWord: W.word -> real
      val castToWord: real -> W.word
-   end) =
+   end
+   where type real = Real32.real) =
 struct
   structure I = I
   structure R = R
@@ -191,6 +194,51 @@ struct
 
   val nnzGrain = CommandLineArgs.parseInt "matcoo-nnz-grain" 5000
 
+
+  fun write_mxv_combine_results (m1, m2) (result1, result2) output =
+    if I.- (row_hi m1, I.fromInt 1) = row_lo m2 then
+      case (result1, result2) of
+        (SingleRowValue r1, SingleRowValue r2) => SingleRowValue (R.+ (r1, r2))
+      | (SingleRowValue r1, FirstLastRowValue (f2, l2)) =>
+          FirstLastRowValue (R.+ (r1, f2), l2)
+      | (FirstLastRowValue (f1, l1), SingleRowValue r2) =>
+          FirstLastRowValue (f1, R.+ (l1, r2))
+      | (FirstLastRowValue (f1, l1), FirstLastRowValue (f2, l2)) =>
+          (* overlap *)
+          ( (*print "fill in middle overlap\n"
+            ;*) upd (output, I.toInt (row_lo m2), R.+ (l1, f2))
+          ; FirstLastRowValue (f1, l2)
+          )
+    else
+      let
+        fun finish_l1 v =
+          upd (output, I.toInt (row_hi m1) - 1, v)
+        fun finish_f2 v =
+          upd (output, I.toInt (row_lo m2), v)
+        fun fill_middle () =
+          ForkJoin.parfor 5000 (I.toInt (row_hi m1), I.toInt (row_lo m2))
+            (fn r => upd (output, r, R.fromInt 0))
+      in
+        (* print "fill in middle, no overlap\n"; *)
+        case (result1, result2) of
+          (SingleRowValue r1, SingleRowValue r2) =>
+            (fill_middle (); FirstLastRowValue (r1, r2))
+
+        | (SingleRowValue r1, FirstLastRowValue (f2, l2)) =>
+            (fill_middle (); finish_f2 f2; FirstLastRowValue (r1, l2))
+
+        | (FirstLastRowValue (f1, l1), SingleRowValue r2) =>
+            (finish_l1 l1; fill_middle (); FirstLastRowValue (f1, r2))
+
+        | (FirstLastRowValue (f1, l1), FirstLastRowValue (f2, l2)) =>
+            ( finish_l1 l1
+            ; fill_middle ()
+            ; finish_f2 f2
+            ; FirstLastRowValue (f1, l2)
+            )
+      end
+
+
   (* requires `row_lo mat < row_hi mat`, i.e., at least one row *)
   fun write_mxv mat vec output : write_mxv_result =
     if nnz mat <= nnzGrain then
@@ -202,53 +250,8 @@ struct
           ForkJoin.par (fn _ => write_mxv m1 vec output, fn _ =>
             write_mxv m2 vec output)
 
-      (* val {first_row_value = frv1, last_row_value = lrv1} = result1
-      val {first_row_value = frv2, last_row_value = lrv2} = result2 *)
       in
-        (* dump_info "write_mxv" mat; *)
-
-        if I.- (row_hi m1, I.fromInt 1) = row_lo m2 then
-          case (result1, result2) of
-            (SingleRowValue r1, SingleRowValue r2) =>
-              SingleRowValue (R.+ (r1, r2))
-          | (SingleRowValue r1, FirstLastRowValue (f2, l2)) =>
-              FirstLastRowValue (R.+ (r1, f2), l2)
-          | (FirstLastRowValue (f1, l1), SingleRowValue r2) =>
-              FirstLastRowValue (f1, R.+ (l1, r2))
-          | (FirstLastRowValue (f1, l1), FirstLastRowValue (f2, l2)) =>
-              (* overlap *)
-              ( (*print "fill in middle overlap\n"
-                ;*) upd (output, I.toInt (row_lo m2), R.+ (l1, f2))
-              ; FirstLastRowValue (f1, l2)
-              )
-        else
-          let
-            fun finish_l1 v =
-              upd (output, I.toInt (row_hi m1) - 1, v)
-            fun finish_f2 v =
-              upd (output, I.toInt (row_lo m2), v)
-            fun fill_middle () =
-              ForkJoin.parfor 5000 (I.toInt (row_hi m1), I.toInt (row_lo m2))
-                (fn r => upd (output, r, R.fromInt 0))
-          in
-            (* print "fill in middle, no overlap\n"; *)
-            case (result1, result2) of
-              (SingleRowValue r1, SingleRowValue r2) =>
-                (fill_middle (); FirstLastRowValue (r1, r2))
-
-            | (SingleRowValue r1, FirstLastRowValue (f2, l2)) =>
-                (fill_middle (); finish_f2 f2; FirstLastRowValue (r1, l2))
-
-            | (FirstLastRowValue (f1, l1), SingleRowValue r2) =>
-                (finish_l1 l1; fill_middle (); FirstLastRowValue (f1, r2))
-
-            | (FirstLastRowValue (f1, l1), FirstLastRowValue (f2, l2)) =>
-                ( finish_l1 l1
-                ; fill_middle ()
-                ; finish_f2 f2
-                ; FirstLastRowValue (f1, l2)
-                )
-          end
+        write_mxv_combine_results (m1, m2) (result1, result2) output
       end
 
 
@@ -277,8 +280,75 @@ struct
       end
 
 
-  (* =================================================================== *)
+  (* ======================================================================= *)
+  (* ======================================================================= *)
+  (* ======================================================================= 
+   * gpu
+   *)
 
+  fun tt a b =
+    Time.fmt 4 (Time.- (b, a))
+
+  fun mxv_gpu ctx (mat: mat) (vec: R.real Seq.t) =
+    if nnz mat = 0 then
+      Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
+    else
+      let
+        val t0 = Time.now ()
+        val Mat {row_indices, col_indices, values, ...} = mat
+        val row_indices_fut =
+          Futhark.Int32Array1.new ctx row_indices (Seq.length row_indices)
+        val col_indices_fut =
+          Futhark.Int32Array1.new ctx col_indices (Seq.length col_indices)
+        val values_fut = Futhark.Real32Array1.new ctx values (Seq.length values)
+        val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
+        val t1 = Time.now ()
+        val result_fut =
+          Futhark.Entry.sparse_mxv ctx
+            (row_indices_fut, col_indices_fut, values_fut, vec_fut)
+        val _ = Futhark.Context.sync
+        val t2 = Time.now ()
+
+        val rlo = I.toInt (row_lo mat)
+        val rhi = I.toInt (row_hi mat)
+
+        val output = ArraySlice.full (ForkJoin.alloc (Seq.length vec))
+        val _ = ForkJoin.parfor 5000 (0, rlo) (fn r =>
+          ArraySlice.update (output, r, R.fromInt 0))
+        val _ = Futhark.Real32Array1.values_into result_fut
+          (Seq.subseq output (rlo, rhi - rlo))
+        val _ = ForkJoin.parfor 5000 (rhi, Seq.length vec) (fn r =>
+          ArraySlice.update (output, r, R.fromInt 0))
+
+        val t3 = Time.now ()
+
+        val _ = Futhark.Int32Array1.free row_indices_fut
+        val _ = Futhark.Int32Array1.free col_indices_fut
+        val _ = Futhark.Real32Array1.free values_fut
+        val _ = Futhark.Real32Array1.free result_fut
+
+        val t4 = Time.now ()
+      in
+        print
+          ("gpu sparse-mxv: " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+"
+           ^ tt t3 t4 ^ "s\n");
+        output
+      end
+      handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
+
+
+  (* ======================================================================= *)
+  (* ======================================================================= *)
+  (* ======================================================================= 
+   * hybrid
+   *)
+
+
+  (* ======================================================================= *)
+  (* ======================================================================= *)
+  (* =======================================================================
+   * to/from file
+   *)
 
   structure DS = DelayedSeq
 
@@ -353,6 +423,14 @@ struct
           val c = I.fromInt (valOf (ParseFile.parseInt (DS.nth toks 1)))
           val v = R.fromLarge IEEEReal.TO_NEAREST (valOf (ParseFile.parseReal
             (DS.nth toks 2)))
+
+        (* val ln = line lineNum
+        val chars = CharVector.tabulate (DS.length ln, DS.nth ln)
+        val toks = String.tokens Char.isSpace chars
+        val r = I.fromInt (valOf (Int.fromString (List.nth (toks, 0))))
+        val c = I.fromInt (valOf (Int.fromString (List.nth (toks, 1))))
+        val v = R.fromLarge IEEEReal.TO_NEAREST (valOf (Real.fromString
+          (List.nth (toks, 2)))) *)
         in
           (* if i mod 500000 = 0 then
             print ("finished row " ^ Int.toString i ^ "\n")
