@@ -38,6 +38,7 @@ val bench =
   case impl of
     "cpu" => (fn () => M.mxv mat vec)
   | "gpu" => (fn () => M.mxv_gpu ctx mat vec)
+  | "hybrid" => (fn () => M.mxv_hybrid ctx mat vec)
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val result = Benchmark.run "sparse-mxv" bench

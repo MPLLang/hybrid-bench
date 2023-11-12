@@ -68,11 +68,17 @@ struct
 
   (* split m -> (m1, m2)
    * where m = m1 + m2
-   * and nnz(m1) ~= nnz(m2) 
+   * and nnz(m1) ~= frac * nnz(m)
+   * and nnz(m2) ~= (1-frac) * nnz(m)
    *)
-  fun split (mat as Mat m) =
+  fun split frac (mat as Mat m) =
     let
-      val half = nnz mat div 2
+      val half = Real.floor (frac * Real.fromInt (nnz mat))
+      val half =
+        if nnz mat <= 1 then half
+        else if half = 0 then half + 1
+        else if half = nnz mat then half - 1
+        else half
 
       val (r1, r2) = split_seq (#row_indices m) half
       val (c1, c2) = split_seq (#col_indices m) half
@@ -245,7 +251,7 @@ struct
       write_mxv_serial mat vec output
     else
       let
-        val (m1, m2) = split mat
+        val (m1, m2) = split 0.5 mat
         val (result1, result2) =
           ForkJoin.par (fn _ => write_mxv m1 vec output, fn _ =>
             write_mxv m2 vec output)
@@ -303,11 +309,13 @@ struct
         val values_fut = Futhark.Real32Array1.new ctx values (Seq.length values)
         val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
         val t1 = Time.now ()
-        val result_fut =
+        val (result_fut, _) =
           Futhark.Entry.sparse_mxv ctx
             (row_indices_fut, col_indices_fut, values_fut, vec_fut)
         val _ = Futhark.Context.sync
         val t2 = Time.now ()
+
+        (* val _ = print ("num nonzero " ^ Int32.toString num_nonzero ^ "\n") *)
 
         val rlo = I.toInt (row_lo mat)
         val rhi = I.toInt (row_hi mat)
@@ -343,6 +351,110 @@ struct
    * hybrid
    *)
 
+  fun write_mxv_gpu ctx mat vec_fut output =
+    let
+      val t0 = Time.now ()
+      val Mat {row_indices, col_indices, values, ...} = mat
+      val row_indices_fut =
+        Futhark.Int32Array1.new ctx row_indices (Seq.length row_indices)
+      val col_indices_fut =
+        Futhark.Int32Array1.new ctx col_indices (Seq.length col_indices)
+      val values_fut = Futhark.Real32Array1.new ctx values (Seq.length values)
+      val t1 = Time.now ()
+      val (result_fut, _) =
+        Futhark.Entry.sparse_mxv ctx
+          (row_indices_fut, col_indices_fut, values_fut, vec_fut)
+      val _ = Futhark.Context.sync
+      val t2 = Time.now ()
+
+      (* val _ = print ("num nonzero " ^ Int32.toString num_nonzero ^ "\n") *)
+
+      val rlo = I.toInt (row_lo mat)
+      val rhi = I.toInt (row_hi mat)
+
+      val _ = Futhark.Real32Array1.values_into result_fut
+        (Seq.subseq (ArraySlice.full output) (rlo, rhi - rlo))
+
+      val t3 = Time.now ()
+
+      val _ = Futhark.Int32Array1.free row_indices_fut
+      val _ = Futhark.Int32Array1.free col_indices_fut
+      val _ = Futhark.Real32Array1.free values_fut
+      val _ = Futhark.Real32Array1.free result_fut
+
+      val t4 = Time.now ()
+    in
+      print
+        ("gpu sparse-mxv (" ^ Int.toString (nnz mat) ^ "): " ^ tt t0 t1 ^ "+"
+         ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
+
+      if rlo + 1 = rhi then
+        SingleRowValue (Array.sub (output, rlo))
+      else
+        FirstLastRowValue (Array.sub (output, rlo), Array.sub (output, rhi - 1))
+    end
+    handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
+
+
+  val nnzGrain_hybrid = CommandLineArgs.parseInt "matcoo-nnz-grain-hybrid" 20000
+
+  val hybrid_split = CommandLineArgs.parseReal "matcoo-hybrid-split" 0.2
+
+
+  fun write_mxv_hybrid ctx mat (vec, vec_fut) output : write_mxv_result =
+    if nnz mat <= nnzGrain_hybrid then
+      ForkJoin.choice
+        { prefer_cpu = fn _ => write_mxv mat vec output
+        , prefer_gpu = fn _ => write_mxv_gpu ctx mat vec_fut output
+        }
+    else
+      let
+        val (m1, m2) = split hybrid_split mat
+        val (result1, result2) =
+          ForkJoin.par
+            ( fn _ => write_mxv_hybrid_choose ctx m1 (vec, vec_fut) output
+            , fn _ => write_mxv_hybrid ctx m2 (vec, vec_fut) output
+            )
+
+      in
+        write_mxv_combine_results (m1, m2) (result1, result2) output
+      end
+
+
+  and write_mxv_hybrid_choose ctx mat (vec, vec_fut) output : write_mxv_result =
+    ForkJoin.choice
+      { prefer_cpu = fn _ => write_mxv_hybrid ctx mat (vec, vec_fut) output
+      , prefer_gpu = fn _ => write_mxv_gpu ctx mat vec_fut output
+      }
+
+
+  fun mxv_hybrid ctx (mat: mat) (vec: R.real Seq.t) =
+    if nnz mat = 0 then
+      Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
+    else
+      let
+        val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
+        val output: R.real array = ForkJoin.alloc (Seq.length vec)
+        val result = write_mxv_hybrid ctx mat (vec, vec_fut) output
+      in
+        (* print "top level: fill in front\n"; *)
+        ForkJoin.parfor 5000 (0, I.toInt (row_lo mat)) (fn r =>
+          upd (output, r, R.fromInt 0));
+        (* print "top-level: fill in middle\n"; *)
+        case result of
+          SingleRowValue r => upd (output, I.toInt (row_lo mat), r)
+        | FirstLastRowValue (f, l) =>
+            ( upd (output, I.toInt (row_lo mat), f)
+            ; upd (output, I.toInt (row_hi mat) - 1, l)
+            );
+        (* print "top-level: fill in back\n"; *)
+        ForkJoin.parfor 5000 (I.toInt (row_hi mat), Seq.length vec) (fn r =>
+          upd (output, r, R.fromInt 0));
+
+        Futhark.Real32Array1.free vec_fut;
+
+        ArraySlice.full output
+      end
 
   (* ======================================================================= *)
   (* ======================================================================= *)
