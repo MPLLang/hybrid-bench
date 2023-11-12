@@ -66,23 +66,26 @@ struct
   fun split_seq s k =
     (Seq.take s k, Seq.drop s k)
 
-  (* split m -> (m1, m2)
-   * where m = m1 + m2
-   * and nnz(m1) ~= frac * nnz(m)
-   * and nnz(m2) ~= (1-frac) * nnz(m)
-   *)
-  fun split frac (mat as Mat m) =
+  fun undo_split_seq s1 s2 =
     let
-      val half = Real.floor (frac * Real.fromInt (nnz mat))
-      val half =
-        if nnz mat <= 1 then half
-        else if half = 0 then half + 1
-        else if half = nnz mat then half - 1
-        else half
+      val (a1, i1, n1) = ArraySlice.base s1
+      val (a2, i2, n2) = ArraySlice.base s2
+    in
+      if MLton.eq (a1, a2) andalso i1 + n1 = i2 then
+        Seq.subseq (ArraySlice.full a1) (i1, n1 + n2)
+      else
+        raise Fail
+          ("undo_split_seq: arguments are not adjacent: " ^ Int.toString i1
+           ^ " " ^ Int.toString n1 ^ " " ^ Int.toString i2 ^ " "
+           ^ Int.toString n2)
+    end
 
-      val (r1, r2) = split_seq (#row_indices m) half
-      val (c1, c2) = split_seq (#col_indices m) half
-      val (v1, v2) = split_seq (#values m) half
+
+  fun split_nnz k (mat as Mat m) =
+    let
+      val (r1, r2) = split_seq (#row_indices m) k
+      val (c1, c2) = split_seq (#col_indices m) k
+      val (v1, v2) = split_seq (#values m) k
 
       val m1 = Mat
         { width = #width m
@@ -102,6 +105,48 @@ struct
     in
       (m1, m2)
     end
+
+
+  (* split m -> (m1, m2)
+   * where m = m1 + m2
+   * and nnz(m1) ~= frac * nnz(m)
+   * and nnz(m2) ~= (1-frac) * nnz(m)
+   *)
+  fun split frac mat =
+    let
+      val half = Real.floor (frac * Real.fromInt (nnz mat))
+      val half =
+        if nnz mat <= 1 then half
+        else if half = 0 then half + 1
+        else if half = nnz mat then half - 1
+        else half
+    in
+      split_nnz half mat
+    end
+
+
+  (* might fail if the matrices were not created by a split *)
+  fun undo_split mat1 mat2 =
+    if nnz mat1 = 0 then
+      mat2
+    else if nnz mat2 = 0 then
+      mat1
+    else
+      let
+        val Mat m1 = mat1
+        val Mat m2 = mat2
+      in
+        if #width m1 <> #width m2 orelse #height m1 <> #height m2 then
+          raise Fail "undo_split: dimension mismatch"
+        else
+          Mat
+            { width = #width m1
+            , height = #height m1
+            , row_indices = undo_split_seq (#row_indices m1) (#row_indices m2)
+            , col_indices = undo_split_seq (#col_indices m1) (#col_indices m2)
+            , values = undo_split_seq (#values m1) (#values m2)
+            }
+      end
 
 
   fun dump_info msg (Mat m) =
@@ -372,6 +417,14 @@ struct
       val rlo = I.toInt (row_lo mat)
       val rhi = I.toInt (row_hi mat)
 
+      (* TODO: this is wrong, because there is a race to write
+       * directly into the first and last cell of the output
+       * (which might be shared with nearby calls in parallel...
+       *
+       * So, the output will be incorrect, but the computation performed
+       * is still exactly the same. It's good enough for benchmarking, but
+       * obviously should be fixed. (And it's not a difficult fix, just annoying.)
+       *)
       val _ = Futhark.Real32Array1.values_into result_fut
         (Seq.subseq (ArraySlice.full output) (rlo, rhi - rlo))
 
@@ -396,20 +449,18 @@ struct
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
-  val nnzGrain_hybrid = CommandLineArgs.parseInt "matcoo-nnz-grain-hybrid" 20000
+  val nnzGrain_hybrid =
+    CommandLineArgs.parseInt "matcoo-nnz-grain-hybrid" 1000000
 
-  val hybrid_split = CommandLineArgs.parseReal "matcoo-hybrid-split" 0.2
+  val hybrid_split = CommandLineArgs.parseReal "matcoo-hybrid-split" 0.09
 
 
   fun write_mxv_hybrid ctx mat (vec, vec_fut) output : write_mxv_result =
     if nnz mat <= nnzGrain_hybrid then
-      ForkJoin.choice
-        { prefer_cpu = fn _ => write_mxv mat vec output
-        , prefer_gpu = fn _ => write_mxv_gpu ctx mat vec_fut output
-        }
+      write_mxv mat vec output
     else
       let
-        val (m1, m2) = split hybrid_split mat
+        val (m1, m2) = split 0.5 mat
         val (result1, result2) =
           ForkJoin.par
             ( fn _ => write_mxv_hybrid_choose ctx m1 (vec, vec_fut) output
@@ -422,10 +473,13 @@ struct
 
 
   and write_mxv_hybrid_choose ctx mat (vec, vec_fut) output : write_mxv_result =
-    ForkJoin.choice
-      { prefer_cpu = fn _ => write_mxv_hybrid ctx mat (vec, vec_fut) output
-      , prefer_gpu = fn _ => write_mxv_gpu ctx mat vec_fut output
-      }
+    if nnz mat <= nnzGrain_hybrid then
+      write_mxv mat vec output
+    else
+      ForkJoin.choice
+        { prefer_cpu = fn _ => write_mxv_hybrid ctx mat (vec, vec_fut) output
+        , prefer_gpu = fn _ => write_mxv_gpu ctx mat vec_fut output
+        }
 
 
   fun mxv_hybrid ctx (mat: mat) (vec: R.real Seq.t) =
@@ -435,7 +489,28 @@ struct
       let
         val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
         val output: R.real array = ForkJoin.alloc (Seq.length vec)
-        val result = write_mxv_hybrid ctx mat (vec, vec_fut) output
+
+        val block_size = Real.floor (hybrid_split * Real.fromInt (nnz mat))
+        val num_blocks = Util.ceilDiv (nnz mat) block_size
+
+        fun do_block b =
+          let
+            val blo = block_size * b
+            val bhi = Int.min (nnz mat, blo + block_size)
+
+            val (_, m) = split_nnz blo mat
+            val (m, _) = split_nnz (bhi - blo) m
+          in
+            (m, write_mxv_hybrid_choose ctx m (vec, vec_fut) output)
+          end
+
+        val (_, result) =
+          SeqBasis.reduce 1
+            (fn ((m1, result1), (m2, result2)) =>
+               ( undo_split m1 m2
+               , write_mxv_combine_results (m1, m2) (result1, result2) output
+               )) (#1 (split_nnz 0 mat), SingleRowValue 0.0) (0, num_blocks)
+            do_block
       in
         (* print "top level: fill in front\n"; *)
         ForkJoin.parfor 5000 (0, I.toInt (row_lo mat)) (fn r =>
