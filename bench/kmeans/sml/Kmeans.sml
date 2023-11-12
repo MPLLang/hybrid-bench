@@ -366,66 +366,29 @@ struct
   fun kmeans k max_iterations points =
     kmeansHybrid (centroidsChunkCPU points) k max_iterations points
 
+  fun loop f max_iterations points centroids i =
+    if i >= max_iterations then
+      (i, centroids)
+    else
+      let
+        val centroids' = f points centroids
+      in
+        if
+          Seq.equal closeEnough
+            (Points.toSeq centroids, Points.toSeq centroids')
+        then (i + 1, centroids')
+        else loop f max_iterations points centroids' (i + 1)
+      end
 
   (* uses Hist.hist *)
   fun kmeans' k max_iterations points =
-    let
-      fun loop centroids i =
-        if i >= max_iterations then
-          (i, centroids)
-        else
-          let
-            val centroids' = newCentroids' points centroids
-          in
-            if
-              Seq.equal closeEnough
-                (Points.toSeq centroids, Points.toSeq centroids')
-            then (i + 1, centroids')
-            else loop centroids' (i + 1)
-          end
-    in
-      loop (Points.take points k) 0
-    end
-
+    loop newCentroids' max_iterations points (Points.take points k) 0
 
   (* uses Hist.inplace_hist_hybrid *)
   fun kmeans'' k max_iterations points =
-    let
-      fun loop centroids i =
-        if i >= max_iterations then
-          (i, centroids)
-        else
-          let
-            val centroids' = newCentroids'' points centroids
-          in
-            if
-              Seq.equal closeEnough
-                (Points.toSeq centroids, Points.toSeq centroids')
-            then (i + 1, centroids')
-            else loop centroids' (i + 1)
-          end
-    in
-      loop (Points.take points k) 0
-    end
-
+    loop newCentroids'' max_iterations points (Points.take points k) 0
 
   (* uses Hist.inplace_hist_hybrid *)
   fun kmeansNewHybrid gpu k max_iterations points =
-    let
-      fun loop centroids i =
-        if i >= max_iterations then
-          (i, centroids)
-        else
-          let
-            val centroids' = newCentroidsHybrid gpu points centroids
-          in
-            if
-              Seq.equal closeEnough
-                (Points.toSeq centroids, Points.toSeq centroids')
-            then (i + 1, centroids')
-            else loop centroids' (i + 1)
-          end
-    in
-      loop (Points.take points k) 0
-    end
+    loop (newCentroidsHybrid gpu) max_iterations points (Points.take points k) 0
 end

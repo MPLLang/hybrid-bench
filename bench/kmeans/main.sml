@@ -101,9 +101,6 @@ val bench =
                               (hist_arr, c * (d + 1), SOME (d + 1)))) k
                      val t4 = Time.now ()
                    in
-                     print
-                       ("gpu histogram (" ^ Int.toString (stop - start) ^ "): "
-                        ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
                      result
                    end
 
