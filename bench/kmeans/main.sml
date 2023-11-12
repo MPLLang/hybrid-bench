@@ -15,6 +15,8 @@ val d = CLA.parseInt "d" 2
 
 val k = CLA.parseInt "k" 5
 
+val max_iterations = CLA.parseInt "max-iterations" 10
+
 val impl = CommandLineArgs.parseString "impl" "cpu"
 
 val () = if d = ~1 then raise Fail "Need -d INT" else ()
@@ -50,8 +52,7 @@ val points =
 val () = print ("Dims:   " ^ Int.toString d ^ "\n")
 val () = print ("K:      " ^ Int.toString k ^ "\n")
 val () = print ("Points: " ^ Int.toString (Points.length points) ^ "\n")
-
-val max_iterations = 50
+val () = print ("Max iterations: " ^ Int.toString max_iterations ^ "\n")
 
 val () = print "Initialising Futhark context... "
 val ctx = Futhark.Context.new
