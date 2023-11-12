@@ -179,6 +179,13 @@ val () =
 val () = Futhark.Context.free ctx
 
 val () = print ("kmeans iterations: " ^ Int.toString kmeans_iters ^ "\n")
-val _ = List.tabulate (k, fn i =>
-  print
-    (Util.summarizeArraySlice 10 Real.toString (Points.nth kmeans_res i) ^ "\n"))
+val _ =
+  if CLA.parseFlag "print-centroids" then
+    ( List.tabulate (k, fn i =>
+        print
+          (Util.summarizeArraySlice 10 Real.toString (Points.nth kmeans_res i)
+           ^ "\n"))
+    ; ()
+    )
+  else
+    print "Pass --print-centroids to print results.\n"
