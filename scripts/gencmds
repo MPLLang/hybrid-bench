@@ -95,6 +95,17 @@ def bfs(procs, impl):
   return row
 
 
+def kmeans(procs, impl):
+  row = {
+    "tag": "kmeans",
+    "cwd": "bench/kmeans",
+    "cmd": cmd(procs, impl, "--gen-random-input -n 100000 -d 1000 -k 5 -hist-gpu-grain 10000 -hist-cpu-grain 500 -hist-gpu-split 0.2"),
+    "procs": procs,
+    "impl": impl
+  }
+  return row
+
+
 # ============================================================================
 
 
@@ -127,7 +138,7 @@ def filter_gpu_procs(row):
 
 tests = [
   add_extra(filter_gpu_procs(filter_unique(make_row(procs, impl))))
-  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs]
+  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans]
   for procs in [1,2,4,6,8,12,16,24,30,32]
   for impl in ["hybrid","cpu","gpu"]
 ]
