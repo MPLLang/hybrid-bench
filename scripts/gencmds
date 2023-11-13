@@ -110,7 +110,7 @@ def sparse_mxv(procs, impl):
   row = {
     "tag": "sparse-mxv",
     "cwd": "bench/sparse-mxv",
-    "cmd": cmd(procs, impl, "-input /home/ec2-user/suite-sparse/stokes/stokes.mtx.bin --exclude-copy-mat-onto-gpu")
+    "cmd": cmd(procs, impl, "-input /home/ec2-user/suite-sparse/stokes/stokes.mtx.bin --exclude-copy-mat-onto-gpu"),
     "procs": procs,
     "impl": impl
   }
