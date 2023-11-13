@@ -337,6 +337,9 @@ struct
    * gpu
    *)
 
+  val gpu_block_size = CommandLineArgs.parseInt "matcoo-gpu-block-size"
+    (5 * 1000 * 1000)
+
   fun tt a b =
     Time.fmt 4 (Time.- (b, a))
 
@@ -356,7 +359,12 @@ struct
         val t1 = Time.now ()
         val (is_single_row, first_val, result_fut, last_val) =
           Futhark.Entry.sparse_mxv ctx
-            (row_indices_fut, col_indices_fut, values_fut, vec_fut)
+            ( row_indices_fut
+            , col_indices_fut
+            , values_fut
+            , vec_fut
+            , Int64.fromInt gpu_block_size
+            )
         val _ = Futhark.Context.sync
         val t2 = Time.now ()
 
@@ -420,7 +428,12 @@ struct
       val t1 = Time.now ()
       val (is_single_row, first_val, result_fut, last_val) =
         Futhark.Entry.sparse_mxv ctx
-          (row_indices_fut, col_indices_fut, values_fut, vec_fut)
+          ( row_indices_fut
+          , col_indices_fut
+          , values_fut
+          , vec_fut
+          , Int64.fromInt gpu_block_size
+          )
       val _ = Futhark.Context.sync
       val t2 = Time.now ()
 
