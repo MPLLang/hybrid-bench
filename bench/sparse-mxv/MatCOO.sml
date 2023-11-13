@@ -505,7 +505,7 @@ struct
   val nnzGrain_hybrid =
     CommandLineArgs.parseInt "matcoo-nnz-grain-hybrid" 1000000
 
-  val hybrid_split = CommandLineArgs.parseReal "matcoo-hybrid-split" 0.09
+  val hybrid_split = CommandLineArgs.parseReal "matcoo-hybrid-split" 0.2
 
 
   fun write_mxv_hybrid ctx (mat, mat_fut) (vec, vec_fut) output :
@@ -542,7 +542,7 @@ struct
   fun outer_loop_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
     (block_size, blo, bhi) =
     if blo + 1 = bhi then
-      write_mxv_hybrid_choose ctx (mat, mat_fut) (vec, vec_fut) output
+      write_mxv_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
     else
       let
         val bmid = blo + (bhi - blo) div 2

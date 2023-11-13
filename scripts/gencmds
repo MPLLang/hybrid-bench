@@ -106,6 +106,17 @@ def kmeans(procs, impl):
   return row
 
 
+def sparse_mxv(procs, impl):
+  row = {
+    "tag": "sparse-mxv",
+    "cwd": "bench/sparse-mxv",
+    "cmd": cmd(procs, impl, "-input /home/ec2-user/suite-sparse/stokes/stokes.mtx.bin --exclude-copy-mat-onto-gpu")
+    "procs": procs,
+    "impl": impl
+  }
+  return row
+
+
 # ============================================================================
 
 
@@ -138,7 +149,7 @@ def filter_gpu_procs(row):
 
 tests = [
   add_extra(filter_gpu_procs(filter_unique(make_row(procs, impl))))
-  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans]
+  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans, sparse_mxv]
   for procs in [1,2,4,6,8,12,16,24,30,32]
   for impl in ["hybrid","cpu","gpu"]
 ]
