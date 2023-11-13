@@ -25,8 +25,8 @@ def do_sparse_mxv' [n] (rows: [n]i32) (cols: [n]i32) (vals: [n]f32) (vec: []f32)
       let blo = b * block_size
       let bhi = i64.min n (blo + block_size)
 
-      let brow_lo = i64.i32 rows[blo]
-      let brow_hi = 1 + i64.i32 rows[bhi-1]
+      let brow_lo = i64.i32 (rows[blo] - row_lo)
+      let brow_hi = 1 + i64.i32 (rows[bhi-1] - row_lo)
 
       let old_brow_lo_val = acc[brow_lo]
       let old_brow_hi_val =
@@ -49,8 +49,10 @@ def do_sparse_mxv' [n] (rows: [n]i32) (cols: [n]i32) (vals: [n]f32) (vec: []f32)
   acc
 
 
-entry sparse_mxv [n] (rows: [n]i32) (cols: [n]i32) (vals: [n]f32) (vec: []f32) (block_size: i64) : (u8, f32, []f32, f32) =
-  let output_vec = do_sparse_mxv' rows cols vals vec block_size
+entry sparse_mxv [n] (rows: [n]i32) (cols: [n]i32) (vals: [n]f32) (vec: []f32) (start: i64) (stop: i64) (block_size: i64) : (u8, f32, []f32, f32) =
+  let output_vec =
+    do_sparse_mxv' rows[start:stop] cols[start:stop] vals[start:stop] vec block_size
+    -- do_sparse_mxv rows[start:stop] cols[start:stop] vals[start:stop] vec
   let sz = length output_vec
   in
   if sz == 1 then

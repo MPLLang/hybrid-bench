@@ -377,7 +377,14 @@ struct
         val t1 = Time.now ()
         val (is_single_row, first_val, result_fut, last_val) =
           Futhark.Entry.sparse_mxv ctx
-            (rf, cf, vf, vec_fut, Int64.fromInt gpu_block_size)
+            ( rf
+            , cf
+            , vf
+            , vec_fut
+            , 0
+            , Int64.fromInt (nnz mat)
+            , Int64.fromInt gpu_block_size
+            )
         val _ = Futhark.Context.sync
         val t2 = Time.now ()
 
@@ -427,24 +434,33 @@ struct
    * hybrid
    *)
 
-  fun write_mxv_gpu ctx mat vec_fut output =
+  fun write_mxv_gpu ctx (mat, mat_fut) vec_fut output =
     let
       val t0 = Time.now ()
       val Mat {row_indices, col_indices, values, ...} = mat
-      val row_indices_fut =
-        Futhark.Int32Array1.new ctx row_indices (Seq.length row_indices)
-      val col_indices_fut =
-        Futhark.Int32Array1.new ctx col_indices (Seq.length col_indices)
-      val values_fut = Futhark.Real32Array1.new ctx values (Seq.length values)
+
+      val ((rf, cf, vf), start, stop) =
+        case mat_fut of
+          SOME (r, c, v) =>
+            let val (_, start, len) = ArraySlice.base row_indices
+            in ((r, c, v), start, start + len)
+            end
+
+        | NONE =>
+            let
+              val rf =
+                Futhark.Int32Array1.new ctx row_indices (Seq.length row_indices)
+              val cf =
+                Futhark.Int32Array1.new ctx col_indices (Seq.length col_indices)
+              val vf = Futhark.Real32Array1.new ctx values (Seq.length values)
+            in
+              ((rf, cf, vf), 0, Seq.length values)
+            end
+
       val t1 = Time.now ()
       val (is_single_row, first_val, result_fut, last_val) =
         Futhark.Entry.sparse_mxv ctx
-          ( row_indices_fut
-          , col_indices_fut
-          , values_fut
-          , vec_fut
-          , Int64.fromInt gpu_block_size
-          )
+          (rf, cf, vf, vec_fut, start, stop, Int64.fromInt gpu_block_size)
       val _ = Futhark.Context.sync
       val t2 = Time.now ()
 
@@ -462,9 +478,15 @@ struct
 
       val t3 = Time.now ()
 
-      val _ = Futhark.Int32Array1.free row_indices_fut
-      val _ = Futhark.Int32Array1.free col_indices_fut
-      val _ = Futhark.Real32Array1.free values_fut
+      val _ =
+        if Option.isSome mat_fut then
+          ()
+        else
+          ( Futhark.Int32Array1.free rf
+          ; Futhark.Int32Array1.free cf
+          ; Futhark.Real32Array1.free vf
+          )
+
       val _ = Futhark.Real32Array1.free result_fut
 
       val t4 = Time.now ()
@@ -486,7 +508,8 @@ struct
   val hybrid_split = CommandLineArgs.parseReal "matcoo-hybrid-split" 0.09
 
 
-  fun write_mxv_hybrid ctx mat (vec, vec_fut) output : write_mxv_result =
+  fun write_mxv_hybrid ctx (mat, mat_fut) (vec, vec_fut) output :
+    write_mxv_result =
     if nnz mat <= nnzGrain_hybrid then
       write_mxv mat vec output
     else
@@ -494,8 +517,9 @@ struct
         val (m1, m2) = split 0.5 mat
         val (result1, result2) =
           ForkJoin.par
-            ( fn _ => write_mxv_hybrid_choose ctx m1 (vec, vec_fut) output
-            , fn _ => write_mxv_hybrid ctx m2 (vec, vec_fut) output
+            ( fn _ =>
+                write_mxv_hybrid_choose ctx (m1, mat_fut) (vec, vec_fut) output
+            , fn _ => write_mxv_hybrid ctx (m2, mat_fut) (vec, vec_fut) output
             )
 
       in
@@ -503,19 +527,22 @@ struct
       end
 
 
-  and write_mxv_hybrid_choose ctx mat (vec, vec_fut) output : write_mxv_result =
+  and write_mxv_hybrid_choose ctx (mat, mat_fut) (vec, vec_fut) output :
+    write_mxv_result =
     if nnz mat <= nnzGrain_hybrid then
       write_mxv mat vec output
     else
       ForkJoin.choice
-        { prefer_cpu = fn _ => write_mxv_hybrid ctx mat (vec, vec_fut) output
-        , prefer_gpu = fn _ => write_mxv_gpu ctx mat vec_fut output
+        { prefer_cpu = fn _ =>
+            write_mxv_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
+        , prefer_gpu = fn _ => write_mxv_gpu ctx (mat, mat_fut) vec_fut output
         }
 
 
-  fun outer_loop_hybrid ctx mat (vec, vec_fut) output (block_size, blo, bhi) =
+  fun outer_loop_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
+    (block_size, blo, bhi) =
     if blo + 1 = bhi then
-      write_mxv_hybrid_choose ctx mat (vec, vec_fut) output
+      write_mxv_hybrid_choose ctx (mat, mat_fut) (vec, vec_fut) output
     else
       let
         val bmid = blo + (bhi - blo) div 2
@@ -524,10 +551,10 @@ struct
         val (result1, result2) =
           ForkJoin.par
             ( fn _ =>
-                outer_loop_hybrid ctx m1 (vec, vec_fut) output
+                outer_loop_hybrid ctx (m1, mat_fut) (vec, vec_fut) output
                   (block_size, blo, bmid)
             , fn _ =>
-                outer_loop_hybrid ctx m2 (vec, vec_fut) output
+                outer_loop_hybrid ctx (m2, mat_fut) (vec, vec_fut) output
                   (block_size, bmid, bhi)
             )
       in
@@ -535,11 +562,27 @@ struct
       end
 
 
-  fun mxv_hybrid ctx (mat: mat) (vec: R.real Seq.t) =
+  fun mxv_hybrid ctx (mat: mat, mat_fut) (vec: R.real Seq.t) =
     if nnz mat = 0 then
       Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
     else
       let
+
+        val _ =
+          let
+            val Mat {row_indices, col_indices, values, ...} = mat
+            val (_, start1, _) = ArraySlice.base row_indices
+            val (_, start2, _) = ArraySlice.base col_indices
+            val (_, start3, _) = ArraySlice.base values
+          in
+            if start1 = 0 andalso start2 = 0 andalso start3 = 0 then
+              ()
+            else
+              raise Fail
+                ("MatCOO.mxv_hybrid: error: requires Mat components to be full slices\n"
+                 ^ "(TODO: this is a silly issue that could easily be fixed...)")
+          end
+
         val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
         val output: R.real array = ForkJoin.alloc (Seq.length vec)
 
@@ -547,7 +590,7 @@ struct
         val num_blocks = Util.ceilDiv (nnz mat) block_size
 
         val result =
-          outer_loop_hybrid ctx mat (vec, vec_fut) output
+          outer_loop_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
             (block_size, 0, num_blocks)
       in
         (* print "top level: fill in front\n"; *)
