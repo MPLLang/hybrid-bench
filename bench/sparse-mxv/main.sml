@@ -7,6 +7,8 @@ val inputFile = CLA.parseString "input" ""
 val outputBinFile = CLA.parseString "output-bin" ""
 val impl = CLA.parseString "impl" "cpu"
 
+val exclude_copy_mat_onto_gpu = CLA.parseFlag "exclude-copy-mat-onto-gpu"
+
 val (mat, tm) = Util.getTime (fn _ =>
   if inputFile = "" then Util.die ("missing -input FILE.mtx")
   else M.fromFile inputFile)
@@ -34,10 +36,17 @@ val ctx = Futhark.Context.new
   (Futhark.Config.cache (SOME "futhark.cache") Futhark.Config.default)
 val () = print "Done!\n"
 
+
+val mat_fut =
+  if exclude_copy_mat_onto_gpu andalso impl <> "cpu" then
+    SOME (M.mat_on_gpu ctx mat)
+  else
+    NONE
+
 val bench =
   case impl of
     "cpu" => (fn () => M.mxv mat vec)
-  | "gpu" => (fn () => M.mxv_gpu ctx mat vec)
+  | "gpu" => (fn () => M.mxv_gpu ctx (mat, mat_fut) vec)
   | "hybrid" => (fn () => M.mxv_hybrid ctx mat vec)
   | _ => Util.die ("unknown -impl " ^ impl)
 
@@ -47,4 +56,5 @@ val _ = print
    ^ Util.summarizeArraySlice 20 (M.R.fmt (StringCvt.FIX (SOME 1))) result
    ^ "\n")
 
+val () = Option.app M.free_mat_on_gpu mat_fut
 val () = Futhark.Context.free ctx

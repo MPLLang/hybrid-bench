@@ -343,28 +343,41 @@ struct
   fun tt a b =
     Time.fmt 4 (Time.- (b, a))
 
-  fun mxv_gpu ctx (mat: mat) (vec: R.real Seq.t) =
+
+  fun mat_on_gpu ctx (mat as Mat {row_indices, col_indices, values, ...}) =
+    let
+      val r = Futhark.Int32Array1.new ctx row_indices (Seq.length row_indices)
+      val c = Futhark.Int32Array1.new ctx col_indices (Seq.length col_indices)
+      val v = Futhark.Real32Array1.new ctx values (Seq.length values)
+    in
+      (r, c, v)
+    end
+
+
+  fun free_mat_on_gpu (r_fut, c_fut, v_fut) =
+    ( Futhark.Int32Array1.free r_fut
+    ; Futhark.Int32Array1.free c_fut
+    ; Futhark.Real32Array1.free v_fut
+    )
+
+
+  fun mxv_gpu ctx (mat: mat, mat_fut) (vec: R.real Seq.t) =
     if nnz mat = 0 then
       Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
     else
       let
         val t0 = Time.now ()
-        val Mat {row_indices, col_indices, values, ...} = mat
-        val row_indices_fut =
-          Futhark.Int32Array1.new ctx row_indices (Seq.length row_indices)
-        val col_indices_fut =
-          Futhark.Int32Array1.new ctx col_indices (Seq.length col_indices)
-        val values_fut = Futhark.Real32Array1.new ctx values (Seq.length values)
+
+        val mat_fut' as (rf, cf, vf) =
+          case mat_fut of
+            SOME (r, c, v) => (r, c, v)
+          | NONE => mat_on_gpu ctx mat
+
         val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
         val t1 = Time.now ()
         val (is_single_row, first_val, result_fut, last_val) =
           Futhark.Entry.sparse_mxv ctx
-            ( row_indices_fut
-            , col_indices_fut
-            , values_fut
-            , vec_fut
-            , Int64.fromInt gpu_block_size
-            )
+            (rf, cf, vf, vec_fut, Int64.fromInt gpu_block_size)
         val _ = Futhark.Context.sync
         val t2 = Time.now ()
 
@@ -394,9 +407,7 @@ struct
 
         val t3 = Time.now ()
 
-        val _ = Futhark.Int32Array1.free row_indices_fut
-        val _ = Futhark.Int32Array1.free col_indices_fut
-        val _ = Futhark.Real32Array1.free values_fut
+        val _ = if Option.isSome mat_fut then () else free_mat_on_gpu mat_fut'
         val _ = Futhark.Real32Array1.free result_fut
 
         val t4 = Time.now ()
