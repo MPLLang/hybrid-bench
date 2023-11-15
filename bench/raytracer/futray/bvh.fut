@@ -13,12 +13,12 @@ let expand_bits (v: u32) : u32 =
   in v
 
 let morton_3D {x,y,z} : u32 =
-  let x = f64.min (f64.max(x * 1024) 0) 1023
-  let y = f64.min (f64.max(y * 1024) 0) 1023
-  let z = f64.min (f64.max(z * 1024) 0) 1023
-  let xx = expand_bits (u32.f64 x)
-  let yy = expand_bits (u32.f64 y)
-  let zz = expand_bits (u32.f64 z)
+  let x = f32.min (f32.max(x * 1024) 0) 1023
+  let y = f32.min (f32.max(y * 1024) 0) 1023
+  let z = f32.min (f32.max(z * 1024) 0) 1023
+  let xx = expand_bits (u32.f32 x)
+  let yy = expand_bits (u32.f32 y)
+  let zz = expand_bits (u32.f32 z)
   in xx * 4 + yy * 2 + zz
 
 type ptr = #leaf i32 | #inner i32
@@ -29,12 +29,12 @@ type~ bvh [n] 't = {L: [n]t, I: []inner}
 
 let bvh_mk [n] 't (bbf: t -> aabb) (ts: [n]t) : bvh [n] t =
   let centers = map (bbf >-> centre) ts
-  let x_max = f64.maximum (map (.x) centers)
-  let y_max = f64.maximum (map (.y) centers)
-  let z_max = f64.maximum (map (.z) centers)
-  let x_min = f64.minimum (map (.x) centers)
-  let y_min = f64.minimum (map (.y) centers)
-  let z_min = f64.minimum (map (.z) centers)
+  let x_max = f32.maximum (map (.x) centers)
+  let y_max = f32.maximum (map (.y) centers)
+  let z_max = f32.maximum (map (.z) centers)
+  let x_min = f32.minimum (map (.x) centers)
+  let y_min = f32.minimum (map (.y) centers)
+  let z_min = f32.minimum (map (.z) centers)
   let normalise {x,y,z} = {x=(x-x_min)/(x_max-x_min),
                            y=(y-y_min)/(y_max-y_min),
                            z=(z-z_min)/(z_max-z_min)}
@@ -44,7 +44,7 @@ let bvh_mk [n] 't (bbf: t -> aabb) (ts: [n]t) : bvh [n] t =
   let empty_aabb = {min = vec(0,0,0), max = vec(0,0,0)}
   let empty_aabb {left, right, parent} = {aabb=empty_aabb, left, right, parent}
   let inners = map empty_aabb (mk_radix_tree (map morton ts))
-  let depth = i32.f64 (f64.log2 (f64.i64 n)) + 2
+  let depth = t32 (f32.log2 (f32.i64 n)) + 2
   let get_aabb inners ptr =
     match ptr
     case #leaf i -> bbf (#[unsafe] ts[i])

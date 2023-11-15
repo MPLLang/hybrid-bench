@@ -1,6 +1,6 @@
 import "prim"
 
-let scene_epsilon:f64 = 0.1
+let scene_epsilon:f32 = 0.1
 type pos = vec3
 type dir = vec3
 type colour = vec3
@@ -14,14 +14,14 @@ type ray = {origin: vec3,
 let point_at_param (ray: ray) t =
   ray.origin `vec_add` scale t ray.dir
 
-type hit = { t: f64
+type hit = { t: f32
            , p: pos
            , normal: dir
            , colour: colour }
 
 type sphere = { pos: pos
               , colour: colour
-              , radius: f64 }
+              , radius: f32 }
 
 type opt 'a = #some a | #none
 
@@ -46,9 +46,9 @@ let sphere_hit (s: sphere) r t_min t_max : opt hit =
                else #none
   in if discriminant <= 0.0
      then #none
-     else match f ((-b - f64.sqrt(b*b-a*c))/a)
+     else match f ((-b - f32.sqrt(b*b-a*c))/a)
           case #some hit -> #some hit
-          case #none -> f ((-b + f64.sqrt(b*b-a*c))/a)
+          case #none -> f ((-b + f32.sqrt(b*b-a*c))/a)
 
 let aabb_hit (aabb: aabb) (r: ray) tmin0 tmax0 =
   let iter min' max' origin' dir' tmin' tmax' =
@@ -56,8 +56,8 @@ let aabb_hit (aabb: aabb) (r: ray) tmin0 tmax0 =
     let t0 = (min' - origin') * invD
     let t1 = (max' - origin') * invD
     let (t0', t1') = if invD < 0.0 then (t1, t0) else (t0, t1)
-    let tmin'' = f64.max t0' tmin'
-    let tmax'' = f64.min t1' tmax'
+    let tmin'' = f32.max t0' tmin'
+    let tmax'' = f32.min t1' tmax'
     in (tmin'', tmax'')
   let (tmin1, tmax1) =
     iter aabb.min.x aabb.max.x r.origin.x r.dir.x tmin0 tmax0
@@ -73,7 +73,7 @@ import "bvh"
 
 type~ objs = bvh [] sphere
 
-let objs_hit (bvh: objs) (r: ray) (t_min: f64) (t_max: f64) : opt hit =
+let objs_hit (bvh: objs) (r: ray) (t_min: f32) (t_max: f32) : opt hit =
   let contains aabb = aabb_hit aabb r t_min t_max
   let closest_hit (j, t_max) i s =
     match sphere_hit s r scene_epsilon t_max
@@ -91,8 +91,8 @@ type camera = { origin: pos
               , vertical: dir }
 
 let camera lookfrom lookat vup vfov aspect =
-  let theta = vfov * f64.pi / 180.0
-  let half_height = f64.tan (theta / 2.0)
+  let theta = vfov * f32.pi / 180.0
+  let half_height = f32.tan (theta / 2.0)
   let half_width = aspect * half_height
   let origin = lookfrom
   let w = normalise (lookfrom `vec_sub` lookat)
@@ -148,17 +148,17 @@ let ray_colour objs r (max_depth: i32) =
           (scale (1.0-t) white `vec_add` scale t bg))
 
 let trace_ray objs width height cam j i : colour =
-  let u = f64.i64 i / f64.i64 width
-  let v = f64.i64 j / f64.i64 height
+  let u = f32.i64 i / f32.i64 width
+  let v = f32.i64 j / f32.i64 height
   let ray = get_ray cam u v
   in ray_colour objs ray 50
 
 type pixel = i32
 
 let colour_to_pixel (p: colour) : pixel =
-  let ir = i32.f64 (255.99 * p.x)
-  let ig = i32.f64 (255.99 * p.y)
-  let ib = i32.f64 (255.99 * p.z)
+  let ir = i32.f32 (255.99 * p.x)
+  let ig = i32.f32 (255.99 * p.y)
+  let ib = i32.f32 (255.99 * p.z)
   in (ir << 16) | (ig << 8) | ib
 
 type image [h][w] = [h][w]pixel
@@ -178,7 +178,7 @@ let render_image_pixels objs width height cam start len : [len]pixel =
 
 type~ scene = { look_from: pos
               , look_at: pos
-              , fov: f64
+              , fov: f32
               , spheres: []sphere }
 
 entry rgbbox : scene =
@@ -189,38 +189,38 @@ entry rgbbox : scene =
     flatten <|
     tabulate_2d n n (\y z ->
                        { pos={x=(-k/2.0),
-                              y=(-k/2.0 + (k/f64.i64 n) * f64.i64 y),
-                              z=(-k/2.0 + (k/f64.i64 n) * f64.i64 z)}
+                              y=(-k/2.0 + (k/f32.i64 n) * f32.i64 y),
+                              z=(-k/2.0 + (k/f32.i64 n) * f32.i64 z)}
                        , colour={x=1.0, y=0.0, z=0.0}
-                       , radius = (k/(f64.i64 n*2.0))})
+                       , radius = (k/(f32.i64 n*2.0))})
 
   let midwall =
     flatten <|
     tabulate_2d n n (\x y ->
-                       { pos={x=(-k/2.0 + (k/f64.i64 n) * f64.i64 x),
-                              y=(-k/2.0 + (k/f64.i64 n) * f64.i64 y),
+                       { pos={x=(-k/2.0 + (k/f32.i64 n) * f32.i64 x),
+                              y=(-k/2.0 + (k/f32.i64 n) * f32.i64 y),
                               z=(-k/2.0)}
                        , colour={x=1.0, y=1.0, z=0.0}
-                       , radius = (k/(f64.i64 n*2.0))})
+                       , radius = (k/(f32.i64 n*2.0))})
 
   let rightwall =
     flatten <|
     tabulate_2d n n (\y z ->
                        { pos={x=(k/2.0),
-                              y=(-k/2.0 + (k/f64.i64 n) * f64.i64 y),
-                              z=(-k/2.0 + (k/f64.i64 n) * f64.i64 z)}
+                              y=(-k/2.0 + (k/f32.i64 n) * f32.i64 y),
+                              z=(-k/2.0 + (k/f32.i64 n) * f32.i64 z)}
                        , colour={x=0.0, y=0.0, z=1.0}
-                       , radius = (k/(f64.i64 n*2.0))})
+                       , radius = (k/(f32.i64 n*2.0))})
 
 
   let bottom =
     flatten <|
     tabulate_2d n n (\x z ->
-                       { pos={x=(-k/2.0 + (k/f64.i64 n) * f64.i64 x),
+                       { pos={x=(-k/2.0 + (k/f32.i64 n) * f32.i64 x),
                               y=(-k/2.0),
-                              z=(-k/2.0 + (k/f64.i64 n) * f64.i64 z)}
+                              z=(-k/2.0 + (k/f32.i64 n) * f32.i64 z)}
                        , colour={x=1.0, y=1.0, z=1.0}
-                       , radius = (k/(f64.i64 n*2.0))})
+                       , radius = (k/(f32.i64 n*2.0))})
 
 
   in { spheres = leftwall ++ midwall ++ rightwall ++ bottom
@@ -234,11 +234,11 @@ entry irreg : scene =
     let bottom =
       flatten <|
       tabulate_2d n n (\x z ->
-                         { pos={x=(-k/2.0 + (k/f64.i64 n) * f64.i64 x),
+                         { pos={x=(-k/2.0 + (k/f32.i64 n) * f32.i64 x),
                                 y=0.0,
-                                z=(-k/2.0 + (k/f64.i64 n) * f64.i64 z)}
+                                z=(-k/2.0 + (k/f32.i64 n) * f32.i64 z)}
                          , colour = white
-                         , radius = k/(f64.i64 n * 2.0)})
+                         , radius = k/(f32.i64 n * 2.0)})
     in { spheres = bottom
        , look_from = {x=0.0, y=12.0, z=30.0}
        , look_at = {x=0.0, y=10.0, z= -1.0}
@@ -249,7 +249,7 @@ type~ prepared_scene = {objs:objs, cam:camera}
 entry prepare_scene h w (scene: scene) : prepared_scene =
   {objs=bvh_mk sphere_aabb scene.spheres,
    cam=camera scene.look_from scene.look_at {x=0.0, y=1.0, z=0.0}
-              scene.fov (f64.i64 w/f64.i64 h)}
+              scene.fov (f32.i64 w/f32.i64 h)}
 
 entry render h w ({objs, cam}: prepared_scene) =
   render_image objs w h cam
