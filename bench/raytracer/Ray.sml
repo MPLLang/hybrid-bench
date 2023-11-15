@@ -416,11 +416,8 @@ struct
   fun render_gpu ctx fut_prepared_scene width height : image =
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
-      val doGpu = FutRay.render ctx fut_prepared_scene (ArraySlice.full pixels)
-      fun ensureOnGpu () =
-        ForkJoin.choice {prefer_cpu = ensureOnGpu, prefer_gpu = fn () => doGpu}
+      val _ = FutRay.render ctx fut_prepared_scene (ArraySlice.full pixels)
     in
-      ensureOnGpu ();
       {width = width, height = height, pixels = pixels}
     end
 

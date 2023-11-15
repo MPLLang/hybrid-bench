@@ -20,23 +20,50 @@ val _ = print ("output " ^ (if output = "" then "(none)" else output) ^ "\n")
 val _ = print ("ppm6? " ^ (if dop6 then "yes" else "no") ^ "\n")
 val _ = print ("s " ^ scene_name ^ "\n")
 
-val ((objs, cam), tm1) = Util.getTime (fn _ =>
-  Ray.from_scene width height scene)
-val _ = print ("Scene BVH construction in " ^ Time.fmt 4 tm1 ^ "s\n")
-
-val prepared_scene = FutRay.prepare_rgbbox_scene (ctx, height, width)
-
 val bench =
   case impl of
-    "cpu" => (fn () => Ray.render_cpu objs width height cam)
-  | "gpu" => (fn () => Ray.render_gpu ctx prepared_scene width height)
+    "cpu" =>
+      (fn () =>
+         let
+           val ((objs, cam), tm1) = Util.getTime (fn _ =>
+             Ray.from_scene width height scene)
+           val _ = print ("Scene BVH construction in " ^ Time.fmt 4 tm1 ^ "s\n")
+         in
+           Ray.render_cpu objs width height cam
+         end)
+
+  | "gpu" =>
+      (fn () =>
+         let
+           val (prepared_scene, tm2) = Util.getTime (fn _ =>
+             FutRay.prepare_rgbbox_scene (ctx, height, width))
+           val _ = print ("Futhark prep scene in " ^ Time.fmt 4 tm2 ^ "s\n")
+           val result = Ray.render_gpu ctx prepared_scene width height
+         in
+           FutRay.prepare_rgbbox_scene_free prepared_scene;
+           result
+         end)
+
   | "hybrid" =>
-      (fn () => Ray.render_hybrid ctx prepared_scene objs width height cam)
+      (fn () =>
+         let
+           val ((objs, cam), tm1) = Util.getTime (fn _ =>
+             Ray.from_scene width height scene)
+           val _ = print ("Scene BVH construction in " ^ Time.fmt 4 tm1 ^ "s\n")
+           val (prepared_scene, tm2) = Util.getTime (fn _ =>
+             FutRay.prepare_rgbbox_scene (ctx, height, width))
+           val _ = print ("Futhark prep scene in " ^ Time.fmt 4 tm2 ^ "s\n")
+           val result =
+             Ray.render_hybrid ctx prepared_scene objs width height cam
+         in
+           FutRay.prepare_rgbbox_scene_free prepared_scene;
+           result
+         end)
+
   | _ => raise Fail ("unknown -impl: " ^ impl)
 
 val result = Benchmark.run ("rendering (" ^ impl ^ ")") bench
 
-val _ = FutRay.prepare_rgbbox_scene_free prepared_scene
 val _ = FutRay.cleanup ctx
 
 val writeImage = if dop6 then Ray.image2ppm6 else Ray.image2ppm
