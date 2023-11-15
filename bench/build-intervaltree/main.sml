@@ -61,6 +61,14 @@ val segs = Seq.tabulate (fn i => randSeg (2 * i)) n
 val segs_xs = Seq.map #1 segs
 val futctx = FutSort.init segs_xs
 
+val _ =
+  if not reportSize then
+    ()
+  else
+    let val sz = MLton.size segs
+    in print ("input size (bytes): " ^ LargeInt.toString sz ^ "\n")
+    end
+
 fun makeIntervalMap () =
   let
 
@@ -143,7 +151,7 @@ val _ =
     ()
   else
     let val sz = MLton.size tree
-    in print ("size (bytes): " ^ LargeInt.toString sz ^ "\n")
+    in print ("size of tree (bytes): " ^ LargeInt.toString sz ^ "\n")
     end
 
 val _ = FutSort.cleanup futctx
