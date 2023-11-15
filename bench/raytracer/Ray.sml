@@ -17,7 +17,9 @@ coloured, reflective spheres.  It parallelises two things
 structure Ray =
 struct
 
-  type vec3 = {x: real, y: real, z: real}
+  structure Math = Real32.Math
+
+  type vec3 = {x: Real32.real, y: Real32.real, z: Real32.real}
 
   local
     fun vf f (v1: vec3) (v2: vec3) =
@@ -51,10 +53,10 @@ struct
 
   type aabb = {min: vec3, max: vec3}
 
-  fun min x y : real =
+  fun min x y : Real32.real =
     if x < y then x else y
 
-  fun max x y : real =
+  fun max x y : Real32.real =
     if x < y then y else x
 
   fun enclosing (box0: aabb) (box1: aabb) =
@@ -115,7 +117,7 @@ struct
                   | 1 => #y
                   | _ => #z
                 fun cmp (x, y) =
-                  Real.compare (axis (centre (f x)), axis (centre (f y)))
+                  Real32.compare (axis (centre (f x)), axis (centre (f y)))
                 val xs_sorted = sort cmp xs
                 val xs_left = List.take (xs_sorted, n div 2)
                 val xs_right = List.drop (xs_sorted, n div 2)
@@ -147,9 +149,9 @@ struct
   fun point_at_param (ray: ray) t =
     vec_add (#origin ray) (scale t (#dir ray))
 
-  type hit = {t: real, p: pos, normal: dir, colour: colour}
+  type hit = {t: Real32.real, p: pos, normal: dir, colour: colour}
 
-  type sphere = {pos: pos, colour: colour, radius: real}
+  type sphere = {pos: pos, colour: colour, radius: Real32.real}
 
   fun sphere_aabb {pos, colour = _, radius} =
     { min = vec_sub pos {x = radius, y = radius, z = radius}
@@ -300,8 +302,8 @@ struct
 
   fun trace_ray objs width height cam j i : colour =
     let
-      val u = real i / real width
-      val v = real j / real height
+      val u = Real32.fromInt i / Real32.fromInt width
+      val v = Real32.fromInt j / Real32.fromInt height
       val ray = get_ray cam u v
     in
       ray_colour objs ray 0
@@ -309,11 +311,13 @@ struct
 
   type pixel = Int32.int
 
-  fun colour_to_pixel {x = r, y = g, z = b} : pixel =
+  fun colour_to_pixel
+    {x = r: Real32.real, y = g: Real32.real, z = b: Real32.real} : pixel =
     let
-      val ir = Word32.fromInt (trunc (255.99 * r))
-      val ig = Word32.fromInt (trunc (255.99 * g))
-      val ib = Word32.fromInt (trunc (255.99 * b))
+      val s: Real32.real = 255.99
+      val ir = Word32.fromInt (Real32.trunc (s * r))
+      val ig = Word32.fromInt (Real32.trunc (s * g))
+      val ib = Word32.fromInt (Real32.trunc (s * b))
 
       val x = Word32.orb
         (Word32.orb (Word32.<< (ir, 0w16), Word32.<< (ig, 0w8)), ib)
@@ -423,12 +427,16 @@ struct
 
 
   type scene =
-    {camLookFrom: pos, camLookAt: pos, camFov: real, spheres: sphere list}
+    { camLookFrom: pos
+    , camLookAt: pos
+    , camFov: Real32.real
+    , spheres: sphere list
+    }
 
   fun from_scene width height (scene: scene) : objs * camera =
     ( mk_bvh sphere_aabb (#spheres scene)
     , camera (#camLookFrom scene) (#camLookAt scene) {x = 0.0, y = 1.0, z = 0.0}
-        (#camFov scene) (real width / real height)
+        (#camFov scene) (Real32.fromInt width / Real32.fromInt height)
     )
 
   fun tabulate_2d m n f =
@@ -437,7 +445,9 @@ struct
   val rgbbox: scene =
     let
       val n = 10
-      val k = 60.0
+      val k: Real32.real = 60.0
+
+      val real = Real32.fromInt
 
       val leftwall = tabulate_2d n n (fn (y, z) =>
         { pos =
@@ -492,7 +502,8 @@ struct
   val irreg: scene =
     let
       val n = 100
-      val k = 600.0
+      val k: Real32.real = 600.0
+      val real = Real32.fromInt
       val bottom = tabulate_2d n n (fn (x, z) =>
         { pos =
             { x = (~k / 2.0 + (k / real n) * real x)
