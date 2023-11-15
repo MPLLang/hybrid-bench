@@ -88,18 +88,21 @@ val bench =
                { kernel = fn (start, stop) =>
                    let
                      val t1 = Time.now ()
-                     val hist_fut =
+                     val (counts_fut, hist_fut) =
                        Futhark.Entry.histogram ctx
                          (points_fut, centroids_fut, start, stop - start)
                      val () = Futhark.Context.sync ctx
 
                      val t2 = Time.now ()
+                     val counts_arr = Futhark.Int64Array1.values counts_fut
                      val hist_arr = Futhark.Real64Array2.values hist_fut
+                     val () = Futhark.Int64Array1.free counts_fut
                      val () = Futhark.Real64Array2.free hist_fut
                      val t3 = Time.now ()
                      val result = ArraySlice.full (Array.tabulate (k, fn c =>
                        Array.tabulate (d + 1, fn i =>
-                         Array.sub (hist_arr, c * (d + 1) + i))))
+                         if i = 0 then Real.fromInt (Array.sub (counts_arr, c))
+                         else Array.sub (hist_arr, c * d + (i - 1)))))
                      val t4 = Time.now ()
                    in
                      (* print

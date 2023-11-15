@@ -99,7 +99,7 @@ def kmeans(procs, impl):
   row = {
     "tag": "kmeans",
     "cwd": "bench/kmeans",
-    "cmd": cmd(procs, impl, "-n 100000 --gen-random-input -d 512 -k 16 -hist-gpu-grain 1000 -hist-gpu-split 0.16 -hist-cpu-grain 250"),
+    "cmd": cmd(procs, impl, "-n 100000 --gen-random-input -d 512 -k 16 -hist-gpu-grain 2000 -hist-gpu-split 0.08 -hist-cpu-grain 250"),
     "procs": procs,
     "impl": impl
   }
