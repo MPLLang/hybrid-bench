@@ -2,9 +2,12 @@ structure CLA = CommandLineArgs
 
 val n = CLA.parseInt "n" 5000000
 val impl = CLA.parseString "impl" "hybrid"
+val reportSize = CLA.parseFlag "report-size"
 
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
+val _ = print
+  ("report-size? " ^ (if reportSize then "true" else "false") ^ "\n")
 
 
 fun cmpWith vals (i, j) =
@@ -134,5 +137,13 @@ val _ = print ("hits " ^ Int.toString numHits ^ "\n")
 val _ = print ("min " ^ Int.toString minHits ^ "\n")
 val _ = print ("avg " ^ Int.toString avgHits ^ "\n")
 val _ = print ("max " ^ Int.toString maxHits ^ "\n")
+
+val _ =
+  if not reportSize then
+    ()
+  else
+    let val sz = MLton.size tree
+    in print ("size (bytes): " ^ LargeInt.toString sz ^ "\n")
+    end
 
 val _ = FutSort.cleanup futctx
