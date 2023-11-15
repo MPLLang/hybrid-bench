@@ -50,7 +50,7 @@ sig
   val kmeans': int -> int -> Points.t -> int * Points.t
   val kmeans'': int -> int -> Points.t -> int * Points.t
   val kmeansNewHybrid:
-    (Points.t -> {kernel: (int * int) -> real Seq.t Seq.t, after: unit -> unit})
+    (Points.t -> {kernel: (int * int) -> real array Seq.t, after: unit -> unit})
     -> int
     -> int
     -> Points.t
@@ -255,7 +255,7 @@ struct
     val hist_gpu_grain = CommandLineArgs.parseInt "hist-gpu-grain" 100000
     val hist_gpu_split = CommandLineArgs.parseReal "hist-gpu-split" 0.75
 
-    val _ = print ("hist-cpu-grain " ^ Int.toString hist_gpu_grain ^ "\n")
+    val _ = print ("hist-gpu-grain " ^ Int.toString hist_gpu_grain ^ "\n")
     val _ = print ("hist-gpu-split " ^ Real.toString hist_gpu_split ^ "\n")
 
     fun newCentroidsHybrid gpu points centroids =
@@ -274,9 +274,12 @@ struct
          *   [s1/s0, s2/s0, ..., s(d)/s0]
          *)
         val cluster_results =
-          Hist.inplace_hist_hybrid hist_cpu_grain hist_gpu_grain hist_gpu_split
-            { combine = Seq.zipWith Real.+
-            , fresh_neutral = fn () => Seq.tabulate (fn _ => 0.0) (d + 1)
+          Hist.inplace_hist_hybrid_two_level hist_cpu_grain hist_gpu_grain
+            hist_gpu_split
+            { combine_inplace = fn (a, b) =>
+                Util.for (0, d + 1) (fn i =>
+                  Array.update (a, i, Array.sub (a, i) + Array.sub (b, i)))
+            , fresh_neutral = fn () => Array.tabulate (d + 1, fn _ => 0.0)
             , num_bins = k
             }
             { lo = 0
@@ -288,14 +291,12 @@ struct
                   let
                     val pt = Points.nth points i
                   in
-                    ArraySlice.update
-                      (binval, 0, 1.0 + ArraySlice.sub (binval, 0));
-
+                    Array.update (binval, 0, 1.0 + Array.sub (binval, 0));
                     Util.for (0, d) (fn j =>
-                      ArraySlice.update
+                      Array.update
                         ( binval
                         , j + 1
-                        , ArraySlice.sub (binval, j + 1) + Seq.nth pt j
+                        , Array.sub (binval, j + 1) + Seq.nth pt j
                         ))
                   end
             }
@@ -303,8 +304,10 @@ struct
         val _ = after ()
 
         val means =
-          Seq.map (fn x => Seq.map (fn r => r / Seq.nth x 0) (Seq.drop x 1))
-            cluster_results
+          Seq.map
+            (fn x => let val x = ArraySlice.full x
+                     in Seq.map (fn r => r / Seq.nth x 0) (Seq.drop x 1)
+                     end) cluster_results
       in
         Points.fromSeq d (Seq.flatten means)
       end

@@ -53,6 +53,23 @@ sig
        }
     -> 'a Seq.t
 
+
+  val inplace_hist_hybrid_two_level:
+    grain (* cpu grain *)
+    -> grain (* gpu grain *)
+    -> real (* gpu split *)
+    -> { combine_inplace: 'a * 'a -> unit
+       , fresh_neutral: unit -> 'a
+       , num_bins: int
+       }
+    -> { lo: int
+       , hi: int
+       , get_bin: int -> int
+       , modify_bin: int -> 'a -> unit
+       , gpu: (int * int) -> 'a Seq.t
+       }
+    -> 'a Seq.t
+
 end =
 struct
 
@@ -174,6 +191,100 @@ struct
               gpu (blo, bhi)
             end
         )
+    end
+
+
+  fun inplace_hist_hybrid_two_level cpu_grain gpu_grain gpu_split
+    (hist_args as
+       {combine_inplace: 'a * 'a -> unit, fresh_neutral: unit -> 'a, num_bins})
+    {lo, hi, get_bin, modify_bin, gpu: int * int -> 'a Seq.t} : 'a Seq.t =
+    let
+      fun fresh_acc () =
+        Seq.tabulate (fn _ => fresh_neutral ()) (num_bins)
+
+      fun combine_accs (acc1: 'a Seq.t, acc2: 'a Seq.t) : 'a Seq.t =
+        ( Util.for (0, Seq.length acc1) (fn i =>
+            combine_inplace (Seq.nth acc1 i, Seq.nth acc2 i))
+        ; acc1
+        )
+
+
+      fun base_cpu start stop =
+        let
+          val acc = fresh_acc ()
+        in
+          Util.for (start, stop) (fn i =>
+            let val bin = get_bin i
+            in modify_bin i (Seq.nth acc bin)
+            end);
+          acc
+        end
+
+
+      fun loop_cpu start stop =
+        if stop - start <= cpu_grain then
+          base_cpu start stop
+        else
+          let
+            val mid = start + (stop - start) div 2
+            val (l, r) = ForkJoin.par (fn _ => loop_cpu start mid, fn _ =>
+              loop_cpu mid stop)
+          in
+            combine_accs (l, r)
+          end
+
+
+      fun loop start stop =
+        if stop - start <= cpu_grain then
+          base_cpu start stop
+        else
+          let
+            val mid = start + (stop - start) div 2
+            val (l, r) = ForkJoin.par (fn _ => loop_choose start mid, fn _ =>
+              loop mid stop)
+          in
+            combine_accs (l, r)
+          end
+
+
+      and loop_choose start stop =
+        if stop - start <= gpu_grain then
+          loop_cpu start stop
+        else
+          ForkJoin.choice
+            { prefer_cpu = fn _ => loop start stop
+            , prefer_gpu = fn _ => gpu (start, stop)
+            }
+
+
+      val n = hi - lo
+      val block_size = Real.floor (gpu_split * Real.fromInt n)
+      val num_blocks = Util.ceilDiv n block_size
+
+      fun outer_loop blo bhi =
+        if blo >= bhi then
+          raise Fail "impossible"
+        else if blo + 1 = bhi then
+          let
+            val start = lo + blo * block_size
+            val stop = Int.min (start + block_size, lo + n)
+          in
+            ForkJoin.choice
+              { prefer_cpu = fn _ => loop start stop
+              , prefer_gpu = fn _ => gpu (start, stop)
+              }
+          end
+        else
+          let
+            val bmid = blo + (bhi - blo) div 2
+            val (l, r) = ForkJoin.par (fn _ => outer_loop blo bmid, fn _ =>
+              outer_loop bmid bhi)
+          in
+            combine_accs (l, r)
+          end
+
+    in
+      outer_loop 0 num_blocks
     end
 
 end

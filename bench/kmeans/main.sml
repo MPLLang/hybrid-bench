@@ -97,13 +97,14 @@ val bench =
                      val hist_arr = Futhark.Real64Array2.values hist_fut
                      val () = Futhark.Real64Array2.free hist_fut
                      val t3 = Time.now ()
-                     val result =
-                       Seq.tabulate
-                         (fn c =>
-                            Seq.fromArraySeq (ArraySlice.slice
-                              (hist_arr, c * (d + 1), SOME (d + 1)))) k
+                     val result = ArraySlice.full (Array.tabulate (k, fn c =>
+                       Array.tabulate (d + 1, fn i =>
+                         Array.sub (hist_arr, c * (d + 1) + i))))
                      val t4 = Time.now ()
                    in
+                     (* print
+                       ("gpu kmeans (" ^ Int.toString (stop - start) ^ "): "
+                        ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n"); *)
                      result
                    end
 
@@ -130,7 +131,8 @@ val bench =
          in
            print ("gpu kmeans " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "s\n");
            (Int32.toInt num_iters, result)
-         end)
+         end
+         handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg))
   | "hybrid-orig" =>
       (fn () =>
          let
