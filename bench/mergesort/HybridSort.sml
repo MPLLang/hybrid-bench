@@ -61,8 +61,6 @@ struct
     let
       val n = Seq.length input
 
-      fun base xs = Quicksort.sort Int32.compare xs
-
       fun loop (xs: Int32.int Seq.t) =
         if Seq.length xs <= sort_grain then
           ForkJoin.choice
