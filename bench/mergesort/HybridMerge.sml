@@ -45,7 +45,7 @@ struct
   fun split n =
     Real.ceil (merge_split * Real.fromInt n)
 
-  fun write_merge ctx (s1, s2) t =
+  fun write_merge ctxMap (s1, s2) t =
     if ArraySlice.length s1 = 0 then
       Util.foreach s2 (fn (i, x) => ArraySlice.update (t, i, x))
     else if ArraySlice.length s2 = 0 then
@@ -53,7 +53,8 @@ struct
     else if ArraySlice.length t <= merge_grain then
       ForkJoin.choice
         { prefer_cpu = fn _ => Merge.writeMerge Int32.compare (s1, s2) t
-        , prefer_gpu = fn _ => write_merge_gpu ctx (s1, s2) t
+        , prefer_gpu = fn device =>
+            write_merge_gpu (CtxMap.choose ctxMap device) (s1, s2) t
         }
     else
       let
@@ -72,28 +73,28 @@ struct
         val tl = slice_idxs t 0 (mid1 + mid2)
         val tr = slice_idxs t (mid1 + mid2) (ArraySlice.length t)
       in
-        ForkJoin.par (fn _ => write_merge_choose ctx (l1, l2) tl, fn _ =>
-          write_merge ctx (r1, r2) tr);
+        ForkJoin.par (fn _ => write_merge_choose ctxMap (l1, l2) tl, fn _ =>
+          write_merge ctxMap (r1, r2) tr);
         ()
       end
 
 
-  and write_merge_choose ctx (s1, s2) t =
+  and write_merge_choose ctxMap (s1, s2) t =
     if ArraySlice.length t <= merge_grain then
-      write_merge ctx (s1, s2) t
+      write_merge ctxMap (s1, s2) t
     else
       ForkJoin.choice
-        { prefer_cpu = fn _ => write_merge ctx (s1, s2) t
-        , prefer_gpu = fn _ => write_merge_gpu ctx (s1, s2) t
+        { prefer_cpu = fn _ => write_merge ctxMap (s1, s2) t
+        , prefer_gpu = fn device => write_merge_gpu (CtxMap.choose ctxMap device) (s1, s2) t
         }
 
 
-  fun merge ctx (s1, s2) =
+  fun merge ctxMap (s1, s2) =
     let
       val n = ArraySlice.length s1 + ArraySlice.length s2
       val out = ArraySlice.full (ForkJoin.alloc n)
     in
-      write_merge ctx (s1, s2) out;
+      write_merge ctxMap (s1, s2) out;
       out
     end
 
