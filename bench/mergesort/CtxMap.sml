@@ -22,6 +22,10 @@ struct
     Seq.map (fn (_, ctx) => FutharkSort.Context.free ctx) ctxMap
 
   fun choose (ctxMap: ctx_map) (device: device_identifier) =
-    #2 (Seq.first (Seq.filter (fn (name, _) => name = device) ctxMap))
-
+  let
+    val (device, ctx) = Seq.first (Seq.filter (fn (name, _) => name = device) ctxMap)
+    val _ = print ("chosen device: " ^ device ^ "\n")
+  in
+  ctx
+  end
 end
