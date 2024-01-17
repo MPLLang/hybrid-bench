@@ -17,6 +17,8 @@ coloured, reflective spheres.  It parallelises two things
 structure Ray =
 struct
 
+  structure CtxSet = CtxSetFn (structure F = Futhark)
+
   structure Math = Real32.Math
 
   type vec3 = {x: Real32.real, y: Real32.real, z: Real32.real}
@@ -373,7 +375,7 @@ struct
   val renderHybridGrain = BenchParams.Raytracer.gpu_grain
 
 
-  fun render_hybrid ctx fut_prepared_scene objs width height cam : image =
+  fun render_hybrid ctxSet fut_prepared_scene objs width height cam : image =
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
 
@@ -386,13 +388,13 @@ struct
             (trace_ray objs width height cam j i))
         end
 
-      fun gpuTask lo hi =
-        FutRay.render ctx fut_prepared_scene (ArraySlice.slice
+      fun gpuTask device (lo, hi) =
+        FutRay.render (CtxSet.choose ctxSet device) fut_prepared_scene (ArraySlice.slice
           (pixels, lo, SOME (hi - lo)))
 
     in
       HybridBasis.parfor_hybrid renderHybridGpuSplit renderHybridGrain
-        (0, height * width) (writePixel, fn (lo, hi) => gpuTask lo hi);
+        (0, height * width) (writePixel, gpuTask);
 
       {width = width, height = height, pixels = pixels}
     end

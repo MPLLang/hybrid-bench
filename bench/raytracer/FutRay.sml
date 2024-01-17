@@ -3,18 +3,15 @@ struct
 
   val profile = CommandLineArgs.parseFlag "profile"
 
-  type fut_context = Futhark.ctx
+  structure CtxSet = CtxSetFn (structure F = Futhark)
 
   fun init () =
     let
       val () = print "Initialising Futhark context... "
-      val cfg =
-        (Futhark.Config.cache (SOME "futhark.cache")
-         o Futhark.Config.profiling profile) Futhark.Config.default
-      val ctx = Futhark.Context.new cfg
+      val ctxSet = CtxSet.fromList ["#0", "#1"]
       val () = print "Done!\n"
     in
-      ctx
+      ctxSet
     end
 
 
@@ -23,11 +20,15 @@ struct
     in TextIO.output (os, s) before TextIO.closeOut os
     end
 
-  fun cleanup x =
-    ( if profile then (writeFile "futhark.json" (Futhark.Context.report x))
+  fun cleanup ctxSet =
+  let 
+  val (_, ctx) = Seq.first ctxSet (* FIXME *)
+  in
+    ( if profile then (writeFile "futhark.json" (Futhark.Context.report ctx))
       else ()
-    ; Futhark.Context.free x
+    ; CtxSet.free ctxSet
     )
+    end
 
   type i64 = Int64.int
   type i32 = Int32.int

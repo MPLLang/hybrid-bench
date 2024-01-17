@@ -12,7 +12,8 @@ val scene =
   | "irreg" => raise Fail ("irreg scene not implemented yet")
   | s => raise Fail ("No such scene: " ^ s)
 
-val ctx = FutRay.init ()
+val ctxSet = FutRay.init ()
+val (_, ctx) = Seq.first ctxSet (* use the first gpu for gpu benchmarks *)
 
 val _ = print ("h " ^ Int.toString height ^ "\n")
 val _ = print ("w " ^ Int.toString width ^ "\n")
@@ -51,10 +52,11 @@ val bench =
              Ray.from_scene width height scene)
            val _ = print ("Scene BVH construction in " ^ Time.fmt 4 tm1 ^ "s\n")
            val (prepared_scene, tm2) = Util.getTime (fn _ =>
+             (* use the first gpu device *)
              FutRay.prepare_rgbbox_scene (ctx, height, width))
            val _ = print ("Futhark prep scene in " ^ Time.fmt 4 tm2 ^ "s\n")
            val result =
-             Ray.render_hybrid ctx prepared_scene objs width height cam
+             Ray.render_hybrid ctxSet prepared_scene objs width height cam
          in
            FutRay.prepare_rgbbox_scene_free prepared_scene;
            result
@@ -64,7 +66,7 @@ val bench =
 
 val result = Benchmark.run ("rendering (" ^ impl ^ ")") bench
 
-val _ = FutRay.cleanup ctx
+val _ = FutRay.cleanup ctxSet
 
 val writeImage = if dop6 then Ray.image2ppm6 else Ray.image2ppm
 
