@@ -3,19 +3,15 @@ struct
 
   val profile = CommandLineArgs.parseFlag "profile"
 
-  type fut_context = FutharkMandelbrot.ctx
+  structure CtxSet = CtxSetFn (structure F = FutharkMandelbrot)
 
   fun init () =
     let
       val () = print "Initialising Futhark context... "
-      val cfg =
-        (FutharkMandelbrot.Config.cache (SOME "futhark.cache")
-         o FutharkMandelbrot.Config.profiling profile)
-          FutharkMandelbrot.Config.default
-      val ctx = FutharkMandelbrot.Context.new cfg
+      val ctxSet = CtxSet.fromList ["#0", "#1"]
       val () = print "Done!\n"
     in
-      ctx
+      ctxSet
     end
 
   fun writeFile fname s =
@@ -23,13 +19,15 @@ struct
     in TextIO.output (os, s) before TextIO.closeOut os
     end
 
-  fun cleanup x =
-    ( if profile then
-        (writeFile "futhark.json" (FutharkMandelbrot.Context.report x))
-      else
-        ()
-    ; FutharkMandelbrot.Context.free x
+  fun cleanup ctxSet =
+  let 
+  val (_, ctx) = Seq.first ctxSet (* FIXME *)
+  in
+    ( if profile then (writeFile "futhark.json" (FutharkMandelbrot.Context.report ctx))
+      else ()
+    ; CtxSet.free ctxSet
     )
+    end
 
   type i64 = Int64.int
   type i32 = Int32.int
