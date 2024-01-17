@@ -1,5 +1,7 @@
 structure CLA = CommandLineArgs
 
+structure CtxSet = CtxSetFn (structure F = FutharkSort)
+
 val n = CLA.parseInt "n" (100 * 1000 * 1000)
 val impl = CLA.parseString "impl" "hybrid"
 val _ = print ("n " ^ Int.toString n ^ "\n")
@@ -7,8 +9,8 @@ val _ = print ("impl " ^ impl ^ "\n")
 
 val () = print "Initialising Futhark context map... "
 
-val ctxMap = CtxMap.fromList ["#0", "#1"] (* TODO: Read it from configuration *)
-val (_, ctx) = Seq.first ctxMap (* use the first gpu for gpu benchmarks *)
+val ctxSet = CtxSet.fromList ["#0", "#1"] (* TODO: Read it from configuration *)
+val (_, ctx) = Seq.first ctxSet (* use the first gpu for gpu benchmarks *)
 
 val () = print "Done!\n"
 
@@ -20,7 +22,7 @@ val input = Seq.tabulate elem n
 
 val bench =
   case impl of
-    "hybrid" => (fn () => HybridSort.sort ctxMap input)
+    "hybrid" => (fn () => HybridSort.sort ctxSet input)
   | "cpu" => (fn () => HybridSort.sort_cpu input)
   | "gpu" => (fn () => HybridSort.sort_gpu ctx input)
   | _ => Util.die ("unknown impl: " ^ impl)
@@ -32,5 +34,4 @@ val _ = print
 val _ = print
   ("result " ^ Util.summarizeArraySlice 8 Int32.toString result ^ "\n")
 
-(* TODO: Use foreach *)
-val _ = Seq.map (fn (name, ctx) => FutharkSort.Context.free ctx) ctxMap
+val _ = CtxSet.free ctxSet

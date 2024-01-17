@@ -1,5 +1,6 @@
 structure HybridMerge =
 struct
+  structure CtxSet = CtxSetFn (structure F = FutharkSort)
 
   fun slice_idxs s i j =
     ArraySlice.subslice (s, i, SOME (j - i))
@@ -54,7 +55,7 @@ struct
       ForkJoin.choice
         { prefer_cpu = fn _ => Merge.writeMerge Int32.compare (s1, s2) t
         , prefer_gpu = fn device =>
-            write_merge_gpu (CtxMap.choose ctxMap device) (s1, s2) t
+            write_merge_gpu (CtxSet.choose ctxMap device) (s1, s2) t
         }
     else
       let
@@ -85,7 +86,7 @@ struct
     else
       ForkJoin.choice
         { prefer_cpu = fn _ => write_merge ctxMap (s1, s2) t
-        , prefer_gpu = fn device => write_merge_gpu (CtxMap.choose ctxMap device) (s1, s2) t
+        , prefer_gpu = fn device => write_merge_gpu (CtxSet.choose ctxMap device) (s1, s2) t
         }
 
 
