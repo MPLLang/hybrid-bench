@@ -21,13 +21,13 @@ struct
     end
 
   fun cleanup ctxSet =
-  let 
-  val (_, ctx) = Seq.first ctxSet (* FIXME *)
-  in
-    ( if profile then (writeFile "futhark.json" (Futhark.Context.report ctx))
-      else ()
-    ; CtxSet.free ctxSet
-    )
+    let
+      val (_, ctx) = Seq.first ctxSet (* FIXME *)
+    in
+      ( if profile then (writeFile "futhark.json" (Futhark.Context.report ctx))
+        else ()
+      ; CtxSet.free ctxSet
+      )
     end
 
   type i64 = Int64.int
@@ -49,6 +49,31 @@ struct
 
   fun prepare_rgbbox_scene_free (scene: prepared_scene) =
     Futhark.Opaque.prepared_scene.free (#prepared scene)
+
+  structure PreparedSceneSet =
+  struct
+    open CtxSet
+
+    type scene_set = (device_identifier * prepared_scene) Seq.t
+
+    fun prepareFromCtxSet (ctxSet: ctx_set) (height, width) =
+      Seq.map
+        (fn (device, ctx) =>
+           let val scene = prepare_rgbbox_scene (ctx, height, width)
+           in (device, scene)
+           end) ctxSet
+
+    fun freeScene (sceneSet: scene_set) =
+      Seq.map (fn (_, scene) => prepare_rgbbox_scene_free scene) sceneSet
+
+    fun choose (sceneSet: scene_set) (device: device_identifier) =
+      let
+        val (_, scene) = Seq.first
+          (Seq.filter (fn (d, _) => d = device) sceneSet)
+      in
+        scene
+      end
+  end
 
   fun render ctx {prepared, height, width} output : unit =
     let

@@ -51,14 +51,13 @@ val bench =
            val ((objs, cam), tm1) = Util.getTime (fn _ =>
              Ray.from_scene width height scene)
            val _ = print ("Scene BVH construction in " ^ Time.fmt 4 tm1 ^ "s\n")
-           val (prepared_scene, tm2) = Util.getTime (fn _ =>
-             (* use the first gpu device *)
-             FutRay.prepare_rgbbox_scene (ctx, height, width))
-           val _ = print ("Futhark prep scene in " ^ Time.fmt 4 tm2 ^ "s\n")
+           val (prepared_scene_set, tm2) = Util.getTime (fn _ =>
+             FutRay.PreparedSceneSet.prepareFromCtxSet ctxSet (height, width))
+           val _ = print ("Futhark prep scenes in " ^ Time.fmt 4 tm2 ^ "s\n")
            val result =
-             Ray.render_hybrid ctxSet prepared_scene objs width height cam
+             Ray.render_hybrid ctxSet prepared_scene_set objs width height cam
          in
-           FutRay.prepare_rgbbox_scene_free prepared_scene;
+           FutRay.PreparedSceneSet.freeScene prepared_scene_set;
            result
          end)
 

@@ -375,7 +375,7 @@ struct
   val renderHybridGrain = BenchParams.Raytracer.gpu_grain
 
 
-  fun render_hybrid ctxSet fut_prepared_scene objs width height cam : image =
+  fun render_hybrid ctxSet fut_prepared_scene_set objs width height cam : image =
     let
       val pixels: Int32.int array = ForkJoin.alloc (height * width)
 
@@ -389,8 +389,9 @@ struct
         end
 
       fun gpuTask device (lo, hi) =
-        FutRay.render (CtxSet.choose ctxSet device) fut_prepared_scene (ArraySlice.slice
-          (pixels, lo, SOME (hi - lo)))
+        FutRay.render (CtxSet.choose ctxSet device)
+          (FutRay.PreparedSceneSet.choose fut_prepared_scene_set device)
+          (ArraySlice.slice (pixels, lo, SOME (hi - lo)))
 
     in
       HybridBasis.parfor_hybrid renderHybridGpuSplit renderHybridGrain
