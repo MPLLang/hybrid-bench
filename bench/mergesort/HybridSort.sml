@@ -58,7 +58,7 @@ struct
   fun split n =
     Real.ceil (sort_split * Real.fromInt n)
 
-  fun sort ctxMap input =
+  fun sort ctxSet input =
     let
       val n = Seq.length input
 
@@ -66,7 +66,7 @@ struct
         if Seq.length xs <= sort_grain then
           ForkJoin.choice
             { prefer_cpu = fn _ => sort_cpu xs
-            , prefer_gpu = fn device => sort_gpu (CtxSet.choose ctxMap device) xs
+            , prefer_gpu = fn device => sort_gpu (CtxSet.choose ctxSet device) xs
             }
         else
           let
@@ -76,7 +76,7 @@ struct
             val (left', right') =
               ForkJoin.par (fn _ => loop_choose left, fn _ => loop right)
           in
-            HybridMerge.merge ctxMap (left', right')
+            HybridMerge.merge ctxSet (left', right')
           end
 
       and loop_choose xs =
@@ -86,7 +86,7 @@ struct
           ForkJoin.choice
             { prefer_cpu = fn _ => loop xs
             , prefer_gpu = fn device =>
-                sort_gpu (CtxSet.choose ctxMap device) xs
+                sort_gpu (CtxSet.choose ctxSet device) xs
             }
 
     in
