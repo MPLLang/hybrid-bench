@@ -5,3 +5,4 @@ HybridBasis.sml
 BenchParams.sml
 CtxSet.sml
 Device.sml
+GpuData.sml
