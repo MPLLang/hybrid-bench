@@ -278,7 +278,7 @@ struct
   val reduce_hybrid_split = BenchParams.Quickhull.reduce_hybrid_split
 
 
-  fun hull_hybrid ctx (pts, points_fut) =
+  fun hull_hybrid ctxSet (pts, points_fut) =
     let
       fun pt i =
         FlatPointSeq.nth pts (Int32.toInt i)
@@ -312,13 +312,17 @@ struct
               HybridBasis.reduce_hybrid reduce_hybrid_split reduce_hybrid_grain
                 max (~1, Real.negInf) (0, Seq.length idxs)
                 ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
-                , fn (lo, hi) =>
-                    let
-                      val i = point_furthest_from_line_gpu ctx
-                        (points_fut, l, r, Seq.subseq idxs (lo, hi - lo))
-                    in
-                      (i, d i)
-                    end
+                , fn device =>
+                    fn (lo, hi) =>
+                      let
+                        val ctx = CtxSet.choose ctxSet device
+                        val points_fut =
+                          FutharkPoints.choose points_fut_set device
+                        val i = point_furthest_from_line_gpu ctx
+                          (points_fut, l, r, Seq.subseq idxs (lo, hi - lo))
+                      in
+                        (i, d i)
+                      end
                 )
 
             fun doLeft () =
@@ -342,7 +346,14 @@ struct
         else
           ForkJoin.choice
             { prefer_cpu = fn () => semihull idxs l r
-            , prefer_gpu = fn () => semihull_gpu ctx (points_fut, idxs, l, r)
+            , prefer_gpu = fn device =>
+                let
+                  val ctx = CtxSet.choose ctxSet device
+                  val points_fut = FutharkPoints.choose points_fut_set device
+                in
+                  semihull_gpu ctx (points_fut, idxs, l, r)
+                end
+
             }
 
 
@@ -356,9 +367,16 @@ struct
               (0, Seq.length idxs)
               ( fn i => Seq.nth idxs i
               , fn i => aboveLine lp rp (Seq.nth idxs i)
-              , fn (lo, hi) =>
-                  points_above_gpu ctx
-                    (points_fut, Seq.subseq idxs (lo, hi - lo), l, r)
+              , fn device =>
+                  fn (lo, hi) =>
+                    let
+                      val ctx = CtxSet.choose ctxSet device
+                      val points_fut =
+                        FutharkPoints.choose points_fut_set device
+                    in
+                      points_above_gpu ctx
+                        (points_fut, Seq.subseq idxs (lo, hi - lo), l, r)
+                    end
               )
         in
           semihull_choose idxs' l r
@@ -371,8 +389,13 @@ struct
         else
           ForkJoin.choice
             { prefer_cpu = fn _ => filter_then_semihull idxs l r
-            , prefer_gpu = fn _ =>
-                filter_then_semihull_gpu ctx (points_fut, l, r, idxs)
+            , prefer_gpu = fn device =>
+                let
+                  val ctx = CtxSet.choose ctxSet device
+                  val points_fut = FutharkPoints.choose points_fut_set device
+                in
+                  filter_then_semihull_gpu ctx (points_fut, l, r, idxs)
+                end
             }
 
 
@@ -388,9 +411,16 @@ struct
               (0, FlatPointSeq.length pts)
               ( fn i => Int32.fromInt i
               , fn i => dist lp rp (Int32.fromInt i) > 0.0
-              , fn (lo, hi) =>
-                  top_level_points_above_in_range_gpu ctx
-                    (points_fut, lo, hi, l, r)
+              , fn device =>
+                  fn (lo, hi) =>
+                    let
+                      val ctx = CtxSet.choose ctxSet device
+                      val points_fut =
+                        FutharkPoints.choose points_fut_set device
+                    in
+                      top_level_points_above_in_range_gpu ctx
+                        (points_fut, lo, hi, l, r)
+                    end
               )
 
           val tm = tick tm "top-level filter"
@@ -406,8 +436,13 @@ struct
       fun top_level_filter_then_semihull_choose l r =
         ForkJoin.choice
           { prefer_cpu = fn _ => top_level_filter_then_semihull l r
-          , prefer_gpu = fn _ =>
-              top_level_filter_then_semihull_gpu ctx (points_fut, l, r)
+          , prefer_gpu = fn device =>
+              let
+                val ctx = CtxSet.choose ctxSet device
+                val points_fut = FutharkPoints.choose points_fut_set device
+              in
+                top_level_filter_then_semihull_gpu ctx (points_fut, l, r)
+              end
           }
 
       val tm = startTiming ()
@@ -416,7 +451,14 @@ struct
         HybridBasis.reduce_hybrid reduce_hybrid_split reduce_hybrid_grain minmax
           (0, 0) (0, FlatPointSeq.length pts)
           ( fn i => (Int32.fromInt i, Int32.fromInt i)
-          , fn (lo, hi) => min_max_point_in_range_gpu ctx (points_fut, lo, hi)
+          , fn device =>
+              fn (lo, hi) =>
+                let
+                  val ctx = CtxSet.choose ctxSet device
+                  val points_fut = FutharkPoints.choose points_fut_set device
+                in
+                  min_max_point_in_range_gpu ctx (points_fut, lo, hi)
+                end
           )
 
       val tm = tick tm "endpoints"

@@ -26,24 +26,30 @@ fun randomPoints n =
        , Real64.fromInt (rand (i + 1) n) / Real64.fromInt n
        )) n
 
+structure CtxSet = CtxSetFn (structure F = Futhark)
+
 val () = print "Initialising Futhark context... "
-val ctx = Futhark.Context.new
-  (Futhark.Config.cache (SOME "futhark.cache") Futhark.Config.default)
+val ctxSet = CtxSet.fromList ["#1", "#2"]
+val ctx = CtxSet.choose ctxSet "#1"
 val () = print "Done!\n"
 
-fun futharkPoints (points: FlatPointSeq.t) =
+fun futharkPoints (points: FlatPointSeq.t) ctx =
   Futhark.Real64Array2.new ctx (FlatPointSeq.viewData points)
     (FlatPointSeq.length points, 2)
 
+structure FutharkPoints = GpuData(type t = Futhark.Real64Array2.t)
+
 val points = FlatPointSeq.fromArraySeq points
-val (points_fut, tm) = Util.getTime (fn _ => futharkPoints points)
-val _ = print ("copied points to GPU in " ^ Time.fmt 4 tm ^ "s\n")
+val (points_fut_set, tm) = Util.getTime (fn _ =>
+  (FutharkPoints.initialize ctxSet (futharkPoints points)))
+val points_fut = FutharkPoints.choose points_fut_set "#1"
+val _ = print ("copied points to GPUs in " ^ Time.fmt 4 tm ^ "s\n")
 
 val bench =
   case impl of
     "cpu" => (fn () => Quickhull.hull_cpu points)
   | "gpu" => (fn () => Quickhull.hull_gpu ctx points_fut)
-  | "hybrid" => (fn () => Quickhull.hull_hybrid ctx (points, points_fut))
+  | "hybrid" => (fn () => Quickhull.hull_hybrid ctxSet (points, points_fut))
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val result = Benchmark.run ("quickhull " ^ impl) bench
