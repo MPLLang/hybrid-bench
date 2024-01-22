@@ -56,17 +56,19 @@ val () = print ("K:      " ^ Int.toString k ^ "\n")
 val () = print ("Points: " ^ Int.toString (Points.length points) ^ "\n")
 val () = print ("Max iterations: " ^ Int.toString max_iterations ^ "\n")
 
+structure CtxSet = CtxSetFn (structure F = Futhark)
 val () = print "Initialising Futhark context... "
-val ctx = Futhark.Context.new
-  ((Futhark.Config.cache (SOME "futhark.cache")
-    o Futhark.Config.profiling profile) Futhark.Config.default)
+val ctxSet = CtxSet.fromList ["#1", "#2"]
+val ctx = CtxSet.choose ctxSet "#1"
 val () = print "Done!\n"
 
+structure FutharkPoints = GpuData(type t = Futhark.Real64Array2.array)
 
-fun futharkPoints (points: Points.t) =
+fun futharkPoints (points: Points.t) ctx =
   Futhark.Real64Array2.new ctx (Points.toSeq points) (Points.length points, d)
 
-val points_fut = futharkPoints points
+val points_fut_set = FutharkPoints.initialize ctxSet (futharkPoints points)
+val points_fut = FutharkPoints.choose points_fut_set "#1"
 
 fun tt a b =
   Time.fmt 4 (Time.- (b, a))
@@ -81,37 +83,51 @@ val bench =
          let
            fun gpuHistogram centroids =
              let
-               val centroids_fut =
-                 Futhark.Real64Array2.new ctx (Points.toSeq centroids)
-                   (Points.length centroids, d)
+               val centroids_fut_set =
+                 FutharkPoints.initialize ctxSet (fn ctx =>
+                   Futhark.Real64Array2.new ctx (Points.toSeq centroids)
+                     (Points.length centroids, d))
              in
-               { kernel = fn (start, stop) =>
+               { kernel = fn device =>
                    let
-                     val t1 = Time.now ()
-                     val (counts_fut, hist_fut) =
-                       Futhark.Entry.histogram ctx
-                         (points_fut, centroids_fut, start, stop - start)
-                     val () = Futhark.Context.sync ctx
-
-                     val t2 = Time.now ()
-                     val counts_arr = Futhark.Int64Array1.values counts_fut
-                     val hist_arr = Futhark.Real64Array2.values hist_fut
-                     val () = Futhark.Int64Array1.free counts_fut
-                     val () = Futhark.Real64Array2.free hist_fut
-                     val t3 = Time.now ()
-                     val result = ArraySlice.full (Array.tabulate (k, fn c =>
-                       Array.tabulate (d + 1, fn i =>
-                         if i = 0 then Real.fromInt (Array.sub (counts_arr, c))
-                         else Array.sub (hist_arr, c * d + (i - 1)))))
-                     val t4 = Time.now ()
+                     val ctx = CtxSet.choose ctxSet device
+                     val centroids_fut =
+                       FutharkPoints.choose centroids_fut_set device
+                     val points_fut = FutharkPoints.choose points_fut_set device
                    in
-                     (* print
-                       ("gpu kmeans (" ^ Int.toString (stop - start) ^ "): "
-                        ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n"); *)
-                     result
+                     fn (start, stop) =>
+                       let
+                         val t1 = Time.now ()
+                         val (counts_fut, hist_fut) =
+                           Futhark.Entry.histogram ctx
+                             (points_fut, centroids_fut, start, stop - start)
+                         val () = Futhark.Context.sync ctx
+
+                         val t2 = Time.now ()
+                         val counts_arr = Futhark.Int64Array1.values counts_fut
+                         val hist_arr = Futhark.Real64Array2.values hist_fut
+                         val () = Futhark.Int64Array1.free counts_fut
+                         val () = Futhark.Real64Array2.free hist_fut
+                         val t3 = Time.now ()
+                         val result =
+                           ArraySlice.full (Array.tabulate (k, fn c =>
+                             Array.tabulate (d + 1, fn i =>
+                               if i = 0 then
+                                 Real.fromInt (Array.sub (counts_arr, c))
+                               else
+                                 Array.sub (hist_arr, c * d + (i - 1)))))
+                         val t4 = Time.now ()
+                       in
+                         (* print
+                           ("gpu kmeans (" ^ Int.toString (stop - start) ^ "): "
+                            ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n"); *)
+                         result
+                       end
                    end
 
-               , after = fn () => Futhark.Real64Array2.free centroids_fut
+               , after = fn () =>
+                   FutharkPoints.free centroids_fut_set
+                     Futhark.Real64Array2.free
                }
              end
          in
@@ -161,7 +177,7 @@ val bench =
            fun centroidsChunk arg =
              ForkJoin.choice
                { prefer_cpu = fn () => Kmeans.centroidsChunkCPU points arg
-               , prefer_gpu = fn () => centroidsChunkGPU arg
+               , prefer_gpu = fn device => centroidsChunkGPU arg
                }
          in
            Kmeans.kmeansHybrid centroidsChunk k max_iterations points
@@ -181,7 +197,7 @@ val () =
   if profile then (writeFile "futhark.json" (Futhark.Context.report ctx))
   else ()
 
-val () = Futhark.Context.free ctx
+val () = CtxSet.free ctxSet
 
 val () = print ("kmeans iterations: " ^ Int.toString kmeans_iters ^ "\n")
 val _ =

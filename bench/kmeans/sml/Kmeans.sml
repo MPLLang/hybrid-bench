@@ -40,6 +40,8 @@ initialising the centroids to be specific points.)
 
 structure Kmeans:
 sig
+  type device_identifier
+
   val centroidsChunkCPU: Points.t -> int * int * Points.t -> Points.t
   val kmeansHybrid: (int * int * Points.t -> Points.t)
                     -> int
@@ -50,13 +52,15 @@ sig
   val kmeans': int -> int -> Points.t -> int * Points.t
   val kmeans'': int -> int -> Points.t -> int * Points.t
   val kmeansNewHybrid:
-    (Points.t -> {kernel: (int * int) -> real array Seq.t, after: unit -> unit})
+    (Points.t -> {kernel: device_identifier -> (int * int) -> real array Seq.t, after: unit -> unit})
     -> int
     -> int
     -> Points.t
     -> int * Points.t
 end =
 struct
+  type device_identifier = Device.device_identifier
+
   fun distance x y =
     let
       val d = Seq.length x

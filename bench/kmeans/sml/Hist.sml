@@ -2,6 +2,7 @@ structure Hist:
 sig
 
   type grain = int
+  type device_identifier = Device.device_identifier
 
   (* returns the result of each bin
    *
@@ -49,7 +50,7 @@ sig
        , hi: int
        , get_bin: int -> int
        , modify_bin: int -> 'a -> unit
-       , gpu: (int * int) -> 'a Seq.t
+       , gpu: device_identifier -> (int * int) -> 'a Seq.t
        }
     -> 'a Seq.t
 
@@ -66,14 +67,14 @@ sig
        , hi: int
        , get_bin: int -> int
        , modify_bin: int -> 'a -> unit
-       , gpu: (int * int) -> 'a Seq.t
+       , gpu: device_identifier -> (int * int) -> 'a Seq.t
        }
     -> 'a Seq.t
 
 end =
 struct
-
   type grain = int
+  type device_identifier = Device.device_identifier
 
 
   fun hist grain {combine, neutral, num_bins} {lo, hi, get_bin, get_elem} =
@@ -149,7 +150,12 @@ struct
 
   fun inplace_hist_hybrid cpu_grain gpu_grain gpu_split
     (hist_args as {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins})
-    {lo, hi, get_bin, modify_bin, gpu: int * int -> 'a Seq.t} : 'a Seq.t =
+    { lo
+    , hi
+    , get_bin
+    , modify_bin
+    , gpu: device_identifier -> int * int -> 'a Seq.t
+    } : 'a Seq.t =
     let
       fun fresh_acc () =
         Array.tabulate (num_bins, fn _ => fresh_neutral ())
@@ -183,13 +189,14 @@ struct
               big_block blo bhi
             end
 
-        , fn (b1, b2) =>
-            let
-              val blo = lo + b1 * gpu_grain
-              val bhi = Int.min (hi, lo + b2 * gpu_grain)
-            in
-              gpu (blo, bhi)
-            end
+        , fn device =>
+            fn (b1, b2) =>
+              let
+                val blo = lo + b1 * gpu_grain
+                val bhi = Int.min (hi, lo + b2 * gpu_grain)
+              in
+                gpu device (blo, bhi)
+              end
         )
     end
 
@@ -197,7 +204,12 @@ struct
   fun inplace_hist_hybrid_two_level cpu_grain gpu_grain gpu_split
     (hist_args as
        {combine_inplace: 'a * 'a -> unit, fresh_neutral: unit -> 'a, num_bins})
-    {lo, hi, get_bin, modify_bin, gpu: int * int -> 'a Seq.t} : 'a Seq.t =
+    { lo
+    , hi
+    , get_bin
+    , modify_bin
+    , gpu: device_identifier -> int * int -> 'a Seq.t
+    } : 'a Seq.t =
     let
       fun fresh_acc () =
         Seq.tabulate (fn _ => fresh_neutral ()) (num_bins)
@@ -253,7 +265,7 @@ struct
         else
           ForkJoin.choice
             { prefer_cpu = fn _ => loop start stop
-            , prefer_gpu = fn _ => gpu (start, stop)
+            , prefer_gpu = fn device => gpu device (start, stop)
             }
 
 
@@ -271,7 +283,7 @@ struct
           in
             ForkJoin.choice
               { prefer_cpu = fn _ => loop start stop
-              , prefer_gpu = fn _ => gpu (start, stop)
+              , prefer_gpu = fn device => gpu device (start, stop)
               }
           end
         else
