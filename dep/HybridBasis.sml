@@ -42,7 +42,7 @@ struct
 
 
   fun reduce_hybrid split grain combine z (lo, hi)
-    (f: int -> (int * int), g: device_identifier -> (int * int) -> (int * int)) =
+    (f: int -> 'a, g: device_identifier -> (int * int) -> 'a) =
     let
       fun base lo hi =
         SeqBasis.reduce grain combine z (lo, hi) f
