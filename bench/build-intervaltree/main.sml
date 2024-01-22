@@ -3,11 +3,14 @@ structure CLA = CommandLineArgs
 val n = CLA.parseInt "n" 5000000
 val impl = CLA.parseString "impl" "hybrid"
 val reportSize = CLA.parseFlag "report-size"
+val devices = ["#0", "#1"]
 
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
 val _ = print
   ("report-size? " ^ (if reportSize then "true" else "false") ^ "\n")
+val _ = print
+  ("devices " ^ String.concatWith ", " devices ^ "\n")
 
 
 fun cmpWith vals (i, j) =
@@ -16,8 +19,8 @@ fun cmpWith vals (i, j) =
 
 val sorter =
   case impl of
-    "hybrid" => (fn c => fn v => fn i => HybridSort.sortChoose c v i)
-  | "cpu" => (fn c => fn v => fn i => Mergesort.sort (cmpWith v) i)
+    "hybrid" => (fn ctxSet => fn v => fn i => HybridSort.sortChoose ctxSet v i)
+  | "cpu" => (fn ctxSet => fn v => fn i => Mergesort.sort (cmpWith v) i)
   | _ => Util.die ("unknown impl '" ^ impl ^ "'")
 
 
@@ -59,7 +62,8 @@ fun query tree seed =
 
 val segs = Seq.tabulate (fn i => randSeg (2 * i)) n
 val segs_xs = Seq.map #1 segs
-val futctx = FutSort.init segs_xs
+
+val ctxSet = Seq.map (fn device => (device, FutSort.init segs_xs device)) (Seq.fromList devices)
 
 val _ =
   if not reportSize then
@@ -117,9 +121,9 @@ fun makeIntervalMap () =
           Int32.compare (#1 (getSeg i), #1 (getSeg j))
         val idxs' = Mergesort.sort cmp idxs *)
 
-        (* val idxs' = HybridSort.sort futctx segs_xs idxs *)
+        (* val idxs' = HybridSort.sort ctxSet segs_xs idxs *)
 
-        val idxs' = sorter futctx segs_xs idxs
+        val idxs' = sorter ctxSet segs_xs idxs
       in
         doitSorted idxs'
       end
@@ -154,4 +158,4 @@ val _ =
     in print ("size of tree (bytes): " ^ LargeInt.toString sz ^ "\n")
     end
 
-val _ = FutSort.cleanup futctx
+val _ = Seq.map (fn (_, ctx) => FutSort.cleanup ctx) ctxSet
