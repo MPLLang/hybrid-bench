@@ -10,7 +10,9 @@ struct
     Seq.map (fn (device, ctx) => (device, f ctx)) ctxSet
 
   fun free data f =
-    Seq.map (fn (_, d) => f d) data
+    let val _ = Seq.map (fn (_, d) => f d) data
+    in ()
+    end
 
   fun choose data device =
     #2 (Seq.first (Seq.filter (fn (d, _) => d = device) data))
