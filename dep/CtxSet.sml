@@ -39,18 +39,23 @@ struct
   type ctx_set = (device_identifier * F.ctx) Seq.t
 
   fun fromList (devices: device_identifier list) =
-    Seq.map (fn device =>
-      let
-        val cfg =
-          (F.Config.cache (SOME "futhark.cache") o F.Config.device (SOME device)
-           o F.Config.profiling profile) F.Config.default
-        val ctx = F.Context.new cfg
-      in
-        (device, ctx)
-      end) (Seq.fromList devices)
+    Seq.map
+      (fn device =>
+         let
+           val cfg =
+             (F.Config.cache (SOME "futhark.cache")
+              o F.Config.device (SOME device) o F.Config.profiling profile)
+               F.Config.default
+           val ctx = F.Context.new cfg
+         in
+           (device, ctx)
+         end) (Seq.fromList devices)
 
   fun free (ctxSet: ctx_set) =
-    Seq.map (fn (_, ctx) => F.Context.free ctx) ctxSet
+    let val _ = Seq.map (fn (_, ctx) => F.Context.free ctx) ctxSet
+    in ()
+    end
+
 
   fun choose (ctxSet: ctx_set) (device: device_identifier) =
     let
