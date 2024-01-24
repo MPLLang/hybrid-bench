@@ -2,7 +2,8 @@ structure FutRay =
 struct
 
   val profile = CommandLineArgs.parseFlag "profile"
-  val devices = String.fields (fn c => c = #",") (CommandLineArgs.parseString "devices" "")
+  val devices = String.fields (fn c => c = #",")
+    (CommandLineArgs.parseString "devices" "")
 
   structure CtxSet = CtxSetFn (structure F = Futhark)
 
@@ -24,11 +25,14 @@ struct
   fun cleanup ctxSet =
     ( if profile then
         List.foldl
-          ( fn (ctx, idx) =>
-              (writeFile ("futhark" ^ (Int.toString idx)
-               ^ ".json") (Futhark.Context.report ctx))
-          ; idx + 1
-          ) 0 (CtxSet.toCtxList ctxSet)
+          (fn (ctx, idx) =>
+             let
+               val _ =
+                 (writeFile ("futhark" ^ (Int.toString idx) ^ ".json")
+                    (Futhark.Context.report ctx))
+             in
+               idx + 1
+             end) 0 (CtxSet.toCtxList ctxSet)
 
       else
         ()
