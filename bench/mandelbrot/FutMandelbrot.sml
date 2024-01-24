@@ -2,7 +2,8 @@ structure FutMandelbrot =
 struct
 
   val profile = CommandLineArgs.parseFlag "profile"
-  val devices = String.fields (fn c => c = #",") (CommandLineArgs.parseString "devices" "")
+  val devices = String.fields (fn c => c = #",")
+    (CommandLineArgs.parseString "devices" "")
 
   structure CtxSet = CtxSetFn (structure F = FutharkMandelbrot)
 
@@ -21,14 +22,18 @@ struct
     end
 
   fun cleanup ctxSet =
-  let 
-  val (_, ctx) = Seq.first ctxSet (* FIXME *)
-  in
-    ( if profile then (writeFile "futhark.json" (FutharkMandelbrot.Context.report ctx))
-      else ()
+    ( if profile then
+        List.foldl
+          ( fn (ctx, idx) =>
+              (writeFile "futhark" ^ (Int.toString idx)
+               ^ ".json" (FutharkMandelbrot.Context.report ctx))
+          ; idx + 1
+          ) 0 (CtxSet.toCtxList ctxSet)
+
+      else
+        ()
     ; CtxSet.free ctxSet
     )
-    end
 
   type i64 = Int64.int
   type i32 = Int32.int

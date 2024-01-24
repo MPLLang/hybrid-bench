@@ -22,14 +22,18 @@ struct
     end
 
   fun cleanup ctxSet =
-    let
-      val (_, ctx) = Seq.first ctxSet (* FIXME *)
-    in
-      ( if profile then (writeFile "futhark.json" (Futhark.Context.report ctx))
-        else ()
-      ; CtxSet.free ctxSet
-      )
-    end
+    ( if profile then
+        List.foldl
+          ( fn (ctx, idx) =>
+              (writeFile "futhark" ^ (Int.toString idx)
+               ^ ".json" (FutharkMandelbrot.Context.report ctx))
+          ; idx + 1
+          ) 0 (CtxSet.toCtxList ctxSet)
+
+      else
+        ()
+    ; CtxSet.free ctxSet
+    )
 
   type i64 = Int64.int
   type i32 = Int32.int
