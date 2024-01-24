@@ -2,13 +2,14 @@ structure FutRay =
 struct
 
   val profile = CommandLineArgs.parseFlag "profile"
+  val devices = String.fields (fn c => c = #",") (CLA.parseString "devices" "")
 
   structure CtxSet = CtxSetFn (structure F = Futhark)
 
   fun init () =
     let
       val () = print "Initialising Futhark context... "
-      val ctxSet = CtxSet.fromList ["#0", "#1"]
+      val ctxSet = CtxSet.fromList devices
       val () = print "Done!\n"
     in
       ctxSet

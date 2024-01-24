@@ -17,6 +17,9 @@ val k = CLA.parseInt "k" 5
 
 val profile = CommandLineArgs.parseFlag "profile"
 
+val devices = String.fields (fn c => c = #",")
+  (CommandLineArgs.parseString "devices" "")
+
 val max_iterations = CLA.parseInt "max-iterations" 10
 
 val impl = CommandLineArgs.parseString "impl" "cpu"
@@ -58,7 +61,7 @@ val () = print ("Max iterations: " ^ Int.toString max_iterations ^ "\n")
 
 structure CtxSet = CtxSetFn (structure F = Futhark)
 val () = print "Initialising Futhark context... "
-val ctxSet = CtxSet.fromList ["#1", "#2"]
+val ctxSet = CtxSet.fromList devices
 val ctx = CtxSet.choose ctxSet "#1"
 val () = print "Done!\n"
 

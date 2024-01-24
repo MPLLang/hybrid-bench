@@ -3,14 +3,14 @@ structure CLA = CommandLineArgs
 val n = CLA.parseInt "n" 5000000
 val impl = CLA.parseString "impl" "hybrid"
 val reportSize = CLA.parseFlag "report-size"
-val devices = ["#0", "#1"]
+val devices = String.fields (fn c => c = #",")
+  (CommandLineArgs.parseString "devices" "")
 
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
 val _ = print
   ("report-size? " ^ (if reportSize then "true" else "false") ^ "\n")
-val _ = print
-  ("devices " ^ String.concatWith ", " devices ^ "\n")
+val _ = print ("devices " ^ String.concatWith ", " devices ^ "\n")
 
 
 fun cmpWith vals (i, j) =
@@ -63,7 +63,9 @@ fun query tree seed =
 val segs = Seq.tabulate (fn i => randSeg (2 * i)) n
 val segs_xs = Seq.map #1 segs
 
-val ctxSet = Seq.map (fn device => (device, FutSort.init segs_xs device)) (Seq.fromList devices)
+val ctxSet =
+  Seq.map (fn device => (device, FutSort.init segs_xs device))
+    (Seq.fromList devices)
 
 val _ =
   if not reportSize then

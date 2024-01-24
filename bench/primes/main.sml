@@ -1,8 +1,10 @@
 structure CLA = CommandLineArgs
 
+val devices = String.fields (fn c => c = #",")
+  (CommandLineArgs.parseString "devices" "")
 
 val () = print "Initialising Futhark context... "
-val ctxSet = SegmentedPrimes.CtxSet.fromList ["#0", "#1"]
+val ctxSet = SegmentedPrimes.CtxSet.fromList devices
 val (_, ctx) = Seq.first ctxSet
 val () = print "Done!\n"
 
