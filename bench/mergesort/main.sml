@@ -9,7 +9,7 @@ val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
 val _ = print ("devices " ^ String.concatWith "," devices ^ "\n")
 
-val () = print "Initialising Futhark context map... "
+val () = print "Initialising Futhark context... "
 
 val ctxSet = CtxSet.fromList devices
 val (_, ctx) = Seq.first ctxSet (* use the first gpu for gpu benchmarks *)
