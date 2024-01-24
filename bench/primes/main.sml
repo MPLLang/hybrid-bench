@@ -5,7 +5,7 @@ val devices = String.fields (fn c => c = #",")
 
 val () = print "Initialising Futhark context... "
 val ctxSet = SegmentedPrimes.CtxSet.fromList devices
-val (_, ctx) = Seq.first ctxSet
+val ctx = CtxSet.getOne ctxSet
 val () = print "Done!\n"
 
 val n = CommandLineArgs.parseInt "n" (100 * 1000 * 1000)

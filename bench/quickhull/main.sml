@@ -30,7 +30,7 @@ structure CtxSet = CtxSetFn (structure F = Futhark)
 
 val () = print "Initialising Futhark context... "
 val ctxSet = CtxSet.fromList ["#1", "#2"]
-val ctx = CtxSet.choose ctxSet "#1"
+val ctx = CtxSet.getOne ctxSet
 val () = print "Done!\n"
 
 fun futharkPoints (points: FlatPointSeq.t) ctx =

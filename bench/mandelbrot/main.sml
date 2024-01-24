@@ -90,7 +90,7 @@ fun packByte y (xlo, xhi) =
 
 
 val ctxSet = FutMandelbrot.init ()
-val (_, ctx) = Seq.first ctxSet (* use the first gpu for gpu benchmarks *)
+val ctx = FutMandelbrot.CtxSet.getOne ctxSet
 
 
 fun hybridMandelbrot () : Word8.word Seq.t Seq.t =

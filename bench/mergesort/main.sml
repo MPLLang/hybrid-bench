@@ -12,7 +12,7 @@ val _ = print ("devices " ^ String.concatWith "," devices ^ "\n")
 val () = print "Initialising Futhark context... "
 
 val ctxSet = CtxSet.fromList devices
-val (_, ctx) = Seq.first ctxSet (* use the first gpu for gpu benchmarks *)
+val ctx = CtxSet.getOne ctxSet
 
 val () = print "Done!\n"
 

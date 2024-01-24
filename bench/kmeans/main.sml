@@ -62,7 +62,7 @@ val () = print ("Max iterations: " ^ Int.toString max_iterations ^ "\n")
 structure CtxSet = CtxSetFn (structure F = Futhark)
 val () = print "Initialising Futhark context... "
 val ctxSet = CtxSet.fromList devices
-val ctx = CtxSet.choose ctxSet "#1"
+val ctx = CtxSet.getOne ctxSet
 val () = print "Done!\n"
 
 structure FutharkPoints = GpuData(type t = Futhark.Real64Array2.array)
