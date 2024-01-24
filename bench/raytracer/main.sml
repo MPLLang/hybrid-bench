@@ -13,7 +13,7 @@ val scene =
   | s => raise Fail ("No such scene: " ^ s)
 
 val ctxSet = FutRay.init ()
-val (_, ctx) = Seq.first ctxSet (* use the first gpu for gpu benchmarks *)
+val ctx = FutRay.CtxSet.getOne ctxSet
 
 val _ = print ("h " ^ Int.toString height ^ "\n")
 val _ = print ("w " ^ Int.toString width ^ "\n")

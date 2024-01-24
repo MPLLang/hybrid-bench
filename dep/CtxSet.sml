@@ -68,4 +68,16 @@ struct
 
   fun toCtxList (ctxSet: ctx_set) =
     Seq.toList (Seq.map (fn (_, ctx) => ctx) ctxSet)
+
+
+  (* 
+  Get one futhark context for single gpu benchmarks.
+  It selects the first one, which is arbitrarily chosen.
+  *)
+  fun getOne (ctxSet: ctx_set) =
+    let
+      val (_, ctx) = Seq.first ctxSet
+    in
+      ctx
+    end
 end
