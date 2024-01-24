@@ -67,5 +67,5 @@ struct
     end
 
   fun toCtxList (ctxSet: ctx_set) =
-  Seq.toList (Seq.map (fn (_, ctx) => ctx) ctxSet)
+    Seq.toList (Seq.map (fn (_, ctx) => ctx) ctxSet)
 end
