@@ -89,8 +89,6 @@ fun packByte y (xlo, xhi) =
 (* ======================================================================== *)
 
 
-structure CtxSet = CtxSetFn (structure F = FutharkMandelbrot)
-
 val ctxSet = FutMandelbrot.init ()
 val (_, ctx) = Seq.first ctxSet (* use the first gpu for gpu benchmarks *)
 
@@ -115,7 +113,7 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
 
     fun do_gpu_rows device (ylo, yhi) =
       let
-        val outputArr = FutMandelbrot.mandelbrot (CtxSet.choose ctxSet device) ylo yhi 0 numBytesPerRow
+        val outputArr = FutMandelbrot.mandelbrot (FutMandelbrot.CtxSet.choose ctxSet device) ylo yhi 0 numBytesPerRow
         fun slice i =
           ArraySlice.slice (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
       in
