@@ -12,6 +12,8 @@ FUTHARK_BACKEND ?= cuda
 # Path to MPL binary.
 MPL ?= /home/ec2-user/proj/mpl/hybrid-sched/build/bin/mpl
 
+MLTON ?= mlton
+
 MLTONFLAGS = \
   -default-ann 'allowFFI true' \
 	-default-ann 'allowLineComments true' \

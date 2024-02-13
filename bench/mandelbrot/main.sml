@@ -118,8 +118,11 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
       in
         ForkJoin.parfor 1000 (0, yhi - ylo) (fn i => putRow (ylo + i) (slice i))
       end
+
+    val split = BenchParams.Mandelbrot.parfor_split
+    val grain = BenchParams.Mandelbrot.parfor_grain
   in
-    HybridBasis.parfor_hybrid 0.5 10 (0, h) (do_cpu_row, do_gpu_rows);
+    HybridBasis.parfor_hybrid split grain (0, h) (do_cpu_row, do_gpu_rows);
 
     ArraySlice.full rows
   end
