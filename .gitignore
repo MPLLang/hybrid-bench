@@ -4,6 +4,7 @@
 objs/*
 *.o
 main.mpl.bin
+main.mlton.bin
 futhark.cache
 futhark.json
 futhark.prof
