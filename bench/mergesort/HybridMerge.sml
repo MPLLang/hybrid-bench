@@ -4,7 +4,7 @@ struct
   fun slice_idxs s i j =
     ArraySlice.subslice (s, i, SOME (j - i))
 
-  val gpu_merge_block = CommandLineArgs.parseInt "gpu-merge-block" 8
+  val gpu_merge_block = BenchParams.Mergesort.gpu_merge_block
 
   fun write_merge_gpu ctx (xs, ys) output =
     let
@@ -39,8 +39,8 @@ struct
         end
 
 
-  val merge_grain = CommandLineArgs.parseInt "merge-grain" 1500000
-  val merge_split = CommandLineArgs.parseReal "merge-split" 0.15
+  val merge_grain = BenchParams.Mergesort.merge_grain
+  val merge_split = BenchParams.Mergesort.merge_split
 
   fun split n =
     Real.ceil (merge_split * Real.fromInt n)

@@ -13,6 +13,7 @@ struct
 
   structure Primes =
   struct
+
     (* Algorithmic parameter (not hybridization...)
      *
      * Increasing the block size factor will use larger blocks, which has all
@@ -44,6 +45,42 @@ struct
 
     val hybrid_split = CommandLineArgs.parseReal "hybrid-gpu-split" 0.025
     val block_range_hybrid_threshold = 500000
+
+  end
+
+
+  structure Mergesort =
+  struct
+
+    (* ==================================================================
+     * algorithmic parameters
+     *)
+
+    val qsort_grain = CommandLineArgs.parseInt "qsort-grain" 100000
+
+    val gpu_merge_block = CommandLineArgs.parseInt "gpu-merge-block" 8
+
+
+    (* ==================================================================
+     * hybridization parameters
+     *
+     * for sort: 
+     *   - sort_split: midpoint for asymmetric divide-and-conquer. Increasing
+     *     this parameter gives more work to the GPU (e.g., 0.25 means split
+     *     into 25%/75% and put a hybrid task on the 25% piece)
+     *   - sort_grain: below this threshold, stop hybridizing
+     *
+     * for merging (subroutine of the sort): very similar
+     *   - merge_split: midpoint for asymmetric divide-and-conquer
+     *   - merge_grain: below this threshold, stop hybridizing
+     *)
+
+    val sort_split = CommandLineArgs.parseReal "sort-split" 0.36
+    val sort_grain = CommandLineArgs.parseInt "sort-grain" 1500000
+
+    val merge_split = CommandLineArgs.parseReal "merge-split" 0.15
+    val merge_grain = CommandLineArgs.parseInt "merge-grain" 1500000
+
   end
 
 end

@@ -34,7 +34,7 @@ struct
       end
 
 
-  val qsort_grain = CommandLineArgs.parseInt "qsort-grain" 100000
+  val qsort_grain = BenchParams.Mergesort.qsort_grain
 
 
   fun sort_cpu xs =
@@ -51,8 +51,8 @@ struct
       end
 
 
-  val sort_split = CommandLineArgs.parseReal "sort-split" 0.36
-  val sort_grain = CommandLineArgs.parseInt "sort-grain" 1500000
+  val sort_split = BenchParams.Mergesort.sort_split
+  val sort_grain = BenchParams.Mergesort.sort_grain
 
   fun split n =
     Real.ceil (sort_split * Real.fromInt n)
