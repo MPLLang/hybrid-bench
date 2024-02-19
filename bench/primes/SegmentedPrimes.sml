@@ -26,13 +26,7 @@ struct
    * primes on cpu
    *)
 
-
-  (* NOTE: Could tune by playing with this. Increasing blockSizeFactor will
-   * use larger blocks, which has all of the following effects on performance:
-   *   (1) decreased theoretical work, but also worse data locality
-   *   (2) less parallelism
-   *)
-  val blockSizeFactor = CommandLineArgs.parseReal "primes-block-size-factor" 8.0
+  val blockSizeFactor = BenchParams.Primes.block_size_factor
   val _ = print
     ("primes-block-size-factor " ^ Real.toString blockSizeFactor ^ "\n")
 
@@ -102,7 +96,7 @@ struct
    * hybrid primes
    *)
 
-  val hybrid_gpu_split = CommandLineArgs.parseReal "hybrid-gpu-split" 0.025
+  val hybrid_gpu_split = BenchParams.Primes.hybrid_split
   val _ = print
     ("hybrid-gpu-split " ^ Real.toString hybrid_gpu_split
      ^ " (fraction of segments given to gpu choice points)\n")
@@ -216,7 +210,10 @@ struct
             end
 
         and loopChoose lob hib =
-          if blockRangeSize lob hib < 500000 then
+          if
+            blockRangeSize lob hib
+            < BenchParams.Primes.block_range_hybrid_threshold
+          then
             ForkJoin.parfor 1 (lob, hib) doBlock
           else
             ForkJoin.choice
