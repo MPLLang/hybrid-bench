@@ -1,0 +1,11 @@
+../../dep/dep.mlton.mlb
+
+sml/ParseFile.sml
+sml/Points.sml
+sml/Hist.sml
+sml/Kmeans.sml
+
+futhark/kmeans.sig
+futhark/kmeans.sml
+
+main.sml
