@@ -83,4 +83,24 @@ struct
 
   end
 
+
+  structure Kmeans =
+  struct
+
+    (* ======================================================================
+     * hybridization
+     *
+     * Large fanout with asymmetric divide-and-conquer at the leaves. Size
+     * of the leaves is controlled by hist_gpu_split (0 < ... < 1) and we
+     * switch to cpu-only below hist_gpu_grain.
+     *
+     * hist_cpu_grain is used purely for CPU-side grain control.
+     *)
+
+    val hist_cpu_grain = CommandLineArgs.parseInt "hist-cpu-grain" 1000
+    val hist_gpu_grain = CommandLineArgs.parseInt "hist-gpu-grain" 100000
+    val hist_gpu_split = CommandLineArgs.parseReal "hist-gpu-split" 0.75
+
+  end
+
 end

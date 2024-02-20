@@ -203,7 +203,7 @@ struct
       end
 
 
-    val hist_cpu_grain = CommandLineArgs.parseInt "hist-cpu-grain" 1000
+    val hist_cpu_grain = BenchParams.Kmeans.hist_cpu_grain
     val _ = print ("hist-cpu-grain " ^ Int.toString hist_cpu_grain ^ "\n")
 
     fun newCentroids'' points centroids =
@@ -252,9 +252,8 @@ struct
         Points.fromSeq d (Seq.flatten means)
       end
 
-    val hist_gpu_grain = CommandLineArgs.parseInt "hist-gpu-grain" 100000
-    val hist_gpu_split = CommandLineArgs.parseReal "hist-gpu-split" 0.75
-
+    val hist_gpu_grain = BenchParams.Kmeans.hist_gpu_grain
+    val hist_gpu_split = BenchParams.Kmeans.hist_gpu_split
     val _ = print ("hist-gpu-grain " ^ Int.toString hist_gpu_grain ^ "\n")
     val _ = print ("hist-gpu-split " ^ Real.toString hist_gpu_split ^ "\n")
 
