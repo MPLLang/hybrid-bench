@@ -272,6 +272,12 @@ struct
    *)
 
 
+  val semihull_par_grain = BenchParams.Quickhull.semihull_par_grain
+  val semihull_hybrid_grain = BenchParams.Quickhull.semihull_hybrid_grain
+  val reduce_hybrid_grain = BenchParams.Quickhull.reduce_hybrid_grain
+  val reduce_hybrid_split = BenchParams.Quickhull.reduce_hybrid_split
+
+
   fun hull_hybrid ctx (pts, points_fut) =
     let
       fun pt i =
@@ -303,8 +309,8 @@ struct
               dist lp rp i
 
             val (mid, _) =
-              HybridBasis.reduce_hybrid 0.5 5000 max (~1, Real.negInf)
-                (0, Seq.length idxs)
+              HybridBasis.reduce_hybrid reduce_hybrid_split reduce_hybrid_grain
+                max (~1, Real.negInf) (0, Seq.length idxs)
                 ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
                 , fn (lo, hi) =>
                     let
@@ -321,15 +327,17 @@ struct
               filter_then_semihull idxs mid r
 
             val (leftHull, rightHull) =
-              if Seq.length idxs <= 1000 then (doLeft (), doRight ())
-              else ForkJoin.par (doLeft, doRight)
+              if Seq.length idxs <= semihull_par_grain then
+                (doLeft (), doRight ())
+              else
+                ForkJoin.par (doLeft, doRight)
           in
             Tree.append (leftHull, (Tree.append (Tree.$ mid, rightHull)))
           end
 
 
       and semihull_choose idxs l r =
-        if Seq.length idxs < 500 then
+        if Seq.length idxs < semihull_hybrid_grain then
           semihull idxs l r
         else
           ForkJoin.choice
@@ -344,7 +352,8 @@ struct
           val rp = pt r
 
           val idxs' =
-            HybridBasis.filter_hybrid 0.5 5000 (0, Seq.length idxs)
+            HybridBasis.filter_hybrid reduce_hybrid_split reduce_hybrid_grain
+              (0, Seq.length idxs)
               ( fn i => Seq.nth idxs i
               , fn i => aboveLine lp rp (Seq.nth idxs i)
               , fn (lo, hi) =>
@@ -357,7 +366,7 @@ struct
 
 
       and filter_then_semihull_choose idxs l r =
-        if Seq.length idxs <= 500 then
+        if Seq.length idxs <= semihull_hybrid_grain then
           filter_then_semihull idxs l r
         else
           ForkJoin.choice
@@ -375,7 +384,8 @@ struct
           val tm = startTiming ()
 
           val above =
-            HybridBasis.filter_hybrid 0.5 5000 (0, FlatPointSeq.length pts)
+            HybridBasis.filter_hybrid reduce_hybrid_split reduce_hybrid_grain
+              (0, FlatPointSeq.length pts)
               ( fn i => Int32.fromInt i
               , fn i => dist lp rp (Int32.fromInt i) > 0.0
               , fn (lo, hi) =>
@@ -403,8 +413,8 @@ struct
       val tm = startTiming ()
 
       val (l, r) =
-        HybridBasis.reduce_hybrid 0.5 5000 minmax (0, 0)
-          (0, FlatPointSeq.length pts)
+        HybridBasis.reduce_hybrid reduce_hybrid_split reduce_hybrid_grain minmax
+          (0, 0) (0, FlatPointSeq.length pts)
           ( fn i => (Int32.fromInt i, Int32.fromInt i)
           , fn (lo, hi) => min_max_point_in_range_gpu ctx (points_fut, lo, hi)
           )

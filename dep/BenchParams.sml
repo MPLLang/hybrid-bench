@@ -119,4 +119,25 @@ struct
 
   end
 
+
+  structure Quickhull =
+  struct
+
+    (* ======================================================================
+     * hybridization
+     *
+     * semihull: asymmetric divide-and-conquer
+     * 
+     * lots of subroutines hybridized, including reduces and filters, all of
+     * which use the `reduce_hybrid_grain` and `reduce_hybrid_split`
+     *)
+
+    val semihull_par_grain = 1000
+    val semihull_hybrid_grain = 500
+
+    val reduce_hybrid_grain = 5000
+    val reduce_hybrid_split = 0.5
+
+  end
+
 end

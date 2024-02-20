@@ -3,6 +3,9 @@ include ../config.mk
 main.mpl.bin: phony futhark/quickhull.sml
 	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb futhark/quickhull.c futhark/quickhull.smlfut.c
 
+main.mlton.bin: phony futhark/quickhull.sml
+	$(MLTON) $(MLTONFLAGS) -output main.mlton.bin main.mlton.mlb futhark/quickhull.c futhark/quickhull.smlfut.c
+
 futhark/quickhull.sml: futhark/quickhull.fut
 	futhark $(FUTHARK_BACKEND) --library futhark/quickhull.fut
 	smlfut -o futhark --poly-arrays  --structure=Futhark --signature=FUTHARK futhark/quickhull.json
