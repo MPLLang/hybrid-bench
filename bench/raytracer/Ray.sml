@@ -365,14 +365,13 @@ struct
     end
 
 
-  val renderHybridGpuSplit =
-    CommandLineArgs.parseReal "render-hybrid-gpu-split" 0.5
+  val renderHybridGpuSplit = BenchParams.Raytracer.gpu_split
   val _ = print
     ("render-hybrid-gpu-split " ^ Real.toString renderHybridGpuSplit
      ^ " (fraction given to gpu choice points)\n")
 
-  fun calculateMid lo hi =
-    lo + Real.ceil (Real.fromInt (hi - lo) * renderHybridGpuSplit)
+  val renderHybridGrain = BenchParams.Raytracer.gpu_grain
+
 
   fun render_hybrid ctx fut_prepared_scene objs width height cam : image =
     let
@@ -392,8 +391,8 @@ struct
           (pixels, lo, SOME (hi - lo)))
 
     in
-      HybridBasis.parfor_hybrid renderHybridGpuSplit 2000 (0, height * width)
-        (writePixel, fn (lo, hi) => gpuTask lo hi);
+      HybridBasis.parfor_hybrid renderHybridGpuSplit renderHybridGrain
+        (0, height * width) (writePixel, fn (lo, hi) => gpuTask lo hi);
 
       {width = width, height = height, pixels = pixels}
     end

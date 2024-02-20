@@ -103,4 +103,20 @@ struct
 
   end
 
+
+  structure Raytracer =
+  struct
+
+    (* ======================================================================
+     * hybridization
+     *
+     * Simple hybrid parfor. Split in half, and stop hybridizing below the
+     * grain size. 
+     *)
+
+    val gpu_split = CommandLineArgs.parseReal "render-hybrid-gpu-split" 0.5
+    val gpu_grain = 2000
+
+  end
+
 end
