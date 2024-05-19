@@ -5,6 +5,9 @@ val file = CLA.parseString "points" ""
 
 val impl = CommandLineArgs.parseString "impl" "cpu"
 
+val devices = String.fields (fn c => c = #",")
+  (CommandLineArgs.parseString "devices" "")
+
 val points =
   if file = "" then
     raise Fail "Need -points FILE"
@@ -29,7 +32,7 @@ fun randomPoints n =
 structure CtxSet = CtxSetFn (structure F = Futhark)
 
 val () = print "Initialising Futhark context... "
-val ctxSet = CtxSet.fromList ["#1", "#2"]
+val ctxSet = CtxSet.fromList devices
 val ctx = CtxSet.getOne ctxSet
 val () = print "Done!\n"
 
