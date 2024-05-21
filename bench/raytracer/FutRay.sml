@@ -72,11 +72,24 @@ struct
     type scene_set = (device_identifier * prepared_scene) Seq.t
 
     fun prepareFromCtxSet (ctxSet: ctx_set) (height, width) =
-      Seq.map
-        (fn (device, ctx) =>
-           let val scene = prepare_rgbbox_scene (ctx, height, width)
-           in (device, scene)
-           end) ctxSet
+      let
+        val (device, ctx) = Seq.first ctxSet
+        val scene = prepare_rgbbox_scene (ctx, height, width)
+        val { prepared, ... } = scene
+        val rawArray = Futhark.Opaque.prepared_scene.store prepared
+      in
+        Seq.map
+          (fn (d, ctx) =>
+             if d = device then
+               (d, scene)
+             else
+               let
+                 val prepared = Futhark.Opaque.prepared_scene.restore ctx (Word8ArraySlice.full rawArray)
+                 val scene = { height = #height scene, width = #width scene, prepared = prepared}
+               in
+                 (d, scene)
+               end) ctxSet
+      end
 
     fun freeScene (sceneSet: scene_set) =
       Seq.map (fn (_, scene) => prepare_rgbbox_scene_free scene) sceneSet
