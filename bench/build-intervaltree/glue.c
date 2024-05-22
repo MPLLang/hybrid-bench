@@ -13,12 +13,13 @@ struct fut_context
   struct futhark_i32_1d *vals;
 };
 
-void *fut_init(int32_t *vals, int64_t start, int64_t len)
+void *fut_init(unsigned char *device, int32_t *vals, int64_t start, int64_t len)
 {
   struct timer_t t;
   timer_begin(&t, "fut_init");
 
   struct futhark_context_config *cfg = futhark_context_config_new();
+  futhark_context_config_set_device(cfg, device);
   timer_report_tick(&t, "futhark_context_config_new");
 
   struct futhark_context *ctx = futhark_context_new(cfg);
@@ -68,7 +69,7 @@ struct sort_pack
   int32_t *input;
   int64_t start;
   int64_t len;
-  
+
   int32_t *output;
 };
 

@@ -2,20 +2,18 @@ structure FutMandelbrot =
 struct
 
   val profile = CommandLineArgs.parseFlag "profile"
+  val devices = String.fields (fn c => c = #",")
+    (CommandLineArgs.parseString "devices" "")
 
-  type fut_context = FutharkMandelbrot.ctx
+  structure CtxSet = CtxSetFn (structure F = FutharkMandelbrot)
 
   fun init () =
     let
       val () = print "Initialising Futhark context... "
-      val cfg =
-        (FutharkMandelbrot.Config.cache (SOME "futhark.cache")
-         o FutharkMandelbrot.Config.profiling profile)
-          FutharkMandelbrot.Config.default
-      val ctx = FutharkMandelbrot.Context.new cfg
+      val ctxSet = CtxSet.fromList devices
       val () = print "Done!\n"
     in
-      ctx
+      ctxSet
     end
 
   fun writeFile fname s =
@@ -23,12 +21,18 @@ struct
     in TextIO.output (os, s) before TextIO.closeOut os
     end
 
-  fun cleanup x =
+  fun cleanup ctxSet =
     ( if profile then
-        (writeFile "futhark.json" (FutharkMandelbrot.Context.report x))
+        List.foldl
+          ( fn (ctx, idx) =>
+              (writeFile "futhark" ^ (Int.toString idx)
+               ^ ".json" (FutharkMandelbrot.Context.report ctx))
+          ; idx + 1
+          ) 0 (CtxSet.toCtxList ctxSet)
+
       else
         ()
-    ; FutharkMandelbrot.Context.free x
+    ; CtxSet.free ctxSet
     )
 
   type i64 = Int64.int

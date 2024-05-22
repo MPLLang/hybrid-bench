@@ -2,19 +2,18 @@ structure FutRay =
 struct
 
   val profile = CommandLineArgs.parseFlag "profile"
+  val devices = String.fields (fn c => c = #",")
+    (CommandLineArgs.parseString "devices" "")
 
-  type fut_context = Futhark.ctx
+  structure CtxSet = CtxSetFn (structure F = Futhark)
 
   fun init () =
     let
       val () = print "Initialising Futhark context... "
-      val cfg =
-        (Futhark.Config.cache (SOME "futhark.cache")
-         o Futhark.Config.profiling profile) Futhark.Config.default
-      val ctx = Futhark.Context.new cfg
+      val ctxSet = CtxSet.fromList devices
       val () = print "Done!\n"
     in
-      ctx
+      ctxSet
     end
 
 
@@ -23,10 +22,27 @@ struct
     in TextIO.output (os, s) before TextIO.closeOut os
     end
 
-  fun cleanup x =
-    ( if profile then (writeFile "futhark.json" (Futhark.Context.report x))
-      else ()
-    ; Futhark.Context.free x
+  fun cleanup ctxSet =
+    ( if profile then
+        let
+          val _ =
+            List.foldl
+              (fn (ctx, idx) =>
+                 let
+                   val _ =
+                     (writeFile ("futhark" ^ (Int.toString idx) ^ ".json")
+                        (Futhark.Context.report ctx))
+                 in
+                   idx + 1
+                 end) 0 (CtxSet.toCtxList ctxSet)
+        in
+          ()
+        end
+
+
+      else
+        ()
+    ; CtxSet.free ctxSet
     )
 
   type i64 = Int64.int
@@ -48,6 +64,31 @@ struct
 
   fun prepare_rgbbox_scene_free (scene: prepared_scene) =
     Futhark.Opaque.prepared_scene.free (#prepared scene)
+
+  structure PreparedSceneSet =
+  struct
+    open CtxSet
+
+    type scene_set = (device_identifier * prepared_scene) Seq.t
+
+    fun prepareFromCtxSet (ctxSet: ctx_set) (height, width) =
+      Seq.map
+        (fn (device, ctx) =>
+           let val scene = prepare_rgbbox_scene (ctx, height, width)
+           in (device, scene)
+           end) ctxSet
+
+    fun freeScene (sceneSet: scene_set) =
+      Seq.map (fn (_, scene) => prepare_rgbbox_scene_free scene) sceneSet
+
+    fun choose (sceneSet: scene_set) (device: device_identifier) =
+      let
+        val (_, scene) = Seq.first
+          (Seq.filter (fn (d, _) => d = device) sceneSet)
+      in
+        scene
+      end
+  end
 
   fun render ctx {prepared, height, width} output : unit =
     let

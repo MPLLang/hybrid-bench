@@ -89,7 +89,8 @@ fun packByte y (xlo, xhi) =
 (* ======================================================================== *)
 
 
-val ctx = FutMandelbrot.init ()
+val ctxSet = FutMandelbrot.init ()
+val ctx = FutMandelbrot.CtxSet.getOne ctxSet
 
 
 fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
@@ -110,9 +111,9 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
              byte
            end)))
 
-    fun do_gpu_rows (ylo, yhi) =
+    fun do_gpu_rows device (ylo, yhi) =
       let
-        val outputArr = FutMandelbrot.mandelbrot ctx ylo yhi 0 numBytesPerRow
+        val outputArr = FutMandelbrot.mandelbrot (FutMandelbrot.CtxSet.choose ctxSet device) ylo yhi 0 numBytesPerRow
         fun slice i =
           ArraySlice.slice (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
       in
@@ -152,7 +153,7 @@ fun gpuMandelbrot () =
     fun ensureOnGpu () =
       ForkJoin.choice
         { prefer_cpu = ensureOnGpu
-        , prefer_gpu = fn () =>
+        , prefer_gpu = fn _ =>
             let
               val outputArr = FutMandelbrot.mandelbrot ctx 0 h 0 numBytesPerRow
               fun slice i =
@@ -186,7 +187,7 @@ val bench =
 
 val results = Benchmark.run "running mandelbrot" bench
 
-val _ = FutMandelbrot.cleanup ctx
+val _ = FutMandelbrot.cleanup ctxSet
 
 val outfile = CLA.parseString "output" ""
 

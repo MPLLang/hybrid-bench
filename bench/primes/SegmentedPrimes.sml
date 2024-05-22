@@ -95,6 +95,7 @@ struct
   (* ==========================================================================
    * hybrid primes
    *)
+  structure CtxSet = CtxSetFn (structure F = FutharkPrimes)
 
   val hybrid_gpu_split = BenchParams.Primes.hybrid_split
   val _ = print
@@ -106,22 +107,26 @@ struct
     in if result = lo then lo + 1 else if result = hi then hi - 1 else result
     end
 
+  structure FutharkPrimesData =
+    GpuData
+      (type t =
+         (FutharkPrimes.Int64Array1.ctx * FutharkPrimes.Int64Array1.array))
 
-  fun primes_hybrid ctx n : Int64.int array array =
+  fun primes_hybrid ctxSet n : Int64.int array array =
     if n <= 100000 then
       primes_cpu n
     else
       let
         val sqrtN = Real.floor (Math.sqrt (Real.fromInt n))
-        val sqrtPrimes = primes_hybrid ctx sqrtN
+        val sqrtPrimes = primes_hybrid ctxSet sqrtN
 
         val sqrtPrimes = Seq.flatten
           (Seq.map ArraySlice.full (ArraySlice.full sqrtPrimes))
 
-        val (sqrtPrimesOnGpu, tm) = Util.getTime (fn _ =>
-          FutharkPrimes.Int64Array1.new ctx sqrtPrimes
-            (ArraySlice.length sqrtPrimes))
-
+        val (sqrtPrimesOnGpuSet, tm) = Util.getTime (fn _ =>
+          FutharkPrimesData.initialize ctxSet (fn ctx =>
+            FutharkPrimes.Int64Array1.new ctx sqrtPrimes
+              (ArraySlice.length sqrtPrimes)))
         val _ = print
           ("copy sqrtPrimes to gpu (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm
            ^ "s\n")
@@ -176,10 +181,13 @@ struct
             Array.update (outputBlocks, b, output)
           end
 
-        fun doBlocksOnGpu lob hib =
+        fun doBlocksOnGpu device lob hib =
           let
             val lo = 2 + lob * blockSize
             val hi = Int.min (n + 1, lo + (hib - lob) * blockSize)
+            val ctx = CtxSet.choose ctxSet device
+            val sqrtPrimesOnGpu =
+              FutharkPrimesData.choose sqrtPrimesOnGpuSet device
 
             val t0 = Time.now ()
             val gpuPrimes =
@@ -218,7 +226,7 @@ struct
           else
             ForkJoin.choice
               { prefer_cpu = fn _ => loop lob hib
-              , prefer_gpu = fn _ => doBlocksOnGpu lob hib
+              , prefer_gpu = fn device => doBlocksOnGpu device lob hib
               }
 
         fun outerLoop lob hib =
@@ -240,7 +248,8 @@ struct
           else
             print ("sieve (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm ^ "s\n")
       in
-        FutharkPrimes.Int64Array1.free sqrtPrimesOnGpu;
+        FutharkPrimesData.free sqrtPrimesOnGpuSet (fn d =>
+          FutharkPrimes.Int64Array1.free d);
         outputBlocks
       end
 

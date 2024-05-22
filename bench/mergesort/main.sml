@@ -1,13 +1,19 @@
 structure CLA = CommandLineArgs
 
+structure CtxSet = CtxSetFn (structure F = FutharkSort)
+
 val n = CLA.parseInt "n" (100 * 1000 * 1000)
 val impl = CLA.parseString "impl" "hybrid"
+val devices = String.fields (fn c => c = #",") (CLA.parseString "devices" "")
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
+val _ = print ("devices " ^ String.concatWith "," devices ^ "\n")
 
 val () = print "Initialising Futhark context... "
-val ctx = FutharkSort.Context.new
-  (FutharkSort.Config.cache (SOME "futhark.cache") FutharkSort.Config.default)
+
+val ctxSet = CtxSet.fromList devices
+val ctx = CtxSet.getOne ctxSet
+
 val () = print "Done!\n"
 
 val _ = print ("generating " ^ Int.toString n ^ " random integers\n")
@@ -18,7 +24,7 @@ val input = Seq.tabulate elem n
 
 val bench =
   case impl of
-    "hybrid" => (fn () => HybridSort.sort ctx input)
+    "hybrid" => (fn () => HybridSort.sort ctxSet input)
   | "cpu" => (fn () => HybridSort.sort_cpu input)
   | "gpu" => (fn () => HybridSort.sort_gpu ctx input)
   | _ => Util.die ("unknown impl: " ^ impl)
@@ -30,4 +36,4 @@ val _ = print
 val _ = print
   ("result " ^ Util.summarizeArraySlice 8 Int32.toString result ^ "\n")
 
-val _ = FutharkSort.Context.free ctx
+val _ = CtxSet.free ctxSet

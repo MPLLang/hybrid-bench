@@ -11,12 +11,12 @@ struct
   (* NOTE: need to pass the `vals` array here, see note in HybridSort where
    * FutSort.sort is called
    *)
-  fun init (vals: Int32.int Seq.t) =
+  fun init (vals: Int32.int Seq.t) (device: string)=
     let
       val (data, start, len) = ArraySlice.base vals
-      val f = _import "fut_init" public : i32 array * i64 * i64 -> fut_context;
+      val f = _import "fut_init" public : string * i32 array * i64 * i64 -> fut_context;
     in
-      f (data, start, len)
+      f (device, data, start, len)
     end
 
   fun cleanup x =

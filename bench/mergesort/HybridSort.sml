@@ -1,5 +1,6 @@
 structure HybridSort =
 struct
+  structure CtxSet = CtxSetFn (structure F = FutharkSort)
 
   val gpu_sort_name = CommandLineArgs.parseString "gpu-sort" "radix"
   val futhark_sort =
@@ -57,7 +58,7 @@ struct
   fun split n =
     Real.ceil (sort_split * Real.fromInt n)
 
-  fun sort ctx input =
+  fun sort ctxSet input =
     let
       val n = Seq.length input
 
@@ -65,7 +66,7 @@ struct
         if Seq.length xs <= sort_grain then
           ForkJoin.choice
             { prefer_cpu = fn _ => sort_cpu xs
-            , prefer_gpu = fn _ => sort_gpu ctx xs
+            , prefer_gpu = fn device => sort_gpu (CtxSet.choose ctxSet device) xs
             }
         else
           let
@@ -75,7 +76,7 @@ struct
             val (left', right') =
               ForkJoin.par (fn _ => loop_choose left, fn _ => loop right)
           in
-            HybridMerge.merge ctx (left', right')
+            HybridMerge.merge ctxSet (left', right')
           end
 
       and loop_choose xs =
@@ -83,7 +84,10 @@ struct
           loop xs
         else
           ForkJoin.choice
-            {prefer_cpu = fn _ => loop xs, prefer_gpu = fn _ => sort_gpu ctx xs}
+            { prefer_cpu = fn _ => loop xs
+            , prefer_gpu = fn device =>
+                sort_gpu (CtxSet.choose ctxSet device) xs
+            }
 
     in
       loop input
