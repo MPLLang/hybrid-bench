@@ -5,7 +5,7 @@ default: phony
 	smlfut ray.json --output-dir . --signature-name FUTHARK --structure-name Futhark --poly-arrays
 
 clean: phony
-	rm -f ray.c ray.h ray.json
+	rm -f ray.sml ray.sig ray.c ray.h ray.json
 
 .PHONY: phony
 phony:
