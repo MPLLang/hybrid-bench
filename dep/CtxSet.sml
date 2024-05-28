@@ -12,6 +12,7 @@ functor CtxSetFn
        , cache: string option
        , tuning: (string * int) list
        , device: string option
+       , unified_memory: int option
        }
 
      structure Config:
