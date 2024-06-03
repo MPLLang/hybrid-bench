@@ -13,11 +13,22 @@ struct
 
   fun sort_gpu ctx seq : Int32.int Seq.t =
     let
-      val seq_fut = FutharkSort.Int32Array1.new ctx seq (Seq.length seq)
-      val sorted_fut = futhark_sort ctx seq_fut
-      val sorted = FutharkSort.Int32Array1.values sorted_fut
-      val () = FutharkSort.Int32Array1.free seq_fut
-      val () = FutharkSort.Int32Array1.free sorted_fut
+      val (seq_fut, tm) = Util.getTime (fn _ =>
+        FutharkSort.Int32Array1.new ctx seq (Seq.length seq))
+      val _ = print ("sort_gpu new array: " ^ Time.fmt 4 tm ^ "s\n")
+      val (sorted_fut, tm) = Util.getTime (fn _ => futhark_sort ctx seq_fut)
+      val _ = print ("sort_gpu futhark_sort: " ^ Time.fmt 4 tm ^ "s\n")
+      val (sorted, tm) = Util.getTime (fn _ =>
+        FutharkSort.Int32Array1.values sorted_fut)
+      val _ = print ("sort_gpu values: " ^ Time.fmt 4 tm ^ "s\n")
+      val ((), tm) = Util.getTime (fn _ =>
+        let
+          val () = FutharkSort.Int32Array1.free seq_fut
+          val () = FutharkSort.Int32Array1.free sorted_fut
+        in
+          ()
+        end)
+      val _ = print ("sort_gpu free: " ^ Time.fmt 4 tm ^ "s\n")
     in
       ArraySlice.full sorted
     end
@@ -66,7 +77,8 @@ struct
         if Seq.length xs <= sort_grain then
           ForkJoin.choice
             { prefer_cpu = fn _ => sort_cpu xs
-            , prefer_gpu = fn device => sort_gpu (CtxSet.choose ctxSet device) xs
+            , prefer_gpu = fn device =>
+                sort_gpu (CtxSet.choose ctxSet device) xs
             }
         else
           let

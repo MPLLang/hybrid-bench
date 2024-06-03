@@ -23,13 +23,14 @@ struct
 
   fun cleanup ctxSet =
     ( if profile then
-        List.foldl
-          ( fn (ctx, idx) =>
-              (writeFile "futhark" ^ (Int.toString idx)
-               ^ ".json" (FutharkMandelbrot.Context.report ctx))
-          ; idx + 1
-          ) 0 (CtxSet.toCtxList ctxSet)
-
+        ( List.foldl
+            (fn (ctx, idx) =>
+               ( writeFile ("futhark" ^ (Int.toString idx) ^ ".json")
+                   (FutharkMandelbrot.Context.report ctx)
+               ; idx + 1
+               )) 0 (CtxSet.toCtxList ctxSet)
+        ; ()
+        )
       else
         ()
     ; CtxSet.free ctxSet

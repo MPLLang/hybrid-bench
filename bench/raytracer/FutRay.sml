@@ -4,6 +4,7 @@ struct
   val profile = CommandLineArgs.parseFlag "profile"
   val devices = String.fields (fn c => c = #",")
     (CommandLineArgs.parseString "devices" "")
+  val _ = print ("devices: " ^ String.concatWith "," devices ^ "\n")
 
   structure CtxSet = CtxSetFn (structure F = Futhark)
 
@@ -83,10 +84,11 @@ struct
 
     fun choose (sceneSet: scene_set) (device: device_identifier) =
       let
-        val (_, scene) = Seq.first
-          (Seq.filter (fn (d, _) => d = device) sceneSet)
+        val i =
+          valOf (FindFirst.findFirstSerial (0, Seq.length sceneSet) (fn i =>
+            #1 (Seq.nth sceneSet i) = device))
       in
-        scene
+        #2 (Seq.nth sceneSet i)
       end
   end
 
