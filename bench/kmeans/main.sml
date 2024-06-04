@@ -71,7 +71,7 @@ fun futharkPoints (points: Points.t) ctx =
   Futhark.Real64Array2.new ctx (Points.toSeq points) (Points.length points, d)
 
 val points_fut_set = FutharkPoints.initialize ctxSet (futharkPoints points)
-val points_fut = FutharkPoints.choose points_fut_set "#1"
+val points_fut = FutharkPoints.choose points_fut_set "#0"
 
 fun tt a b =
   Time.fmt 4 (Time.- (b, a))

@@ -24,6 +24,7 @@ functor CtxSetFn
        val cache: string option -> cfg -> cfg
        val tuning: (string * int) list -> cfg -> cfg
        val device: string option -> cfg -> cfg
+       val unified_memory: int option -> cfg -> cfg
      end
 
      structure Context:
@@ -47,7 +48,8 @@ struct
            val cfg =
              (F.Config.cache (SOME ("futhark.cache"))
               o F.Config.device (SOME device) o F.Config.profiling profile
-              o F.Config.logging logging) F.Config.default
+              o F.Config.logging logging
+              o F.Config.unified_memory (SOME 0)) F.Config.default
            val ctx = F.Context.new cfg
          in
            (device, ctx)
