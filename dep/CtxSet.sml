@@ -36,6 +36,7 @@ struct
   open Device
 
   val profile = CommandLineArgs.parseFlag "profile"
+  val logging = CommandLineArgs.parseFlag "logging"
 
   type ctx_set = (device_identifier * F.ctx) Seq.t
 
@@ -44,9 +45,9 @@ struct
       (fn device =>
          let
            val cfg =
-             (F.Config.cache (SOME "futhark.cache")
-              o F.Config.device (SOME device) o F.Config.profiling profile)
-               F.Config.default
+             (F.Config.cache (SOME ("futhark.cache"))
+              o F.Config.device (SOME device) o F.Config.profiling profile
+              o F.Config.logging logging) F.Config.default
            val ctx = F.Context.new cfg
          in
            (device, ctx)
@@ -76,9 +77,7 @@ struct
   It selects the first one, which is arbitrarily chosen.
   *)
   fun getOne (ctxSet: ctx_set) =
-    let
-      val (_, ctx) = Seq.first ctxSet
-    in
-      ctx
+    let val (_, ctx) = Seq.first ctxSet
+    in ctx
     end
 end
