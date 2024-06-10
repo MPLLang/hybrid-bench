@@ -151,4 +151,15 @@ struct
       CommandLineArgs.parseReal "bfs-sparse-hybrid-split" 0.2
   end
 
+
+  structure SparseMxv =
+  struct
+    val nnz_grain = CommandLineArgs.parseInt "matcoo-nnz-grain" 5000
+    val nnz_grain_hybrid =
+      CommandLineArgs.parseInt "matcoo-nnz-grain-hybrid" 1000000
+    val hybrid_split = CommandLineArgs.parseReal "matcoo-hybrid-split" 0.2
+    val gpu_block_size = CommandLineArgs.parseInt "matcoo-gpu-block-size"
+      (5 * 1000 * 1000)
+  end
+
 end

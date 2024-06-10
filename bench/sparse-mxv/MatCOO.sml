@@ -24,7 +24,8 @@ functor MatCOO
      val castFromWord: W.word -> real
      val castToWord: real -> W.word
    end
-   where type real = Real32.real) =
+   where type real = Real32.real
+   structure CtxSet: CTX_SET where type ctx = Futhark.ctx) =
 struct
   structure I = I
   structure R = R
@@ -243,7 +244,7 @@ struct
         end
     end
 
-  val nnzGrain = CommandLineArgs.parseInt "matcoo-nnz-grain" 5000
+  val nnzGrain = BenchParams.SparseMxv.nnz_grain
 
 
   fun write_mxv_combine_results (m1, m2) (result1, result2) output =
@@ -337,8 +338,7 @@ struct
    * gpu
    *)
 
-  val gpu_block_size = CommandLineArgs.parseInt "matcoo-gpu-block-size"
-    (5 * 1000 * 1000)
+  val gpu_block_size = BenchParams.SparseMxv.gpu_block_size
 
   fun tt a b =
     Time.fmt 4 (Time.- (b, a))
@@ -361,16 +361,18 @@ struct
     )
 
 
-  fun mxv_gpu ctx (mat: mat, mat_fut) (vec: R.real Seq.t) =
+  fun mxv_gpu ctx_set (mat: mat, mat_futs) (vec: R.real Seq.t) =
     if nnz mat = 0 then
       Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
     else
       let
         val t0 = Time.now ()
 
+        val (device, ctx) = Seq.first ctx_set
+
         val mat_fut' as (rf, cf, vf) =
-          case mat_fut of
-            SOME (r, c, v) => (r, c, v)
+          case mat_futs of
+            SOME datas => GpuData.choose datas device
           | NONE => mat_on_gpu ctx mat
 
         val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
@@ -414,7 +416,7 @@ struct
 
         val t3 = Time.now ()
 
-        val _ = if Option.isSome mat_fut then () else free_mat_on_gpu mat_fut'
+        val _ = if Option.isSome mat_futs then () else free_mat_on_gpu mat_fut'
         val _ = Futhark.Real32Array1.free result_fut
 
         val t4 = Time.now ()
@@ -502,13 +504,11 @@ struct
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
-  val nnzGrain_hybrid =
-    CommandLineArgs.parseInt "matcoo-nnz-grain-hybrid" 1000000
-
-  val hybrid_split = CommandLineArgs.parseReal "matcoo-hybrid-split" 0.2
+  val nnzGrain_hybrid = BenchParams.SparseMxv.nnz_grain_hybrid
+  val hybrid_split = BenchParams.SparseMxv.hybrid_split
 
 
-  fun write_mxv_hybrid ctx (mat, mat_fut) (vec, vec_fut) output :
+  fun write_mxv_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output :
     write_mxv_result =
     if nnz mat <= nnzGrain_hybrid then
       write_mxv mat vec output
@@ -518,8 +518,10 @@ struct
         val (result1, result2) =
           ForkJoin.par
             ( fn _ =>
-                write_mxv_hybrid_choose ctx (m1, mat_fut) (vec, vec_fut) output
-            , fn _ => write_mxv_hybrid ctx (m2, mat_fut) (vec, vec_fut) output
+                write_mxv_hybrid_choose ctx_set (m1, mat_futs) (vec, vec_futs)
+                  output
+            , fn _ =>
+                write_mxv_hybrid ctx_set (m2, mat_futs) (vec, vec_futs) output
             )
 
       in
@@ -527,22 +529,30 @@ struct
       end
 
 
-  and write_mxv_hybrid_choose ctx (mat, mat_fut) (vec, vec_fut) output :
+  and write_mxv_hybrid_choose ctx_set (mat, mat_futs) (vec, vec_futs) output :
     write_mxv_result =
     if nnz mat <= nnzGrain_hybrid then
       write_mxv mat vec output
     else
       ForkJoin.choice
         { prefer_cpu = fn _ =>
-            write_mxv_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
-        , prefer_gpu = fn _ => write_mxv_gpu ctx (mat, mat_fut) vec_fut output
+            write_mxv_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
+        , prefer_gpu = fn device =>
+            let
+              val ctx = CtxSet.choose ctx_set device
+              val mat_fut =
+                Option.map (fn datas => GpuData.choose datas device) mat_futs
+              val vec_fut = GpuData.choose vec_futs device
+            in
+              write_mxv_gpu ctx (mat, mat_fut) vec_fut output
+            end
         }
 
 
-  fun outer_loop_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
+  fun outer_loop_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
     (block_size, blo, bhi) =
     if blo + 1 = bhi then
-      write_mxv_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
+      write_mxv_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
     else
       let
         val bmid = blo + (bhi - blo) div 2
@@ -551,10 +561,10 @@ struct
         val (result1, result2) =
           ForkJoin.par
             ( fn _ =>
-                outer_loop_hybrid ctx (m1, mat_fut) (vec, vec_fut) output
+                outer_loop_hybrid ctx_set (m1, mat_futs) (vec, vec_futs) output
                   (block_size, blo, bmid)
             , fn _ =>
-                outer_loop_hybrid ctx (m2, mat_fut) (vec, vec_fut) output
+                outer_loop_hybrid ctx_set (m2, mat_futs) (vec, vec_futs) output
                   (block_size, bmid, bhi)
             )
       in
@@ -562,7 +572,7 @@ struct
       end
 
 
-  fun mxv_hybrid ctx (mat: mat, mat_fut) (vec: R.real Seq.t) =
+  fun mxv_hybrid (ctx_set: CtxSet.t) (mat: mat, mat_futs) (vec: R.real Seq.t) =
     if nnz mat = 0 then
       Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
     else
@@ -583,14 +593,15 @@ struct
                  ^ "(TODO: this is a silly issue that could easily be fixed...)")
           end
 
-        val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
+        val vec_futs = GpuData.initialize ctx_set (fn ctx =>
+          Futhark.Real32Array1.new ctx vec (Seq.length vec))
         val output: R.real array = ForkJoin.alloc (Seq.length vec)
 
         val block_size = Real.floor (hybrid_split * Real.fromInt (nnz mat))
         val num_blocks = Util.ceilDiv (nnz mat) block_size
 
         val result =
-          outer_loop_hybrid ctx (mat, mat_fut) (vec, vec_fut) output
+          outer_loop_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
             (block_size, 0, num_blocks)
       in
         (* print "top level: fill in front\n"; *)
@@ -607,7 +618,7 @@ struct
         ForkJoin.parfor 5000 (I.toInt (row_hi mat), Seq.length vec) (fn r =>
           upd (output, r, R.fromInt 0));
 
-        Futhark.Real32Array1.free vec_fut;
+        GpuData.free vec_futs Futhark.Real32Array1.free;
 
         ArraySlice.full output
       end

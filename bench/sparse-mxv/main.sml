@@ -1,7 +1,9 @@
 structure CLA = CommandLineArgs
+structure CtxSet = CtxSetFn (structure F = Futhark)
 
 structure R32 = struct open MLton.Real32 open Real32 structure W = Word32 end
-structure M = MatCOO (structure I = Int32 structure R = R32)
+structure M =
+  MatCOO (structure I = Int32 structure R = R32 structure CtxSet = CtxSet)
 
 val inputFile = CLA.parseString "input" ""
 val outputBinFile = CLA.parseString "output-bin" ""
@@ -32,22 +34,23 @@ val _ = print ("num vals " ^ Int.toString num_vals ^ "\n")
 val vec = Seq.tabulate (fn _ => M.R.fromInt 1) (M.I.toInt num_rows)
 
 val () = print "Initialising Futhark context... "
-val ctx = Futhark.Context.new
-  (Futhark.Config.cache (SOME "futhark.cache") Futhark.Config.default)
+val devices = String.fields (fn c => c = #",") (CLA.parseString "devices" "")
+val ctx_set = CtxSet.fromList devices
+val (default_device, default_ctx) = Seq.first ctx_set
 val () = print "Done!\n"
 
 
-val mat_fut =
+val mat_futs =
   if exclude_copy_mat_onto_gpu andalso impl <> "cpu" then
-    SOME (M.mat_on_gpu ctx mat)
+    SOME (GpuData.initialize ctx_set (fn ctx => M.mat_on_gpu ctx mat))
   else
     NONE
 
 val bench =
   case impl of
     "cpu" => (fn () => M.mxv mat vec)
-  | "gpu" => (fn () => M.mxv_gpu ctx (mat, mat_fut) vec)
-  | "hybrid" => (fn () => M.mxv_hybrid ctx (mat, mat_fut) vec)
+  | "gpu" => (fn () => M.mxv_gpu ctx_set (mat, mat_futs) vec)
+  | "hybrid" => (fn () => M.mxv_hybrid ctx_set (mat, mat_futs) vec)
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val result = Benchmark.run "sparse-mxv" bench
@@ -56,5 +59,6 @@ val _ = print
    ^ Util.summarizeArraySlice 20 (M.R.fmt (StringCvt.FIX (SOME 1))) result
    ^ "\n")
 
-val () = Option.app M.free_mat_on_gpu mat_fut
-val () = Futhark.Context.free ctx
+val () = Option.app (fn datas => GpuData.free datas M.free_mat_on_gpu) mat_futs
+(* val () = Futhark.Context.free ctx *)
+val () = CtxSet.free ctx_set
