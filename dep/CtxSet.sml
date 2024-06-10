@@ -32,14 +32,16 @@ functor CtxSetFn
        val new: cfg -> ctx
        val free: ctx -> unit
      end
-   end) =
+   end): CTX_SET where type ctx = F.ctx =
 struct
   open Device
 
   val profile = CommandLineArgs.parseFlag "profile"
   val logging = CommandLineArgs.parseFlag "logging"
 
+  type ctx = F.ctx
   type ctx_set = (device_identifier * F.ctx) Seq.t
+  type t = ctx_set
 
   fun fromList (devices: device_identifier list) =
     Seq.map
@@ -48,8 +50,8 @@ struct
            val cfg =
              (F.Config.cache (SOME ("futhark.cache"))
               o F.Config.device (SOME device) o F.Config.profiling profile
-              o F.Config.logging logging
-              o F.Config.unified_memory (SOME 0)) F.Config.default
+              o F.Config.logging logging o F.Config.unified_memory (SOME 0))
+               F.Config.default
            val ctx = F.Context.new cfg
          in
            (device, ctx)
@@ -72,14 +74,4 @@ struct
 
   fun toCtxList (ctxSet: ctx_set) =
     Seq.toList (Seq.map (fn (_, ctx) => ctx) ctxSet)
-
-
-  (* 
-  Get one futhark context for single gpu benchmarks.
-  It selects the first one, which is arbitrarily chosen.
-  *)
-  fun getOne (ctxSet: ctx_set) =
-    let val (_, ctx) = Seq.first ctxSet
-    in ctx
-    end
 end

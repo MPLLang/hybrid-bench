@@ -13,7 +13,7 @@ val scene =
   | s => raise Fail ("No such scene: " ^ s)
 
 val ctxSet = FutRay.init ()
-val ctx = FutRay.CtxSet.getOne ctxSet
+val (default_device, default_ctx) = Seq.first ctxSet
 
 val _ = print ("h " ^ Int.toString height ^ "\n")
 val _ = print ("w " ^ Int.toString width ^ "\n")
@@ -37,9 +37,9 @@ val bench =
       (fn () =>
          let
            val (prepared_scene, tm2) = Util.getTime (fn _ =>
-             FutRay.prepare_rgbbox_scene (ctx, height, width))
+             FutRay.prepare_rgbbox_scene (default_ctx, height, width))
            val _ = print ("Futhark prep scene in " ^ Time.fmt 4 tm2 ^ "s\n")
-           val result = Ray.render_gpu ctx prepared_scene width height
+           val result = Ray.render_gpu default_ctx prepared_scene width height
          in
            FutRay.prepare_rgbbox_scene_free prepared_scene;
            result

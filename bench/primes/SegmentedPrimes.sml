@@ -107,10 +107,10 @@ struct
     in if result = lo then lo + 1 else if result = hi then hi - 1 else result
     end
 
-  structure FutharkPrimesData =
+  (* structure FutharkPrimesData =
     GpuData
       (type t =
-         (FutharkPrimes.Int64Array1.ctx * FutharkPrimes.Int64Array1.array))
+         (FutharkPrimes.Int64Array1.ctx * FutharkPrimes.Int64Array1.array)) *)
 
   fun primes_hybrid ctxSet n : Int64.int array array =
     if n <= 100000 then
@@ -124,7 +124,7 @@ struct
           (Seq.map ArraySlice.full (ArraySlice.full sqrtPrimes))
 
         val (sqrtPrimesOnGpuSet, tm) = Util.getTime (fn _ =>
-          FutharkPrimesData.initialize ctxSet (fn ctx =>
+          GpuData.initialize ctxSet (fn ctx =>
             FutharkPrimes.Int64Array1.new ctx sqrtPrimes
               (ArraySlice.length sqrtPrimes)))
         val _ = print
@@ -186,8 +186,7 @@ struct
             val lo = 2 + lob * blockSize
             val hi = Int.min (n + 1, lo + (hib - lob) * blockSize)
             val ctx = CtxSet.choose ctxSet device
-            val sqrtPrimesOnGpu =
-              FutharkPrimesData.choose sqrtPrimesOnGpuSet device
+            val sqrtPrimesOnGpu = GpuData.choose sqrtPrimesOnGpuSet device
 
             val t0 = Time.now ()
             val gpuPrimes =
@@ -248,7 +247,7 @@ struct
           else
             print ("sieve (n=" ^ Int.toString n ^ "): " ^ Time.fmt 4 tm ^ "s\n")
       in
-        FutharkPrimesData.free sqrtPrimesOnGpuSet (fn d =>
+        GpuData.free sqrtPrimesOnGpuSet (fn d =>
           FutharkPrimes.Int64Array1.free d);
         outputBlocks
       end

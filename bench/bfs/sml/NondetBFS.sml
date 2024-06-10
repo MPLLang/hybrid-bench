@@ -1,6 +1,6 @@
 (* nondeterministic direction-optimized BFS, using CAS on outneighbors to
  * construct next frontier. *)
-structure NondetBFS =
+functor NondetBFS(CtxSet: CTX_SET where type ctx = Futhark.ctx) =
 struct
   type 'a seq = 'a Seq.t
 
@@ -236,27 +236,20 @@ struct
    * hybrid
    *)
 
-  val bfs_sparse_hybrid_threshold =
-    CommandLineArgs.parseReal "bfs-sparse-hybrid-threshold" 1.0
+  val bfs_sparse_hybrid_threshold = BenchParams.Bfs.sparse_hybrid_threshold
+  val bfs_dense_hybrid_split = BenchParams.Bfs.dense_hybrid_split
+  val bfs_sparse_hybrid_split = BenchParams.Bfs.sparse_hybrid_split
   val _ = print
     ("bfs-sparse-hybrid-threshold " ^ Real.toString bfs_sparse_hybrid_threshold
      ^ "\n")
-
-
-  val bfs_dense_hybrid_split =
-    CommandLineArgs.parseReal "bfs-dense-hybrid-split" 0.25
   val _ = print
     ("bfs-dense-hybrid-split " ^ Real.toString bfs_dense_hybrid_split ^ "\n")
-
-
-  val bfs_sparse_hybrid_split =
-    CommandLineArgs.parseReal "bfs-sparse-hybrid-split" 0.2
   val _ = print
     ("bfs-sparse-hybrid-split " ^ Real.toString bfs_sparse_hybrid_split ^ "\n")
 
 
-  fun bfs_hybrid ctx {diropt: bool} (g: G.graph, g_fut: Futhark.Opaque.graph.t)
-    (s: vertex) =
+  fun bfs_hybrid ctxSet {diropt: bool}
+    (g: G.graph, gs_fut: Futhark.Opaque.graph.t GpuData.t) (s: vertex) =
     let
       val n = G.numVertices g
       val parent = strip (Seq.tabulate (fn _ => ~1) n)
@@ -306,7 +299,8 @@ struct
 
           val t1 = Time.now ()
 
-          val state_fut = Futhark.Word8Array1.new ctx state (Seq.length state)
+          val state_futs = GpuData.initialize ctxSet (fn ctx =>
+            Futhark.Word8Array1.new ctx state (Seq.length state))
 
           val t2 = Time.now ()
 
@@ -341,22 +335,27 @@ struct
 
               , fn v => keep_vertex v
 
-              , fn (vlo, vhi) =>
-                  let
-                    val t0 = Time.now ()
-                    val (vertices_fut, parents_fut) =
-                      Futhark.Entry.bfs_round_dense_kernel ctx
-                        (g_fut, state_fut, itov vlo, itov vhi)
-                    val t1 = Time.now ()
-                    val vertices =
-                      ArraySlice.full (Futhark.Int32Array1.values vertices_fut)
-                    val parents =
-                      ArraySlice.full (Futhark.Int32Array1.values parents_fut)
-                    val _ = Futhark.Int32Array1.free vertices_fut
-                    val _ = Futhark.Int32Array1.free parents_fut
-                  in
-                    (vlo, vhi, vertices, parents, t0, t1)
-                  end
+              , fn device =>
+                  fn (vlo, vhi) =>
+                    let
+                      val t0 = Time.now ()
+                      val ctx = CtxSet.choose ctxSet device
+                      val g_fut = GpuData.choose gs_fut device
+                      val state_fut = GpuData.choose state_futs device
+                      val (vertices_fut, parents_fut) =
+                        Futhark.Entry.bfs_round_dense_kernel ctx
+                          (g_fut, state_fut, itov vlo, itov vhi)
+                      val t1 = Time.now ()
+                      val vertices =
+                        ArraySlice.full
+                          (Futhark.Int32Array1.values vertices_fut)
+                      val parents =
+                        ArraySlice.full (Futhark.Int32Array1.values parents_fut)
+                      val _ = Futhark.Int32Array1.free vertices_fut
+                      val _ = Futhark.Int32Array1.free parents_fut
+                    in
+                      (vlo, vhi, vertices, parents, t0, t1)
+                    end
 
               , fn (vlo, vhi, vertices, parents, t0, t1) =>
                   let
@@ -378,7 +377,7 @@ struct
                   end
               )
         in
-          Futhark.Word8Array1.free state_fut;
+          GpuData.free state_futs Futhark.Word8Array1.free;
           nextFrontier
         end
 
@@ -392,7 +391,7 @@ struct
           val outNbrs: vertex array = ForkJoin.alloc mf
 
 
-          val visited_fut =
+          val visited_futs =
             if
               nf + mf
               < Real.floor (Real.fromInt n * bfs_sparse_hybrid_threshold)
@@ -405,9 +404,13 @@ struct
                   Seq.map (fn v => if v = ~1 then 0w0 else 0w1 : Word8.word)
                     (ArraySlice.full parent)
                 val t1 = Time.now ()
+                val _ = print ("prep sparse state: " ^ tt t0 t1 ^ "s\n")
+                val visited_futs = GpuData.initialize ctxSet (fn ctx =>
+                  Futhark.Word8Array1.new ctx visited n)
+                val t2 = Time.now ()
+                val _ = print ("copy over sparse state: " ^ tt t1 t2 ^ "s\n")
               in
-                print ("prep sparse state: " ^ tt t0 t1 ^ "s\n");
-                SOME (Futhark.Word8Array1.new ctx visited n)
+                SOME visited_futs
               end
 
 
@@ -483,16 +486,20 @@ struct
                 else
                   ForkJoin.choice
                     { prefer_cpu = fn _ => (loop i j; NONE)
-                    , prefer_gpu = fn _ =>
+                    , prefer_gpu = fn (device: string) =>
                         let
                           val t0 = Time.now ()
+                          val ctx = CtxSet.choose ctxSet device
+                          val g_fut = GpuData.choose gs_fut device
+                          val visited_fut =
+                            GpuData.choose (valOf visited_futs) device
                           val frontier_piece = Seq.subseq frontier (i, j - i)
                           val frontier_piece_fut =
                             Futhark.Int32Array1.new ctx frontier_piece (j - i)
                           val t1 = Time.now ()
                           val (vertices_fut, parents_fut) =
                             Futhark.Entry.bfs_round_sparse_kernel ctx
-                              (g_fut, valOf visited_fut, frontier_piece_fut)
+                              (g_fut, visited_fut, frontier_piece_fut)
                           val t2 = Time.now ()
                           val vertices = Futhark.Int32Array1.values vertices_fut
                           val parents = Futhark.Int32Array1.values parents_fut
@@ -546,13 +553,15 @@ struct
             end
 
           val _ =
-            case visited_fut of
+            case visited_futs of
               NONE =>
                 ForkJoin.parfor 100 (0, nf) (fn i =>
                   visitMany i (sub (offsets, i)) (sub (offsets, i + 1)))
             | SOME _ => loop 0 nf
 
-          val _ = Option.app Futhark.Word8Array1.free visited_fut
+          val _ =
+            Option.app (fn datas => GpuData.free datas Futhark.Word8Array1.free)
+              visited_futs
         in
           filterFrontier (ArraySlice.full outNbrs)
         end

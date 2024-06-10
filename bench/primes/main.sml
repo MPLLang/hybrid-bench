@@ -5,7 +5,7 @@ val devices = String.fields (fn c => c = #",")
 
 val () = print "Initialising Futhark context... "
 val ctxSet = SegmentedPrimes.CtxSet.fromList devices
-val ctx = SegmentedPrimes.CtxSet.getOne ctxSet
+val (default_device, default_ctx) = Seq.first ctxSet
 val () = print "Done!\n"
 
 val n = CommandLineArgs.parseInt "n" (100 * 1000 * 1000)
@@ -19,7 +19,7 @@ fun singleton x = Array.fromList [x]
 val doit =
   case impl of
     "cpu" => SegmentedPrimes.primes_cpu
-  | "gpu" => singleton o SegmentedPrimes.primes_gpu ctx
+  | "gpu" => singleton o SegmentedPrimes.primes_gpu default_ctx
   | "hybrid" => SegmentedPrimes.primes_hybrid ctxSet
   | _ => Util.die ("unknown -impl " ^ impl)
 

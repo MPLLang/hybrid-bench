@@ -12,7 +12,7 @@ val _ = print ("devices " ^ String.concatWith "," devices ^ "\n")
 val () = print "Initialising Futhark context... "
 
 val ctxSet = CtxSet.fromList devices
-val ctx = CtxSet.getOne ctxSet
+val (default_device, default_ctx) = Seq.first ctxSet
 
 val () = print "Done!\n"
 
@@ -26,7 +26,7 @@ val bench =
   case impl of
     "hybrid" => (fn () => HybridSort.sort ctxSet input)
   | "cpu" => (fn () => HybridSort.sort_cpu input)
-  | "gpu" => (fn () => HybridSort.sort_gpu ctx input)
+  | "gpu" => (fn () => HybridSort.sort_gpu default_ctx input)
   | _ => Util.die ("unknown impl: " ^ impl)
 
 val result = Benchmark.run ("sort " ^ impl) bench

@@ -62,16 +62,17 @@ val () = print ("Max iterations: " ^ Int.toString max_iterations ^ "\n")
 structure CtxSet = CtxSetFn (structure F = Futhark)
 val () = print "Initialising Futhark context... "
 val ctxSet = CtxSet.fromList devices
-val ctx = CtxSet.getOne ctxSet
+val (default_device, default_ctx) = Seq.first ctxSet
 val () = print "Done!\n"
 
-structure FutharkPoints = GpuData(type t = Futhark.Real64Array2.array)
+(* structure FutharkPoints = GpuData(type t = ) *)
+(* Futhark.Real64Array2.array *)
 
 fun futharkPoints (points: Points.t) ctx =
   Futhark.Real64Array2.new ctx (Points.toSeq points) (Points.length points, d)
 
-val points_fut_set = FutharkPoints.initialize ctxSet (futharkPoints points)
-val points_fut = FutharkPoints.choose points_fut_set "#0"
+val points_fut_set = GpuData.initialize ctxSet (futharkPoints points)
+val points_fut = GpuData.choose points_fut_set default_device
 
 fun tt a b =
   Time.fmt 4 (Time.- (b, a))
@@ -86,17 +87,15 @@ val bench =
          let
            fun gpuHistogram centroids =
              let
-               val centroids_fut_set =
-                 FutharkPoints.initialize ctxSet (fn ctx =>
-                   Futhark.Real64Array2.new ctx (Points.toSeq centroids)
-                     (Points.length centroids, d))
+               val centroids_fut_set = GpuData.initialize ctxSet (fn ctx =>
+                 Futhark.Real64Array2.new ctx (Points.toSeq centroids)
+                   (Points.length centroids, d))
              in
                { kernel = fn device =>
                    let
                      val ctx = CtxSet.choose ctxSet device
-                     val centroids_fut =
-                       FutharkPoints.choose centroids_fut_set device
-                     val points_fut = FutharkPoints.choose points_fut_set device
+                     val centroids_fut = GpuData.choose centroids_fut_set device
+                     val points_fut = GpuData.choose points_fut_set device
                    in
                      fn (start, stop) =>
                        let
@@ -129,8 +128,7 @@ val bench =
                    end
 
                , after = fn () =>
-                   FutharkPoints.free centroids_fut_set
-                     Futhark.Real64Array2.free
+                   GpuData.free centroids_fut_set Futhark.Real64Array2.free
                }
              end
          in
@@ -143,7 +141,7 @@ val bench =
          let
            val t0 = Time.now ()
            val (num_iters, centroids_fut) =
-             Futhark.Entry.kmeans ctx
+             Futhark.Entry.kmeans default_ctx
                (Int64.fromInt k, Int32.fromInt max_iterations, points_fut)
            val t1 = Time.now ()
            val result = Points.fromSeq d (Seq.fromArraySeq
@@ -161,10 +159,10 @@ val bench =
            fun centroidsChunkGPU (start, len, centroids) =
              let
                val centroids_fut =
-                 Futhark.Real64Array2.new ctx (Points.toSeq centroids)
+                 Futhark.Real64Array2.new default_ctx (Points.toSeq centroids)
                    (Points.length centroids, d)
                val new_centroids_fut =
-                 Futhark.Entry.centroids_chunk ctx
+                 Futhark.Entry.centroids_chunk default_ctx
                    ( Int64.fromInt start
                    , Int64.fromInt len
                    , points_fut
@@ -189,7 +187,7 @@ val bench =
 
 val (kmeans_iters, kmeans_res) = Benchmark.run ("kmeans " ^ impl) bench
 
-val () = Futhark.Real64Array2.free points_fut
+val () = GpuData.free points_fut_set Futhark.Real64Array2.free
 
 fun writeFile fname s =
   let val os = TextIO.openOut fname
@@ -197,8 +195,10 @@ fun writeFile fname s =
   end
 
 val () =
-  if profile then (writeFile "futhark.json" (Futhark.Context.report ctx))
-  else ()
+  if profile then
+    (writeFile "futhark.json" (Futhark.Context.report default_ctx))
+  else
+    ()
 
 val () = CtxSet.free ctxSet
 

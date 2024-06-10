@@ -3,6 +3,7 @@ spinlock.mlb
 TreeSeq.sml
 Device.sml
 GpuData.sml
+CTX_SET.sml
 CtxSet.sml
 HybridBasis.sml
 BenchParams.sml

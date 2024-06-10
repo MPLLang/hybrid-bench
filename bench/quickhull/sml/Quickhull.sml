@@ -1,12 +1,12 @@
-structure Quickhull:
+functor Quickhull(CtxSet: CTX_SET where type ctx = Futhark.ctx):
 sig
 
   val hull_cpu: FlatPointSeq.t -> Int32.int Seq.t
 
   val hull_gpu: Futhark.ctx -> Futhark.Real64Array2.array -> Int32.int Seq.t
 
-  val hull_hybrid: Futhark.ctx
-                   -> FlatPointSeq.t * Futhark.Real64Array2.array
+  val hull_hybrid: CtxSet.t
+                   -> FlatPointSeq.t * (Futhark.Real64Array2.array GpuData.t)
                    -> Int32.int Seq.t
 end =
 struct
@@ -278,7 +278,7 @@ struct
   val reduce_hybrid_split = BenchParams.Quickhull.reduce_hybrid_split
 
 
-  fun hull_hybrid ctxSet (pts, points_fut) =
+  fun hull_hybrid ctxSet (pts, points_fut_set) =
     let
       fun pt i =
         FlatPointSeq.nth pts (Int32.toInt i)
@@ -316,8 +316,7 @@ struct
                     fn (lo, hi) =>
                       let
                         val ctx = CtxSet.choose ctxSet device
-                        val points_fut =
-                          FutharkPoints.choose points_fut_set device
+                        val points_fut = GpuData.choose points_fut_set device
                         val i = point_furthest_from_line_gpu ctx
                           (points_fut, l, r, Seq.subseq idxs (lo, hi - lo))
                       in
@@ -349,7 +348,7 @@ struct
             , prefer_gpu = fn device =>
                 let
                   val ctx = CtxSet.choose ctxSet device
-                  val points_fut = FutharkPoints.choose points_fut_set device
+                  val points_fut = GpuData.choose points_fut_set device
                 in
                   semihull_gpu ctx (points_fut, idxs, l, r)
                 end
@@ -371,8 +370,7 @@ struct
                   fn (lo, hi) =>
                     let
                       val ctx = CtxSet.choose ctxSet device
-                      val points_fut =
-                        FutharkPoints.choose points_fut_set device
+                      val points_fut = GpuData.choose points_fut_set device
                     in
                       points_above_gpu ctx
                         (points_fut, Seq.subseq idxs (lo, hi - lo), l, r)
@@ -392,7 +390,7 @@ struct
             , prefer_gpu = fn device =>
                 let
                   val ctx = CtxSet.choose ctxSet device
-                  val points_fut = FutharkPoints.choose points_fut_set device
+                  val points_fut = GpuData.choose points_fut_set device
                 in
                   filter_then_semihull_gpu ctx (points_fut, l, r, idxs)
                 end
@@ -415,8 +413,7 @@ struct
                   fn (lo, hi) =>
                     let
                       val ctx = CtxSet.choose ctxSet device
-                      val points_fut =
-                        FutharkPoints.choose points_fut_set device
+                      val points_fut = GpuData.choose points_fut_set device
                     in
                       top_level_points_above_in_range_gpu ctx
                         (points_fut, lo, hi, l, r)
@@ -439,7 +436,7 @@ struct
           , prefer_gpu = fn device =>
               let
                 val ctx = CtxSet.choose ctxSet device
-                val points_fut = FutharkPoints.choose points_fut_set device
+                val points_fut = GpuData.choose points_fut_set device
               in
                 top_level_filter_then_semihull_gpu ctx (points_fut, l, r)
               end
@@ -455,7 +452,7 @@ struct
               fn (lo, hi) =>
                 let
                   val ctx = CtxSet.choose ctxSet device
-                  val points_fut = FutharkPoints.choose points_fut_set device
+                  val points_fut = GpuData.choose points_fut_set device
                 in
                   min_max_point_in_range_gpu ctx (points_fut, lo, hi)
                 end

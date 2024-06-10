@@ -1,10 +1,20 @@
 (* data initially copied to GPU  a Futhark context for each gpu device *)
 
-functor GpuData (type t) =
+structure GpuData:
+sig
+  type 'a gpu_data = (Device.device_identifier * 'a) Seq.t
+  type 'a t = 'a gpu_data
+  val initialize: (Device.device_identifier * 'ctx) Seq.t
+                  -> ('ctx -> 'a)
+                  -> 'a gpu_data
+  val free: 'a gpu_data -> ('a -> unit) -> unit
+  val choose: 'a gpu_data -> Device.device_identifier -> 'a
+end =
 struct
   open Device
 
-  type gpu_data = (device_identifier * t) Seq.t
+  type 'a gpu_data = (device_identifier * 'a) Seq.t
+  type 'a t = 'a gpu_data
 
   fun initialize ctxSet f =
     Seq.map (fn (device, ctx) => (device, f ctx)) ctxSet

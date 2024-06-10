@@ -140,4 +140,15 @@ struct
 
   end
 
+
+  structure Bfs =
+  struct
+    val sparse_hybrid_threshold =
+      CommandLineArgs.parseReal "bfs-sparse-hybrid-threshold" 1.0
+    val dense_hybrid_split =
+      CommandLineArgs.parseReal "bfs-dense-hybrid-split" 0.25
+    val sparse_hybrid_split =
+      CommandLineArgs.parseReal "bfs-sparse-hybrid-split" 0.2
+  end
+
 end
