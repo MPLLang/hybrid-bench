@@ -2,116 +2,128 @@
 import json
 
 
-def cmd(procs, impl, args):
-  cmd_template = "/usr/bin/env time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 set-affinity -- -warmup 5 -repeat 20 -impl {} {}"
-  return cmd_template.format(str(procs), impl, args)
+def cmd(procs, gpus, impl, args):
+  cmd_template = "/usr/bin/env time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 set-affinity -- -warmup 5 -repeat 20 -devices {} -impl {} {}"
+  dev_list = ",".join("#{}".format(i) for i in range(0, gpus))
+  dev_str = "'{}'".format(dev_list)
+  return cmd_template.format(str(procs), dev_str, impl, args)
 
 
-def interval_tree(procs, impl):
+def interval_tree(procs, gpus, impl):
   row = {
     "tag": "interval-tree",
     "cwd": "bench/build-intervaltree",
-    "cmd": cmd(procs, impl, "-n 5000000"),
+    "cmd": cmd(procs, gpus, impl, "-n 5000000"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def dmm(procs, impl):
+def dmm(procs, gpus, impl):
   row = {
     "tag": "dmm",
     "cwd": "bench/dmm-flat-mat",
-    "cmd": cmd(procs, impl, "-n 8192"),
+    "cmd": cmd(procs, gpus, impl, "-n 8192"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def mandelbrot(procs, impl):
+def mandelbrot(procs, gpus, impl):
   row = {
     "tag": "mandelbrot",
     "cwd": "bench/mandelbrot",
-    "cmd": cmd(procs, impl, ""),
+    "cmd": cmd(procs, gpus, impl, ""),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def raytracer(procs, impl):
+def raytracer(procs, gpus, impl):
   row = {
     "tag": "raytracer",
     "cwd": "bench/raytracer",
-    "cmd": cmd(procs, impl, "-h 1000 -w 1000"),
+    "cmd": cmd(procs, gpus, impl, "-h 1000 -w 1000"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def mergesort(procs, impl):
+def mergesort(procs, gpus, impl):
   row = {
     "tag": "mergesort",
     "cwd": "bench/mergesort",
-    "cmd": cmd(procs, impl, "-n 10000000"),
+    "cmd": cmd(procs, gpus, impl, "-n 10000000"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def new_primes(procs, impl):
+def new_primes(procs, gpus, impl):
   row = {
     "tag": "new-primes",
     "cwd": "bench/primes",
-    "cmd": cmd(procs, impl, "-n 100000000"),
+    "cmd": cmd(procs, gpus, impl, "-n 100000000"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def quickhull(procs, impl):
+def quickhull(procs, gpus, impl):
   row = {
     "tag": "quickhull",
     "cwd": "bench/quickhull",
-    "cmd": cmd(procs, impl, "-points /home/ec2-user/geom-data/uniform-circle-10M"),
+    "cmd": cmd(procs, gpus, impl, "-points /home/ec2-user/geom-data/uniform-circle-10M"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def bfs(procs, impl):
+def bfs(procs, gpus, impl):
   row = {
     "tag": "bfs",
     "cwd": "bench/bfs",
-    "cmd": cmd(procs, impl, "/home/ec2-user/graph-data/rmat-10M-symm-bin"),
+    "cmd": cmd(procs, gpus, impl, "/home/ec2-user/graph-data/rmat-10M-symm-bin"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def kmeans(procs, impl):
+def kmeans(procs, gpus, impl):
   row = {
     "tag": "kmeans",
     "cwd": "bench/kmeans",
-    "cmd": cmd(procs, impl, "-n 100000 --gen-random-input -d 512 -k 16 -hist-gpu-grain 2000 -hist-gpu-split 0.08 -hist-cpu-grain 250"),
+    "cmd": cmd(procs, gpus, impl, "-n 100000 --gen-random-input -d 512 -k 16 -hist-gpu-grain 2000 -hist-gpu-split 0.08 -hist-cpu-grain 250"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
 
 
-def sparse_mxv(procs, impl):
+def sparse_mxv(procs, gpus, impl):
   row = {
     "tag": "sparse-mxv",
     "cwd": "bench/sparse-mxv",
-    "cmd": cmd(procs, impl, "-input /home/ec2-user/suite-sparse/stokes/stokes.mtx.bin --exclude-copy-mat-onto-gpu"),
+    "cmd": cmd(procs, gpus, impl, "-input /home/ec2-user/suite-sparse/stokes/stokes.mtx.bin --exclude-copy-mat-onto-gpu"),
     "procs": procs,
+    "gpus": gpus,
     "impl": impl
   }
   return row
@@ -142,15 +154,18 @@ def filter_unique(row):
 def filter_gpu_procs(row):
   if row is None:
     return None
-  if row['impl'] == 'gpu' and row['procs'] != 1:
+  if row['impl'] == 'gpu' and (row['procs'] != 1 or row['gpus'] != 1):
+    return None
+  if row['impl'] == 'cpu' and row['gpus'] != 1:
     return None
   return row
 
 
 tests = [
-  add_extra(filter_gpu_procs(filter_unique(make_row(procs, impl))))
+  add_extra(filter_gpu_procs(filter_unique(make_row(procs, gpus, impl))))
   for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans, sparse_mxv]
-  for procs in [1,2,4,6,8,12,16,24,30,32]
+  for procs in [1,10,20,30,40,50,60,70,80]
+  for gpus in [1,2,3,4]
   for impl in ["hybrid","cpu","gpu"]
 ]
 tests = [ r for r in tests if r is not None ]
