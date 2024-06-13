@@ -67,7 +67,7 @@ struct
     let
       val (device, ctx) = Seq.first
         (Seq.filter (fn (d, _) => d = device) ctxSet)
-      val _ = print ("chosen device: " ^ device ^ "\n")
+      (*val _ = print ("chosen device: " ^ device ^ "\n")*)
     in
       ctx
     end
