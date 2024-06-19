@@ -50,6 +50,7 @@ val bench =
   case impl of
     "cpu" => (fn () => M.mxv mat vec)
   | "gpu" => (fn () => M.mxv_gpu ctx_set (mat, mat_futs) vec)
+  | "multi-gpu" => (fn () => M.mxv_multi_gpu ctx_set (mat, mat_futs) vec)
   | "hybrid" => (fn () => M.mxv_hybrid ctx_set (mat, mat_futs) vec)
   | _ => Util.die ("unknown -impl " ^ impl)
 

@@ -535,9 +535,14 @@ struct
 
   and write_mxv_hybrid_choose ctx_set (mat, mat_futs) (vec, vec_futs) output :
     write_mxv_result =
-    if nnz mat <= nnzGrain_hybrid then
+    if
+      nnz mat <= nnzGrain_hybrid
+    then
       write_mxv mat vec output
-    else if Real.fromInt (nnz mat) / Real.fromInt (row_spread mat) < hybrid_gpu_work_rat then
+    else if
+      Real.fromInt (nnz mat) / Real.fromInt (row_spread mat)
+      < hybrid_gpu_work_rat
+    then
       write_mxv_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
     else
       ForkJoin.choice
@@ -628,6 +633,81 @@ struct
           upd (output, r, R.fromInt 0));
 
         GpuData.free vec_futs Futhark.Real32Array1.free;
+
+        ArraySlice.full output
+      end
+
+  (* =======================================================================
+   * multi gpu
+   *)
+
+  fun mxv_multi_gpu (ctx_set: CtxSet.t) (mat: mat, mat_futs) (vec: R.real Seq.t) =
+    if nnz mat = 0 then
+      Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
+    else
+      let
+
+        val _ =
+          let
+            val Mat {row_indices, col_indices, values, ...} = mat
+            val (_, start1, _) = ArraySlice.base row_indices
+            val (_, start2, _) = ArraySlice.base col_indices
+            val (_, start3, _) = ArraySlice.base values
+          in
+            if start1 = 0 andalso start2 = 0 andalso start3 = 0 then
+              ()
+            else
+              raise Fail
+                ("MatCOO.mxv_hybrid: error: requires Mat components to be full slices\n"
+                 ^ "(TODO: this is a silly issue that could easily be fixed...)")
+          end
+
+        val output: R.real array = ForkJoin.alloc (Seq.length vec)
+
+        val num_blocks = Seq.length ctx_set
+        val block_size = (nnz mat) div num_blocks
+
+        fun loop mat blo bhi =
+          if blo + 1 = bhi then
+            let
+              val b = blo
+              val (device, ctx) = Seq.nth ctx_set b
+              val mat_fut =
+                Option.map (fn datas => GpuData.choose datas device) mat_futs
+              val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)
+              val result =
+                write_mxv_gpu (device, ctx) (mat, mat_fut) vec_fut output
+              val () = Futhark.Real32Array1.free vec_fut
+            in
+              result
+            end
+          else
+            let
+              val bmid = blo + (bhi - blo) div 2
+              val half_elems = block_size * (bmid - blo)
+              val (m1, m2) = split_nnz half_elems mat
+              val (result1, result2) =
+                ForkJoin.par (fn _ => loop m1 blo bmid, fn _ =>
+                  loop m2 bmid bhi)
+            in
+              write_mxv_combine_results (m1, m2) (result1, result2) output
+            end
+
+        val result = loop mat 0 num_blocks
+      in
+        (* print "top level: fill in front\n"; *)
+        ForkJoin.parfor 5000 (0, I.toInt (row_lo mat)) (fn r =>
+          upd (output, r, R.fromInt 0));
+        (* print "top-level: fill in middle\n"; *)
+        case result of
+          SingleRowValue r => upd (output, I.toInt (row_lo mat), r)
+        | FirstLastRowValue (f, l) =>
+            ( upd (output, I.toInt (row_lo mat), f)
+            ; upd (output, I.toInt (row_hi mat) - 1, l)
+            );
+        (* print "top-level: fill in back\n"; *)
+        ForkJoin.parfor 5000 (I.toInt (row_hi mat), Seq.length vec) (fn r =>
+          upd (output, r, R.fromInt 0));
 
         ArraySlice.full output
       end
