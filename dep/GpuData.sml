@@ -17,7 +17,10 @@ struct
   type 'a t = 'a gpu_data
 
   fun initialize ctxSet f =
-    Seq.map (fn (device, ctx) => (device, f ctx)) ctxSet
+    ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length ctxSet) (fn i =>
+      let val (device, ctx) = Seq.nth ctxSet i
+      in (device, f ctx)
+      end))
 
   fun free data f =
     let val _ = Seq.map (fn (_, d) => f d) data

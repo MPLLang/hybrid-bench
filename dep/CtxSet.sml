@@ -49,7 +49,7 @@ struct
          let
            val cfg =
              (F.Config.cache (SOME ("futhark.cache"))
-              o F.Config.device (SOME device) o F.Config.profiling profile
+              o F.Config.device (SOME (device ^ String.implode [Char.chr 0])) o F.Config.profiling profile
               o F.Config.logging logging o F.Config.unified_memory (SOME 0))
                F.Config.default
            val ctx = F.Context.new cfg

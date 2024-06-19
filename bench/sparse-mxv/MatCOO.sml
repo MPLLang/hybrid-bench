@@ -64,6 +64,9 @@ struct
     if nnz mat = 0 then I.fromInt 0
     else I.+ (I.fromInt 1, Seq.last (#row_indices m))
 
+  fun row_spread mat =
+    I.toInt (row_hi mat) - I.toInt (row_lo mat)
+
   fun split_seq s k =
     (Seq.take s k, Seq.drop s k)
 
@@ -387,7 +390,7 @@ struct
             , Int64.fromInt (nnz mat)
             , Int64.fromInt gpu_block_size
             )
-        val _ = Futhark.Context.sync
+        val () = Futhark.Context.sync ctx
         val t2 = Time.now ()
 
         (* val _ = print ("num nonzero " ^ Int32.toString num_nonzero ^ "\n") *)
@@ -422,7 +425,7 @@ struct
         val t4 = Time.now ()
       in
         print
-          ("gpu sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
+          ("gpu " ^ device ^ " sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
            ^ Int.toString (rhi - rlo) ^ "): " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+"
            ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
         output
@@ -436,7 +439,7 @@ struct
    * hybrid
    *)
 
-  fun write_mxv_gpu ctx (mat, mat_fut) vec_fut output =
+  fun write_mxv_gpu (device, ctx) (mat, mat_fut) vec_fut output =
     let
       val t0 = Time.now ()
       val Mat {row_indices, col_indices, values, ...} = mat
@@ -463,7 +466,7 @@ struct
       val (is_single_row, first_val, result_fut, last_val) =
         Futhark.Entry.sparse_mxv ctx
           (rf, cf, vf, vec_fut, start, stop, Int64.fromInt gpu_block_size)
-      val _ = Futhark.Context.sync
+      val () = Futhark.Context.sync ctx
       val t2 = Time.now ()
 
       (* val _ = print ("num nonzero " ^ Int32.toString num_nonzero ^ "\n") *)
@@ -494,7 +497,7 @@ struct
       val t4 = Time.now ()
     in
       print
-        ("gpu sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
+        ("gpu " ^ device ^ " sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
          ^ Int.toString (rhi - rlo) ^ "): " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+"
          ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
 
@@ -506,6 +509,7 @@ struct
 
   val nnzGrain_hybrid = BenchParams.SparseMxv.nnz_grain_hybrid
   val hybrid_split = BenchParams.SparseMxv.hybrid_split
+  val hybrid_gpu_work_rat = BenchParams.SparseMxv.hybrid_gpu_work_rat
 
 
   fun write_mxv_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output :
@@ -533,6 +537,8 @@ struct
     write_mxv_result =
     if nnz mat <= nnzGrain_hybrid then
       write_mxv mat vec output
+    else if Real.fromInt (nnz mat) / Real.fromInt (row_spread mat) < hybrid_gpu_work_rat then
+      write_mxv_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
     else
       ForkJoin.choice
         { prefer_cpu = fn _ =>
@@ -544,7 +550,7 @@ struct
                 Option.map (fn datas => GpuData.choose datas device) mat_futs
               val vec_fut = GpuData.choose vec_futs device
             in
-              write_mxv_gpu ctx (mat, mat_fut) vec_fut output
+              write_mxv_gpu (device, ctx) (mat, mat_fut) vec_fut output
             end
         }
 
@@ -552,7 +558,7 @@ struct
   fun outer_loop_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
     (block_size, blo, bhi) =
     if blo + 1 = bhi then
-      write_mxv_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
+      write_mxv_hybrid_choose ctx_set (mat, mat_futs) (vec, vec_futs) output
     else
       let
         val bmid = blo + (bhi - blo) div 2
@@ -593,12 +599,15 @@ struct
                  ^ "(TODO: this is a silly issue that could easily be fixed...)")
           end
 
-        val vec_futs = GpuData.initialize ctx_set (fn ctx =>
-          Futhark.Real32Array1.new ctx vec (Seq.length vec))
         val output: R.real array = ForkJoin.alloc (Seq.length vec)
 
         val block_size = Real.floor (hybrid_split * Real.fromInt (nnz mat))
         val num_blocks = Util.ceilDiv (nnz mat) block_size
+
+        val (vec_futs, tm) = Util.getTime (fn () =>
+          GpuData.initialize ctx_set (fn ctx =>
+            Futhark.Real32Array1.new ctx vec (Seq.length vec)))
+        val _ = print ("gpu data initialize " ^ Time.fmt 4 tm ^ "s\n")
 
         val result =
           outer_loop_hybrid ctx_set (mat, mat_futs) (vec, vec_futs) output
