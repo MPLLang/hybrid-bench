@@ -3,7 +3,7 @@ import json
 import copy
 
 def cmd(procs, gpus, impl, args):
-  cmd_template = "/usr/bin/env time -v ./main.mpl.bin @mpl procs {} max-cc-depth 0 set-affinity -- -warmup 5 -repeat 20 -devices {} -impl {} {}"
+  cmd_template = "/usr/bin/env time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 set-affinity -- -warmup 5 -repeat 20 -devices {} -impl {} {}"
   dev_list = ",".join("#{}".format(i) for i in range(0, gpus))
   dev_str = "'{}'".format(dev_list)
   return cmd_template.format(str(procs), dev_str, impl, args)
