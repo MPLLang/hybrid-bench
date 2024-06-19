@@ -748,8 +748,10 @@ def speedupPlot(outputName, tag):
   # ,'D','*','P','X'
   linestyles = ['solid', 'dashed','dashdot']
 
+  gpu_colors = ['thistle', 'plum', 'fuchsia', 'mediumpurple', 'darkviolet']
+
   # markers = ['.'] * len(speedupTags)
-  procs = P
+  procs = [1,10,20,30,40,50,60,70,80]
 
   fontSize = 35
   legendFontSize = 35
@@ -763,7 +765,7 @@ def speedupPlot(outputName, tag):
   def this_su(impl, p, g):
     try:
       pp = 1 if impl == "gpu" else p
-      gg = 1 if (impl != "hybrid") else g 
+      gg = 1 if (impl == "gpu" or impl == "cpu") else g 
       return baseline / averageTime(D, impl, tag, pp, gg)
     except Exception as e:
       sys.stderr.write('[WARN] error while plotting {} speedup of {} at P={}: {}\n'.format(impl, tag, p, e))
@@ -777,13 +779,28 @@ def speedupPlot(outputName, tag):
     gpu_su = this_su('gpu', 1, 1)
 
     # ideal hybrid speedup line
-    plt.plot([0,xlim], [gpu_su,gpu_su+xlim], marker="", color="grey", linewidth=0.33*linewidth)
+    # plt.plot([0,xlim], [gpu_su,gpu_su+xlim], marker="", color="grey", linewidth=0.33*linewidth)
     
-    lines.append(plt.plot([0,xlim], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color='darkviolet', alpha=0.8))
+    lines.append(plt.plot([0,xlim], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color=gpu_colors[0], alpha=0.8))
     if gpu_su > ylim:
       sys.stderr.write('[WARN] {}: \'gpu\' speedup {} exceeds ylim of {}\n'.format(tag, int(gpu_su), ylim))
   except Exception as e:
     sys.stderr.write('[WARN] error while plotting gpu speedup of {}: {}\n'.format(tag, e))
+
+
+  for i in [1,2,3,4]:
+    try:
+      gpu_su = this_su('multi-gpu', i, i)
+
+      # ideal hybrid speedup line
+      # plt.plot([0,xlim], [gpu_su,gpu_su+xlim], marker="", color="grey", linewidth=0.33*linewidth)
+      
+      lines.append(plt.plot([0,xlim], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color=gpu_colors[i], alpha=0.8))
+      if gpu_su > ylim:
+        sys.stderr.write('[WARN] {}: \'gpu\' speedup {} exceeds ylim of {}\n'.format(tag, int(gpu_su), ylim))
+    except Exception as e:
+      sys.stderr.write('[WARN] error while plotting gpu speedup of {}: {}\n'.format(tag, e))
+
 
   impls = [('cpu', 1), ('hybrid', 1), ('hybrid', 2), ('hybrid', 3), ('hybrid', 4)]
   for (i, (impl, gpus)) in enumerate(impls):
