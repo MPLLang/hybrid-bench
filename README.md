@@ -22,3 +22,5 @@ Setup:
 To run a benchmark:
 - `cd bench/<BENCHMARK>; make; ./main.mpl.bin <ARGS>`
 - You can run `scripts/gencmds` to see preferred configuration
+- Alternatively, to run a batch: `scripts/gencmds | jq 'select(<QUERY>)' | scripts/runcmds --compile`
+    * For example: `scripts/gencmds | jq 'select(.tag == "quickhull" and .procs == 80 and .gpus == 4 and .impl == "hybrid")' | scripts/runcmds --compile`
