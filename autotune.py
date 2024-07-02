@@ -80,7 +80,7 @@ class HybridTuner(MeasurementInterface):
 
     def save_final_config(self, cfg):
         """called at the end of tuning"""
-        for p in cfg.data:
+        for p in sorted(cfg.data.keys()):
             v = cfg.data[p]
             print(f'-{p} {v}')
 
@@ -104,7 +104,7 @@ class MandelbrotTuner(HybridTuner):
 class PrimesTuner(HybridTuner):
     def workload(self):
         n = 1000 * 1000 * 1000
-        return f'-n {n}'
+        return f' -n {n}'
 
     def params(self):
         return [FloatParameter('primes-block-size-factor', 1, 64),
