@@ -11,9 +11,9 @@ val _ =
   else
     ()
 
-val d = CLA.parseInt "d" 2
+val d = CLA.parseInt "d" 512
 
-val k = CLA.parseInt "k" 5
+val k = CLA.parseInt "k" 16
 
 val profile = CommandLineArgs.parseFlag "profile"
 
@@ -87,9 +87,11 @@ val bench =
          let
            fun gpuHistogram centroids =
              let
-               val centroids_fut_set = GpuData.initialize ctxSet (fn ctx =>
-                 Futhark.Real64Array2.new ctx (Points.toSeq centroids)
-                   (Points.length centroids, d))
+               val (centroids_fut_set, tm) = Util.getTime (fn _ =>
+                 GpuData.initialize ctxSet (fn ctx =>
+                   Futhark.Real64Array2.new ctx (Points.toSeq centroids)
+                     (Points.length centroids, d)))
+               val _ = print ("send centroids " ^ Time.fmt 4 tm ^ "s\n")
              in
                { kernel = fn device =>
                    let
@@ -120,9 +122,9 @@ val bench =
                                  Array.sub (hist_arr, c * d + (i - 1)))))
                          val t4 = Time.now ()
                        in
-                         (* print
+                         print
                            ("gpu kmeans (" ^ Int.toString (stop - start) ^ "): "
-                            ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n"); *)
+                            ^ tt t1 t2 ^ "+" ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
                          result
                        end
                    end

@@ -91,15 +91,17 @@ struct
      * hybridization
      *
      * Large fanout with asymmetric divide-and-conquer at the leaves. Size
-     * of the leaves is controlled by hist_gpu_split (0 < ... < 1) and we
-     * switch to cpu-only below hist_gpu_grain.
+     * of the leaves is controlled by hist_outer_split (0 < ... < 1).
+     * Asymmetry within leaves is controlled by hist_gpu_split (0 < ... < 1).
+     * We switch to cpu-only below hist_gpu_grain.
      *
      * hist_cpu_grain is used purely for CPU-side grain control.
      *)
 
-    val hist_cpu_grain = CommandLineArgs.parseInt "hist-cpu-grain" 1000
-    val hist_gpu_grain = CommandLineArgs.parseInt "hist-gpu-grain" 100000
-    val hist_gpu_split = CommandLineArgs.parseReal "hist-gpu-split" 0.75
+    val hist_cpu_grain = CommandLineArgs.parseInt "hist-cpu-grain" 100
+    val hist_gpu_grain = CommandLineArgs.parseInt "hist-gpu-grain" 10000
+    val hist_gpu_split = CommandLineArgs.parseReal "hist-gpu-split" 0.667
+    val hist_outer_split = CommandLineArgs.parseReal "hist-outer-split" 0.2
 
   end
 

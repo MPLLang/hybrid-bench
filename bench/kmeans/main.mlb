@@ -3,7 +3,9 @@
 sml/ParseFile.sml
 sml/Points.sml
 sml/Hist.sml
-sml/Kmeans.sml
+ann "allowFFI true" in
+  sml/Kmeans.sml
+end
 
 futhark/kmeans.sig
 futhark/kmeans.sml
