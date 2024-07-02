@@ -15,6 +15,7 @@ from __future__ import print_function
 import sys
 import re
 import opentuner
+import logging
 from opentuner import ConfigurationManipulator
 from opentuner import FloatParameter, IntegerParameter
 from opentuner import MeasurementInterface
@@ -30,6 +31,7 @@ def get_avgtime(s):
 class HybridTuner(MeasurementInterface):
     def __init__(self, args, *pargs, **kwargs):
         super(HybridTuner, self).__init__(args, *pargs, **kwargs)
+        self.log = logging.getLogger(__name__)
 
     def manipulator(self):
         """
@@ -65,9 +67,10 @@ class HybridTuner(MeasurementInterface):
         if result['returncode'] != 0:
             stdout=result['stdout'].decode('utf8')
             stderr=result['stderr'].decode('utf8')
-            raise Exception(f'Command failed:\n{cmd}\nstdout:\n{stdout}\nstderr:{stderr}')
-
-        return Result(time=get_avgtime(result['stdout'].decode('utf8')))
+            self.log.info(f'Command failed:\n{cmd}\nstdout:\n{stdout}\nstderr:{stderr}')
+            return Result(state='ERROR', time=float('inf'))
+        else:
+            return Result(time=get_avgtime(result['stdout'].decode('utf8')))
 
     def save_final_config(self, cfg):
         """called at the end of tuning"""
