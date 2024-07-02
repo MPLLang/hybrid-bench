@@ -4,11 +4,17 @@
 #
 # Usage:
 #
-# $ ../../autotune.py <mandelbrot|raytracer> --procs N
+# $ ../../autotune.py <mandelbrot|raytracer> --procs=N
 #
 # Probably takes a long time to terminate (if ever), but prints a
 # running log of improvements, so feel free to just kill it when it
 # looks like it's not making further progress.
+#
+# Other useful options:
+#
+# --stop-after=SECONDS
+#
+#   Stop tuning after this many seconds.
 
 from __future__ import print_function
 
@@ -74,9 +80,9 @@ class HybridTuner(MeasurementInterface):
 
     def save_final_config(self, cfg):
         """called at the end of tuning"""
-        for p in cfg:
-            v = cfg[p]
-            print(f' -{p} {v}')
+        for p in cfg.data:
+            v = cfg.data[p]
+            print(f'-{p} {v}')
 
 # TODO: fix hardcoded workloads.
 
@@ -95,9 +101,20 @@ class MandelbrotTuner(HybridTuner):
         return [FloatParameter('mandelbrot-parfor-split', 0, 1),
                 IntegerParameter('mandelbrot-parfor-grain', 1, 100)]
 
+class PrimesTuner(HybridTuner):
+    def workload(self):
+        n = 1000 * 1000 * 1000
+        return f'-n {n}'
+
+    def params(self):
+        return [FloatParameter('primes-block-size-factor', 1, 64),
+                FloatParameter('hybrid-gpu-split', 0, 1),
+                IntegerParameter('block_range_hybrid_threshold', 1e4, 1e6)]
+
 problems = {
     'raytracer': RayTracerTuner,
-    'mandelbrot': MandelbrotTuner
+    'mandelbrot': MandelbrotTuner,
+    'primes': PrimesTuner
 }
 
 problem=sys.argv[1]
