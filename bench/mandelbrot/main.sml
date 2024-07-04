@@ -30,6 +30,9 @@ val _ = print ("w " ^ Int.toString w ^ "\n")
 val dx = (right - left) / Real.fromInt w
 val dy = (top - bot) / Real.fromInt h
 
+val dx32 = Real32.fromLarge IEEEReal.TO_NEAREST (Real.toLarge dx)
+val dy32 = Real32.fromLarge IEEEReal.TO_NEAREST (Real.toLarge dy)
+
 (* convert pixel coordinate to complex coordinate *)
 fun xyToComplex (x, y) =
   let
@@ -84,8 +87,12 @@ fun mark x y =
   end *)
 
 fun packByte y (xlo, xhi) =
-  (_import "mandelbrot_pack_byte": Int64.int * Int64.int * Int64.int -> Word8.word;)
-  (y, xlo, xhi)
+  (_import "mandelbrot_pack_byte": Int32.int * Int32.int * Int32.int * Real32.real * Real32.real -> Word8.word;)
+    (Int32.fromInt y, Int32.fromInt xlo, Int32.fromInt xhi, dx32, dy32)
+
+fun packByteFull y xlo =
+  (_import "mandelbrot_pack_byte_full": Int32.int * Int32.int * Real32.real * Real32.real -> Word8.word;)
+    (Int32.fromInt y, Int32.fromInt xlo, dx32, dy32)
 
 (* ======================================================================== *)
 (* ======================================================================== *)
@@ -108,10 +115,11 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
         (ArraySlice.full (SeqBasis.tabulate 100 (0, numBytesPerRow) (fn b =>
            let
              val xlo = b * 8
-             val xhi = Int.min (xlo + 8, w)
-             val byte = packByte y (xlo, xhi)
            in
-             byte
+             if xlo + 8 <= w then
+               packByteFull y xlo
+             else
+               packByte y (xlo, w)
            end)))
 
     fun do_gpu_rows device (ylo, yhi) =
@@ -148,10 +156,11 @@ fun cpuMandelbrot () =
       ArraySlice.full (SeqBasis.tabulate 1000 (0, numBytesPerRow) (fn b =>
         let
           val xlo = b * 8
-          val xhi = Int.min (xlo + 8, w)
-          val byte = packByte y (xlo, xhi)
         in
-          byte
+          if xlo + 8 <= w then
+            packByteFull y xlo
+          else
+            packByte y (xlo, w)
         end))))
   end
 

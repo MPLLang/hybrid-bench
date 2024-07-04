@@ -1,23 +1,23 @@
 
 -- Config needs to match the same constants in the SML code
-let top = 1.0f64
-let bot = -1.0f64
-let left = -1.5f64
-let right = 0.5f64
+let top = 1.0f32
+let bot = -1.0f32
+let left = -1.5f32
+let right = 0.5f32
 let maxIter = 50i32
-let divergeThresh = 4f64
-let resolution = 10000f64
+let divergeThresh = 4f32
+let resolution = 10000f32
 
 
-let w = i64.f64 (f64.ceil (resolution * (right - left)))
-let h = i64.f64 (f64.ceil (resolution * (top - bot)))
-let dx = (right - left) / f64.i64 w
-let dy = (top - bot) / f64.i64 h
+let w = i64.f32 (f32.ceil (resolution * (right - left)))
+let h = i64.f32 (f32.ceil (resolution * (top - bot)))
+let dx = (right - left) / f32.i64 w
+let dy = (top - bot) / f32.i64 h
 
 
 let xyToComplex (x, y) =
-  let r = left + (f64.i64 x * dx)
-  let i = bot + (f64.i64 y * dy)
+  let r = left + (f32.i64 x * dx)
+  let i = bot + (f32.i64 y * dy)
   in
   (r, i)
 
@@ -25,7 +25,7 @@ let xyToComplex (x, y) =
 def test x y =
   let (cr, ci) = xyToComplex (x, y)
   in
-  loop (zr, zi, trmti, i) = (0.0f64, 0.0f64, 0.0f64, 0)
+  loop (zr, zi, trmti, i) = (0.0f32, 0.0f32, 0.0f32, 0)
   while i < maxIter && (zr * zr) + (zi * zi) <= divergeThresh do
     let zi = (2.0 * zr * zi) + ci
     let zr = trmti + cr
