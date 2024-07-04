@@ -7,7 +7,7 @@ val _ = print ("max-iter " ^ Int.toString maxIter ^ "\n")
 val _ = print ("diverge-thresh " ^ Real.toString divergeThresh ^ "\n")
 
 (* pixels per unit of the complex plane *)
-val resolution = (*CLA.parseInt "resolution"*) 5000
+val resolution = (*CLA.parseInt "resolution"*) 10000
 val _ = print ("resolution " ^ Int.toString resolution ^ "\n")
 
 (* rectangular query region *)

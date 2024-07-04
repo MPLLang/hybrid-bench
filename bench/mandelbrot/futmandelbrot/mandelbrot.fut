@@ -6,7 +6,7 @@ let left = -1.5f64
 let right = 0.5f64
 let maxIter = 50i32
 let divergeThresh = 4f64
-let resolution = 5000f64
+let resolution = 10000f64
 
 
 let w = i64.f64 (f64.ceil (resolution * (right - left)))

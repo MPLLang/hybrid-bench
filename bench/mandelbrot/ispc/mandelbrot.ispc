@@ -4,7 +4,7 @@ const uniform double bot = -1.0;
 const uniform double left = -1.5;
 const uniform double right = 0.5;
 const uniform double diverge_thresh = 4.0;
-const uniform int64 resolution = 5000;
+const uniform int64 resolution = 10000;
 const uniform int64 max_iter = 50;
 
 
