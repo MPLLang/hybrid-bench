@@ -117,8 +117,9 @@ struct
      * grain size. 
      *)
 
-    val gpu_split = CommandLineArgs.parseReal "render-hybrid-gpu-split" 0.5
-    val gpu_grain = 2000
+    val outer_split = CommandLineArgs.parseReal "raytracer-outer-split" 0.22
+    val inner_split = CommandLineArgs.parseReal "raytracer-inner-split" 0.667
+    val grain = 2000
 
   end
 

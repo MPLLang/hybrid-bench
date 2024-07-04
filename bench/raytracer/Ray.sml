@@ -367,13 +367,14 @@ struct
     end
 
 
-  val renderHybridGpuSplit = BenchParams.Raytracer.gpu_split
+  val outer_split = BenchParams.Raytracer.outer_split
+  val inner_split = BenchParams.Raytracer.inner_split
   val _ = print
-    ("render-hybrid-gpu-split " ^ Real.toString renderHybridGpuSplit
-     ^ " (fraction given to gpu choice points)\n")
+    ("raytracer-outer-split " ^ Real.toString outer_split ^ "\n")
+  val _ = print
+    ("raytracer-inner-split " ^ Real.toString inner_split ^ "\n")
 
-  val renderHybridGrain = BenchParams.Raytracer.gpu_grain
-
+  val grain = BenchParams.Raytracer.grain
 
   fun render_hybrid ctxSet fut_prepared_scene_set objs width height cam : image =
     let
@@ -389,12 +390,17 @@ struct
         end
 
       fun gpuTask device (lo, hi) =
-        FutRay.render (CtxSet.choose ctxSet device)
-          (FutRay.PreparedSceneSet.choose fut_prepared_scene_set device)
-          (ArraySlice.slice (pixels, lo, SOME (hi - lo)))
+        let
+          val (tm1, tm2) =
+            FutRay.render (CtxSet.choose ctxSet device)
+              (FutRay.PreparedSceneSet.choose fut_prepared_scene_set device)
+              (ArraySlice.slice (pixels, lo, SOME (hi - lo)))
+        in
+          print ("gpu " ^ device ^ " (" ^ Int.toString (hi-lo) ^ "): " ^ Time.fmt 4 tm1 ^ "+" ^ Time.fmt 4 tm2 ^ "s\n")
+        end
 
     in
-      HybridBasis.parfor_hybrid renderHybridGpuSplit renderHybridGrain
+      HybridBasis.parfor_hybrid outer_split inner_split grain
         (0, height * width) (writePixel, gpuTask);
 
       {width = width, height = height, pixels = pixels}
