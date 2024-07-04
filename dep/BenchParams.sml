@@ -6,8 +6,9 @@ struct
     (* One big asymmetric hybrid parfor over the rows. Split in half, and
      * hybridization threshold at a grain of 10 rows.
      *)
-    val parfor_split = CommandLineArgs.parseReal "mandelbrot-parfor-split" 0.5
-    val parfor_grain = CommandLineArgs.parseInt "mandelbrot-parfor-grain" 10
+    val outer_split = CommandLineArgs.parseReal "mandelbrot-outer-split" 0.2
+    val inner_split = CommandLineArgs.parseReal "mandelbrot-inner-split" 0.5
+    val grain = CommandLineArgs.parseInt "mandelbrot-grain" 10
   end
 
 

@@ -14,7 +14,7 @@ struct
       end
 
 
-  fun parfor_hybrid split grain (lo, hi)
+  fun parfor_hybrid outer_split inner_split grain (lo, hi)
     (f: int -> unit, g: device_identifier -> (int * int) -> unit) =
     let
       fun base lo hi =
@@ -27,7 +27,7 @@ struct
             , prefer_gpu = fn device => g device (lo, hi)
             }
         else
-          let val mid = compute_mid split lo hi
+          let val mid = compute_mid inner_split lo hi
           in ForkJoin.par (fn _ => loop_choose lo mid, fn _ => loop mid hi); ()
           end
 
@@ -36,8 +36,28 @@ struct
           { prefer_cpu = fn _ => loop lo hi
           , prefer_gpu = fn device => g device (lo, hi)
           }
+
+      val n = hi - lo
+      val block_size = Real.floor (outer_split * Real.fromInt n)
+      val num_blocks = Util.ceilDiv n block_size
+
+      fun outer_loop blo bhi =
+        if blo+1 = bhi then
+          let
+            val start = lo + blo * block_size
+            val stop = Int.min (start + block_size, lo + n)
+          in
+            loop_choose start stop
+          end
+        else
+          let
+            val bmid = blo + (bhi-blo) div 2
+          in
+            ForkJoin.par (fn _ => outer_loop blo bmid, fn _ => outer_loop bmid bhi);
+            ()
+          end
     in
-      loop lo hi
+      outer_loop 0 num_blocks
     end
 
 

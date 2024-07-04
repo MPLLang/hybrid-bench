@@ -116,19 +116,25 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
 
     fun do_gpu_rows device (ylo, yhi) =
       let
+        val t0 = Time.now ()
         val outputArr =
           FutMandelbrot.mandelbrot (FutMandelbrot.CtxSet.choose ctxSet device)
             ylo yhi 0 numBytesPerRow
         fun slice i =
           ArraySlice.slice (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
+        val t1 = Time.now ()
+        val _ =
+          ForkJoin.parfor 1000 (0, yhi - ylo) (fn i => putRow (ylo + i) (slice i))
+        val t2 = Time.now ()
       in
-        ForkJoin.parfor 1000 (0, yhi - ylo) (fn i => putRow (ylo + i) (slice i))
+        print ("gpu " ^ device ^ " mandelbrot (" ^ Int.toString ((yhi-ylo) * w) ^ "): " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "+" ^ Time.fmt 4 (Time.- (t2, t1)) ^ "s\n")
       end
 
-    val split = BenchParams.Mandelbrot.parfor_split
-    val grain = BenchParams.Mandelbrot.parfor_grain
+    val outer_split = BenchParams.Mandelbrot.outer_split
+    val inner_split = BenchParams.Mandelbrot.inner_split
+    val grain = BenchParams.Mandelbrot.grain
   in
-    HybridBasis.parfor_hybrid split grain (0, h) (do_cpu_row, do_gpu_rows);
+    HybridBasis.parfor_hybrid outer_split inner_split grain (0, h) (do_cpu_row, do_gpu_rows);
 
     ArraySlice.full rows
   end
