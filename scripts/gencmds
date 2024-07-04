@@ -49,7 +49,7 @@ def raytracer(procs, gpus, impl):
   row = {
     "tag": "raytracer",
     "cwd": "bench/raytracer",
-    "cmd": cmd(procs, gpus, impl, "-h 1000 -w 1000"),
+    "cmd": cmd(procs, gpus, impl, "-h 2000 -w 2000"),
     "procs": procs,
     "gpus": gpus,
     "impl": impl
