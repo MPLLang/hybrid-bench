@@ -60,7 +60,7 @@ fun mark x y =
   end
 
 
-fun packByte y (xlo, xhi) =
+(* fun packByte y (xlo, xhi) =
   let
     fun loop byte x =
       if x >= xhi then
@@ -81,8 +81,11 @@ fun packByte y (xlo, xhi) =
       else Word8.<< (byte, Word.fromInt (8 - (xhi - xlo)))
   in
     byte
-  end
+  end *)
 
+fun packByte y (xlo, xhi) =
+  (_import "mandelbrot_pack_byte": Int64.int * Int64.int * Int64.int -> Word8.word;)
+  (y, xlo, xhi)
 
 (* ======================================================================== *)
 (* ======================================================================== *)
