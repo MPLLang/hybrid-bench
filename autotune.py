@@ -131,7 +131,7 @@ class KmeansTuner(HybridTuner):
     def workload(self):
         return f'-n {self.args.n} --gen-random-input -d {self.args.d} -k {self.args.k}'
 
-    def params (self):
+    def params(self):
         return [IntegerParameter('hist-cpu-grain', 1, 1000),
                 IntegerParameter('hist-gpu-grain', 1, 100000),
                 FloatParameter('hist-gpu-split', 0.01, 1),
@@ -142,13 +142,26 @@ class KmeansTuner(HybridTuner):
         argparser.add_argument('-d', type=int, metavar='INT', default=512)
         argparser.add_argument('-k', type=int, metavar='INT', default=16)
 
+class QuickhullTuner(HybridTuner):
+    def params(self):
+        return [IntegerParameter('quickhull-par-grain', 1, 10000),
+                IntegerParameter('quickhull-hybrid-grain', 1, 10000),
+                IntegerParameter('quickhull-reduce-hybrid-grain', 1, 10000),
+                FloatParameter('quickhull-reduce-hybrid-split', 0.001, 1)]
+
+    def add_arguments(argparser):
+        argparser.add_argument('--points', type=str, metavar='FILE', required=True)
+
+    def workload(self):
+        return f'-points {self.args.points}'
 
 problems = {
     'raytracer': RayTracerTuner,
     'mandelbrot': MandelbrotTuner,
     'primes': PrimesTuner,
     'bfs': BfsTuner,
-    'kmeans': KmeansTuner
+    'kmeans': KmeansTuner,
+    'quickhull': QuickhullTuner
 }
 
 problem=sys.argv[1]
