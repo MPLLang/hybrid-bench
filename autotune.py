@@ -49,14 +49,7 @@ class HybridTuner(MeasurementInterface):
             manipulator.add_parameter(p)
         return manipulator
 
-    def run(self, desired_result, input, limit):
-        """
-        Compile and run a given configuration then
-        return performance
-        """
-        cfg = desired_result.configuration.data
-        # We can print cfg here if we want.
-
+    def gen_run_cmd(self, cfg):
         # Program to run
         cmd = './main.mpl.bin'
         # Basic scheduling
@@ -64,10 +57,21 @@ class HybridTuner(MeasurementInterface):
         # Measurement config
         cmd += ' -warmup 2 -repeat 10'
         # Workload - this should be modified for each benchmark.
-        cmd += self.workload()
+        cmd += ' ' + self.workload()
         for p in cfg:
             v = cfg[p]
             cmd += f' -{p} {v}'
+        return cmd
+
+    def run(self, desired_result, input, limit):
+        """
+        Compile and run a given configuration then
+        return performance
+        """
+        data = desired_result.configuration.data
+        # We can print data here if we want.
+
+        cmd = self.gen_run_cmd(data)
 
         result = self.call_program(cmd)
         if result['returncode'] != 0:
@@ -84,11 +88,14 @@ class HybridTuner(MeasurementInterface):
             v = cfg.data[p]
             print(f'-{p} {v}')
 
+        print('To reproduce:')
+        print(self.gen_run_cmd(cfg.data))
+
 # TODO: fix hardcoded workloads.
 
 class RayTracerTuner(HybridTuner):
     def workload(self):
-        return ' -h 4000 -w 4000'
+        return '-h 4000 -w 4000'
 
     def params(self):
         return [FloatParameter('render-hybrid-gpu-split', 0, 1)]
@@ -104,24 +111,35 @@ class MandelbrotTuner(HybridTuner):
 class PrimesTuner(HybridTuner):
     def workload(self):
         n = 1000 * 1000 * 1000
-        return f' -n {n}'
+        return f'-n {n}'
 
     def params(self):
         return [FloatParameter('primes-block-size-factor', 1, 64),
                 FloatParameter('hybrid-gpu-split', 0, 1),
                 IntegerParameter('block_range_hybrid_threshold', 1e4, 1e6)]
 
+class BfsTuner(HybridTuner):
+    def workload(self):
+        return 'rmat-10M-symm-bin'
+
+    def params(self):
+        return [FloatParameter('bfs-sparse-hybrid-threshold', 0.001, 2),
+                FloatParameter('bfs-dense-hybrid-split', 0.001, 1),
+                FloatParameter('bfs-sparse-hybrid-split', 0.001, 1)]
+
 problems = {
     'raytracer': RayTracerTuner,
     'mandelbrot': MandelbrotTuner,
-    'primes': PrimesTuner
+    'primes': PrimesTuner,
+    'bfs': BfsTuner
 }
 
 problem=sys.argv[1]
 sys.argv = sys.argv[1:]
 
 if problem not in problems:
-    raise Exception(f'{problem} is not one of {problems.keys()}')
+    known = ', '.join(problems.keys())
+    raise Exception(f'"{problem}" is not one of {known}.')
 
 tuner = problems[problem]
 
