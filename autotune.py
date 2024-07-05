@@ -4,17 +4,14 @@
 #
 # Usage:
 #
-# $ ../../autotune.py <mandelbrot|raytracer> --procs=N
+# $ ../../autotune.py <mandelbrot|raytracer|...> --procs=N
 #
-# Probably takes a long time to terminate (if ever), but prints a
-# running log of improvements, so feel free to just kill it when it
-# looks like it's not making further progress.
-#
-# Other useful options:
+# Useful options:
 #
 # --stop-after=SECONDS
 #
-#   Stop tuning after this many seconds.
+#   Stop tuning after this many seconds. You probably want to use
+#   this, as opentuner is not great at detecting convergence.
 
 from __future__ import print_function
 
@@ -38,6 +35,9 @@ class HybridTuner(MeasurementInterface):
     def __init__(self, args, *pargs, **kwargs):
         super(HybridTuner, self).__init__(args, *pargs, **kwargs)
         self.log = logging.getLogger(__name__)
+
+    def add_arguments(argparser):
+        pass
 
     def manipulator(self):
         """
@@ -127,11 +127,28 @@ class BfsTuner(HybridTuner):
                 FloatParameter('bfs-dense-hybrid-split', 0.001, 1),
                 FloatParameter('bfs-sparse-hybrid-split', 0.001, 1)]
 
+class KmeansTuner(HybridTuner):
+    def workload(self):
+        return f'-n {self.args.n} --gen-random-input -d {self.args.d} -k {self.args.k}'
+
+    def params (self):
+        return [IntegerParameter('hist-cpu-grain', 1, 1000),
+                IntegerParameter('hist-gpu-grain', 1, 100000),
+                FloatParameter('hist-gpu-split', 0.01, 1),
+                FloatParameter('hist-outer-split', 0.01, 1)]
+
+    def add_arguments(argparser):
+        argparser.add_argument('-n', type=int, metavar='INT', default=100000)
+        argparser.add_argument('-d', type=int, metavar='INT', default=512)
+        argparser.add_argument('-k', type=int, metavar='INT', default=16)
+
+
 problems = {
     'raytracer': RayTracerTuner,
     'mandelbrot': MandelbrotTuner,
     'primes': PrimesTuner,
-    'bfs': BfsTuner
+    'bfs': BfsTuner,
+    'kmeans': KmeansTuner
 }
 
 problem=sys.argv[1]
@@ -145,5 +162,6 @@ tuner = problems[problem]
 
 if __name__ == '__main__':
     argparser = opentuner.default_argparser()
+    tuner.add_arguments(argparser)
     argparser.add_argument('--procs', type=int, metavar='INT', default='64')
     tuner.main(argparser.parse_args())
