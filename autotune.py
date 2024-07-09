@@ -20,7 +20,7 @@ import re
 import opentuner
 import logging
 from opentuner import ConfigurationManipulator
-from opentuner import FloatParameter, IntegerParameter
+from opentuner.search.manipulator import FloatParameter, IntegerParameter, PowerOfTwoParameter
 from opentuner import MeasurementInterface
 from opentuner import Result
 
@@ -155,13 +155,44 @@ class QuickhullTuner(HybridTuner):
     def workload(self):
         return f'-points {self.args.points}'
 
+class SparseMxvTuner(HybridTuner):
+    def params(self):
+        return [IntegerParameter('matcoo-nnz-grain', 1, 10000),
+                IntegerParameter('matcoo-nnz-grain-hybrid', 1, 1000*1000),
+                FloatParameter('matcoo-hybrid-split', 0.01, 1),
+                IntegerParameter('matcoo-gpu-block-size', 1, 10*1000*1000),
+                FloatParameter('matcoo-hybrid-gpu-work-rat', 0.001, 100)]
+
+    def add_arguments(argparser):
+        argparser.add_argument('--input', type=str, metavar='FILE', required=True)
+
+    def workload(self):
+        return f'-input {self.args.input}'
+
+class MergesortTuner(HybridTuner):
+    def params(self):
+        return [IntegerParameter('qsort-grain', 1000, 10*1000*1000),
+                PowerOfTwoParameter('gpu-merge-block', 1, 64),
+                FloatParameter('sort-split', 0, 1),
+                IntegerParameter('sort-grain', 1, 10*1000*1000),
+                FloatParameter('merge-split', 0, 1),
+                IntegerParameter('merge-grain', 1, 10*1000*1000)]
+
+    def workload(self):
+        return f'-n {self.args.n}'
+
+    def add_arguments(argparser):
+        argparser.add_argument('-n', type=int, metavar='INT', default=10000000)
+
 problems = {
     'raytracer': RayTracerTuner,
     'mandelbrot': MandelbrotTuner,
     'primes': PrimesTuner,
     'bfs': BfsTuner,
     'kmeans': KmeansTuner,
-    'quickhull': QuickhullTuner
+    'quickhull': QuickhullTuner,
+    'sparse-mxv': SparseMxvTuner,
+    'mergesort': MergesortTuner
 }
 
 problem=sys.argv[1]
