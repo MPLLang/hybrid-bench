@@ -17,6 +17,14 @@ struct
 
   fun startTiming () = Time.now ()
 
+  fun par4 (f1, f2, f3, f4) =
+    let
+      val ((r1, r2), (r3, r4)) =
+        ForkJoin.par (fn _ => ForkJoin.par (f1, f2), fn _ => ForkJoin.par (f3, f4))
+    in
+      (r1, r2, r3, r4)
+    end
+
   fun tick tm msg =
     let
       val tm' = Time.now ()
@@ -168,89 +176,136 @@ struct
    * gpu code
    *)
 
+  fun tt t1 t2 = Time.fmt 4 (Time.- (t2,t1))
 
-  fun top_level_points_above_in_range_gpu ctx (points_fut, lo, hi, l, r) =
+  fun tts ts =
+    case ts of
+      [] => ""
+    | [_] => ""
+    | [t1, t2] => tt t1 t2 ^ "s\n"
+    | t1 :: t2 :: rest => tt t1 t2 ^ "+" ^ tts (t2 :: rest)
+
+
+  fun top_level_points_above_in_range_gpu (device, ctx) (points_fut, lo, hi, l, r) =
     let
+      val t0 = Time.now ()
       val res_fut = Futhark.Entry.top_level_points_above_in_range ctx
         (points_fut, lo, hi, l, r)
+      val t1 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
+      val t2 = Time.now ()
     in
+      print ("gpu " ^ device ^ " top_level_points_above_in_range("
+      ^ Int.toString (hi-lo) ^ "): " ^ tts [t0, t1]);
+
       ArraySlice.full res
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
-  fun points_above_gpu ctx (points_fut, idxs, l, r) =
+  fun points_above_gpu (device, ctx) (points_fut, idxs, l, r) =
     let
+      val t0 = Time.now ()
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
+      val t1 = Time.now ()
       val res_fut = Futhark.Entry.points_above ctx (points_fut, idxs_fut, l, r)
+      val t2 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
       val () = Futhark.Int32Array1.free idxs_fut
+      val t3 = Time.now ()
     in
+      print ("gpu " ^ device ^ " points_above("
+      ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2, t3]);
       ArraySlice.full res
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
-  fun top_level_filter_then_semihull_gpu ctx (points_fut, l, r) =
+  fun top_level_filter_then_semihull_gpu (device, ctx) (points_fut, l, r) =
     let
+      val t0 = Time.now ()
       val res_fut =
         Futhark.Entry.top_level_filter_then_semihull ctx (points_fut, l, r)
+      val t1 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
+      val t2 = Time.now ()
     in
+      print ("gpu " ^ device ^ " top_level_filter_then_semihull():"
+      ^ tts [t0, t1, t2]);
       Tree.fromArraySeq (ArraySlice.full res)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
-  fun filter_then_semihull_gpu ctx (points_fut, l, r, idxs) =
+  fun filter_then_semihull_gpu (device, ctx) (points_fut, l, r, idxs) =
     let
+      val t0 = Time.now ()
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
+      val t1 = Time.now ()
       val res_fut =
         Futhark.Entry.filter_then_semihull ctx (points_fut, l, r, idxs_fut)
+      val t2 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
       val () = Futhark.Int32Array1.free idxs_fut
+      val t3 = Time.now ()
     in
+      print ("gpu " ^ device ^ " filter_then_semihull("
+      ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2, t3]);
       Tree.fromArraySeq (ArraySlice.full res)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
-  fun semihull_gpu ctx (points_fut, idxs, l, r) =
+  fun semihull_gpu (device, ctx) (points_fut, idxs, l, r) =
     let
+      val t0 = Time.now ()
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
+      val t1 = Time.now ()
       val res_fut = Futhark.Entry.semihull ctx (points_fut, l, r, idxs_fut)
+      val t2 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
       val () = Futhark.Int32Array1.free idxs_fut
+      val t3 = Time.now ()
     in
+      print ("gpu " ^ device ^ " semihull_gpu("
+      ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2, t3]);
       Tree.fromArraySeq (ArraySlice.full res)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
-  fun min_max_point_in_range_gpu ctx (points_fut, lo, hi) =
+  fun min_max_point_in_range_gpu (device, ctx) (points_fut, lo, hi) =
     let
-      val (min, max) =
+      val t0 = Time.now ()
+      val (l, r, b, t) =
         Futhark.Entry.min_max_point_in_range ctx
           (points_fut, Int64.fromInt lo, Int64.fromInt hi)
+      val t1 = Time.now ()
     in
-      (min, max)
+      print ("gpu " ^ device ^ " min_max_point_in_range("
+      ^ Int.toString (hi-lo) ^ "): " ^ tts [t0, t1]);
+      (l, r, b, t)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 
 
-  fun point_furthest_from_line_gpu ctx (points_fut, l, r, idxs) : Int32.int =
+  fun point_furthest_from_line_gpu (device, ctx) (points_fut, l, r, idxs) : Int32.int =
     let
+      val t0 = Time.now ()
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
+      val t1 = Time.now ()
       val i =
         Futhark.Entry.point_furthest_from_line ctx (points_fut, l, r, idxs_fut)
       val () = Futhark.Int32Array1.free idxs_fut
+      val t2 = Time.now ()
     in
+      print ("gpu " ^ device ^ " point_furthest_from_line("
+      ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2]);
       i
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
@@ -275,7 +330,10 @@ struct
   val semihull_par_grain = BenchParams.Quickhull.semihull_par_grain
   val semihull_hybrid_grain = BenchParams.Quickhull.semihull_hybrid_grain
   val reduce_hybrid_grain = BenchParams.Quickhull.reduce_hybrid_grain
-  val reduce_hybrid_split = BenchParams.Quickhull.reduce_hybrid_split
+  val reduce_hybrid_outer_split =
+    BenchParams.Quickhull.reduce_hybrid_outer_split
+  val reduce_hybrid_inner_split =
+    BenchParams.Quickhull.reduce_hybrid_inner_split
 
 
   fun hull_hybrid ctxSet (pts, points_fut_set) =
@@ -286,14 +344,16 @@ struct
         G.Point.triArea (p, q, pt i)
       fun max ((i, di), (j, dj)) =
         if di > dj then (i, di) else (j, dj)
-      fun x i =
+      fun xx i =
         #1 (pt i)
+      fun yy i =
+        #2 (pt i)
       fun min_by f x y =
         if f x < f y then x else y
       fun max_by f x y =
         if f x > f y then x else y
-      fun minmax ((l1, r1), (l2, r2)) =
-        (min_by x l1 l2, max_by x r1 r2)
+      fun minmax ((l1, r1, b1, t1), (l2, r2, b2, t2)) =
+        (min_by xx l1 l2, max_by xx r1 r2, min_by yy b1 b2, max_by yy t1 t2)
       fun aboveLine p q i =
         (dist p q i > 0.0)
 
@@ -309,15 +369,16 @@ struct
               dist lp rp i
 
             val (mid, _) =
-              HybridBasis.reduce_hybrid reduce_hybrid_split reduce_hybrid_grain
-                max (~1, Real.negInf) (0, Seq.length idxs)
+              HybridBasis.reduce_hybrid reduce_hybrid_outer_split
+                reduce_hybrid_inner_split reduce_hybrid_grain max
+                (~1, Real.negInf) (0, Seq.length idxs)
                 ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
                 , fn device =>
                     fn (lo, hi) =>
                       let
                         val ctx = CtxSet.choose ctxSet device
                         val points_fut = GpuData.choose points_fut_set device
-                        val i = point_furthest_from_line_gpu ctx
+                        val i = point_furthest_from_line_gpu (device, ctx)
                           (points_fut, l, r, Seq.subseq idxs (lo, hi - lo))
                       in
                         (i, d i)
@@ -350,7 +411,7 @@ struct
                   val ctx = CtxSet.choose ctxSet device
                   val points_fut = GpuData.choose points_fut_set device
                 in
-                  semihull_gpu ctx (points_fut, idxs, l, r)
+                  semihull_gpu (device, ctx) (points_fut, idxs, l, r)
                 end
 
             }
@@ -362,8 +423,8 @@ struct
           val rp = pt r
 
           val idxs' =
-            HybridBasis.filter_hybrid reduce_hybrid_split reduce_hybrid_grain
-              (0, Seq.length idxs)
+            HybridBasis.filter_hybrid reduce_hybrid_outer_split
+              reduce_hybrid_inner_split reduce_hybrid_grain (0, Seq.length idxs)
               ( fn i => Seq.nth idxs i
               , fn i => aboveLine lp rp (Seq.nth idxs i)
               , fn device =>
@@ -372,7 +433,7 @@ struct
                       val ctx = CtxSet.choose ctxSet device
                       val points_fut = GpuData.choose points_fut_set device
                     in
-                      points_above_gpu ctx
+                      points_above_gpu (device, ctx)
                         (points_fut, Seq.subseq idxs (lo, hi - lo), l, r)
                     end
               )
@@ -392,7 +453,7 @@ struct
                   val ctx = CtxSet.choose ctxSet device
                   val points_fut = GpuData.choose points_fut_set device
                 in
-                  filter_then_semihull_gpu ctx (points_fut, l, r, idxs)
+                  filter_then_semihull_gpu (device, ctx) (points_fut, l, r, idxs)
                 end
             }
 
@@ -405,7 +466,8 @@ struct
           val tm = startTiming ()
 
           val above =
-            HybridBasis.filter_hybrid reduce_hybrid_split reduce_hybrid_grain
+            HybridBasis.filter_hybrid reduce_hybrid_outer_split
+              reduce_hybrid_inner_split reduce_hybrid_grain
               (0, FlatPointSeq.length pts)
               ( fn i => Int32.fromInt i
               , fn i => dist lp rp (Int32.fromInt i) > 0.0
@@ -415,14 +477,14 @@ struct
                       val ctx = CtxSet.choose ctxSet device
                       val points_fut = GpuData.choose points_fut_set device
                     in
-                      top_level_points_above_in_range_gpu ctx
+                      top_level_points_above_in_range_gpu (device, ctx)
                         (points_fut, lo, hi, l, r)
                     end
               )
 
           val tm = tick tm "top-level filter"
 
-          val above = semihull_choose above l r
+          val above = semihull above l r
 
           val tm = tick tm "top-level semihull"
         in
@@ -438,36 +500,57 @@ struct
                 val ctx = CtxSet.choose ctxSet device
                 val points_fut = GpuData.choose points_fut_set device
               in
-                top_level_filter_then_semihull_gpu ctx (points_fut, l, r)
+                top_level_filter_then_semihull_gpu (device, ctx) (points_fut, l, r)
               end
           }
 
       val tm = startTiming ()
 
-      val (l, r) =
-        HybridBasis.reduce_hybrid reduce_hybrid_split reduce_hybrid_grain minmax
-          (0, 0) (0, FlatPointSeq.length pts)
-          ( fn i => (Int32.fromInt i, Int32.fromInt i)
+      val (l, r, b, t) =
+        HybridBasis.reduce_hybrid reduce_hybrid_outer_split
+          reduce_hybrid_inner_split reduce_hybrid_grain minmax (0, 0, 0, 0)
+          (0, FlatPointSeq.length pts)
+          ( fn i =>
+              let
+                val ii = Int32.fromInt i
+              in
+                (ii, ii, ii, ii)
+              end
           , fn device =>
               fn (lo, hi) =>
                 let
                   val ctx = CtxSet.choose ctxSet device
                   val points_fut = GpuData.choose points_fut_set device
                 in
-                  min_max_point_in_range_gpu ctx (points_fut, lo, hi)
+                  min_max_point_in_range_gpu (device, ctx) (points_fut, lo, hi)
                 end
           )
 
       val tm = tick tm "endpoints"
 
-      val (above, below) =
-        ForkJoin.par (fn _ => top_level_filter_then_semihull_choose l r, fn _ =>
-          top_level_filter_then_semihull r l)
+      val (topleft, topright, botleft, botright) = par4
+        ( fn _ => top_level_filter_then_semihull_choose l t
+        , fn _ => top_level_filter_then_semihull_choose t r
+        , fn _ => top_level_filter_then_semihull_choose r b
+        , fn _ => top_level_filter_then_semihull b l
+        )
 
       val tm = tick tm "quickhull"
 
+      (* val hullt = Tree.append
+        (Tree.append (Tree.$ l, above), Tree.append (Tree.$ r, below)) *)
+
       val hullt = Tree.append
-        (Tree.append (Tree.$ l, above), Tree.append (Tree.$ r, below))
+        ( Tree.append
+            ( Tree.append (Tree.$ l, topleft)
+            , Tree.append (Tree.$ t, topright)
+            )
+        , Tree.append
+            ( Tree.append (Tree.$ r, botleft)
+            , Tree.append (Tree.$ b, botright)
+            )
+        )
+
 
       val result = Tree.toArraySeq hullt
 

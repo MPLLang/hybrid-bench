@@ -41,7 +41,7 @@ sig
    * where `gpu(i,j)` should be equivalent to performing a full hist on the
    * range [i,j).
    *)
-  val inplace_hist_hybrid:
+  (* val inplace_hist_hybrid:
     grain (* cpu grain *)
     -> grain (* gpu grain *)
     -> real (* gpu split *)
@@ -52,7 +52,7 @@ sig
        , modify_bin: int -> 'a -> unit
        , gpu: device_identifier -> (int * int) -> 'a Seq.t
        }
-    -> 'a Seq.t
+    -> 'a Seq.t *)
 
 
   val inplace_hist_hybrid_two_level:
@@ -149,7 +149,7 @@ struct
     end
 
 
-  fun inplace_hist_hybrid cpu_grain gpu_grain gpu_split
+  (* fun inplace_hist_hybrid cpu_grain gpu_grain gpu_split
     (hist_args as {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins})
     { lo
     , hi
@@ -199,7 +199,7 @@ struct
                 gpu device (blo, bhi)
               end
         )
-    end
+    end *)
 
 
   fun inplace_hist_hybrid_two_level cpu_grain gpu_grain outer_split gpu_split

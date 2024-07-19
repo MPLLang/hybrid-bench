@@ -18,6 +18,9 @@ module type euclidean_space = {
   val point_eq : point -> point -> bool
   val point_less : point -> point -> bool
 
+  val less_by_x: point -> point -> bool
+  val less_by_y: point -> point -> bool
+
   val signed_dist_to_line : point -> point -> point -> dist
 }
 
@@ -43,6 +46,9 @@ module naive_space : euclidean_space with point = {x:f64, y:f64} = {
   def point_less (p : point) (q : point) =
     p.x < q.x || (p.x == q.x && p.y < q.y)
 
+  def less_by_x (p: point) (q: point) = p.x < q.x
+  def less_by_y (p: point) (q: point) = p.y < q.y
+
   def sqr (x : f64) = x * x
   def ssqr (x : f64) = f64.abs x * x
 
@@ -66,6 +72,9 @@ module indexed_space (S: euclidean_space)
 
   def point_eq (a: point) (b: point) = S.point_eq a.0 b.0
   def point_less (a: point) (b: point) = S.point_less a.0 b.0
+
+  def less_by_x (a: point) (b: point) = S.less_by_x a.0 b.0
+  def less_by_y (a: point) (b: point) = S.less_by_y a.0 b.0
 
   def signed_dist_to_line (p: point) (q: point) (r: point) =
     S.signed_dist_to_line p.0 q.0 r.0
@@ -138,11 +147,17 @@ module mk_quickhull (S : euclidean_space) = {
   def filter_then_semihull (start : point) (end : point) (points : []point) =
     semihull start end (filter (\p -> dist_less zero_dist (signed_dist_to_line start end p)) points)
 
-  def pmin p q = if point_less p q then p else q
-  def pmax p q = if point_less p q then q else p
+  def min_by_x p q = if less_by_x p q then p else q
+  def max_by_x p q = if less_by_x p q then q else p
+  def min_by_y p q = if less_by_y p q then p else q
+  def max_by_y p q = if less_by_y p q then q else p
 
   def min_max_point ps =
-    (reduce pmin ps[0] ps, reduce pmax ps[0] ps)
+    ( reduce min_by_x ps[0] ps
+    , reduce max_by_x ps[0] ps
+    , reduce min_by_y ps[0] ps
+    , reduce max_by_y ps[0] ps
+    )
 
   def point_furthest_from_line l r pts =
     let with_dist = map (\p -> (p, signed_dist_to_line l r p)) pts
@@ -150,8 +165,8 @@ module mk_quickhull (S : euclidean_space) = {
 
   def compute (ps : []point) =
     if length ps <= 3 then (ps, []) else
-    let leftmost = reduce pmin ps[0] ps
-    let rightmost = reduce pmax ps[0] ps
+    let leftmost = reduce min_by_x ps[0] ps
+    let rightmost = reduce max_by_x ps[0] ps
     let (_, upper_points, lower_points) =
       partition2
       (\p -> point_eq p leftmost || point_eq p rightmost)
@@ -194,11 +209,11 @@ entry point_furthest_from_line [k] (points: [k][2]f64) (l: i32) (r: i32) (idxs: 
   in i
 
 
-entry min_max_point_in_range [k] (points: [k][2]f64) lo hi : (i32, i32) =
+entry min_max_point_in_range [k] (points: [k][2]f64) lo hi : (i32, i32, i32, i32) =
   let ps = take (hi-lo) (drop lo points)
   let ps = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 (lo + i))) (indices ps) ps
-  let (min, max) = naive_quickhull.min_max_point ps
-  in (min.1, max.1)
+  let (l, r, b, t) = naive_quickhull.min_max_point ps
+  in (l.1, r.1, b.1, t.1)
 
 
 -- select points above the line (l, r) and then compute the semihull of these

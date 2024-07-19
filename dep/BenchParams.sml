@@ -140,7 +140,8 @@ struct
     val semihull_hybrid_grain = 500
 
     val reduce_hybrid_grain = 5000
-    val reduce_hybrid_split = 0.5
+    val reduce_hybrid_inner_split = 0.5
+    val reduce_hybrid_outer_split = 0.2
 
   end
 
