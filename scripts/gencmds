@@ -85,7 +85,7 @@ def quickhull(procs, gpus, impl):
   row = {
     "tag": "quickhull",
     "cwd": "bench/quickhull",
-    "cmd": cmd(procs, gpus, impl, "-points /home/cc/data/geom/2d/uniform-circle-10M"),
+    "cmd": cmd(procs, gpus, impl, "-points /home/cc/data/geom/2d/uniform-circle-20M"),
     "procs": procs,
     "gpus": gpus,
     "impl": impl
