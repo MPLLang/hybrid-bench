@@ -38,7 +38,7 @@ struct
           }
 
       val n = hi - lo
-      val block_size = Real.floor (outer_split * Real.fromInt n)
+      val block_size = Real.ceil (outer_split * Real.fromInt n)
       val num_blocks = Util.ceilDiv n block_size
 
       fun outer_loop blo bhi =
@@ -57,7 +57,10 @@ struct
             ()
           end
     in
-      outer_loop 0 num_blocks
+      if n <= grain then
+        base lo hi
+      else
+        outer_loop 0 num_blocks
     end
 
 
@@ -88,7 +91,7 @@ struct
           }
 
       val n = hi - lo
-      val block_size = Real.floor (outer_split * Real.fromInt n)
+      val block_size = Real.ceil (outer_split * Real.fromInt n)
       val num_blocks = Util.ceilDiv n block_size
 
       fun outer_loop blo bhi =
@@ -107,7 +110,10 @@ struct
               fn _ => outer_loop bmid bhi))
           end
     in
-      outer_loop 0 num_blocks
+      if n <= grain then
+        base lo hi
+      else
+        outer_loop 0 num_blocks
     end
 
 
@@ -188,7 +194,7 @@ struct
           , prefer_gpu = fn device => gpu device i j
           }
 
-      val block_size = Real.floor (outer_split * Real.fromInt n)
+      val block_size = Real.ceil (outer_split * Real.fromInt n)
       val num_blocks = Util.ceilDiv n block_size
 
       fun outer_loop blo bhi =
@@ -207,12 +213,15 @@ struct
               fn _ => outer_loop bmid bhi))
           end
     in
-      (* TODO (maybe): use TreeSeq.toBlocks here instead? This would avoid the
-       * full copy for TreeSeq.toArraySeq. But, it's not so straightforward,
-       * because eventually we would need to copy to the GPU at which point
-       * we would need to flatten anyway. Hmmm....
-       *)
-      TreeSeq.toArraySeq (outer_loop 0 num_blocks)
+      if n <= grain then
+        TreeSeq.toArraySeq (base lo hi)
+      else
+        (* TODO (maybe): use TreeSeq.toBlocks here instead? This would avoid the
+        * full copy for TreeSeq.toArraySeq. But, it's not so straightforward,
+        * because eventually we would need to copy to the GPU at which point
+        * we would need to flatten anyway. Hmmm....
+        *)
+        TreeSeq.toArraySeq (outer_loop 0 num_blocks)
     end
 
 

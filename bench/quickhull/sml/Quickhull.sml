@@ -546,8 +546,8 @@ struct
             , Tree.append (Tree.$ t, topright)
             )
         , Tree.append
-            ( Tree.append (Tree.$ r, botleft)
-            , Tree.append (Tree.$ b, botright)
+            ( Tree.append (Tree.$ r, botright)
+            , Tree.append (Tree.$ b, botleft)
             )
         )
 
