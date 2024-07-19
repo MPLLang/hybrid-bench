@@ -197,7 +197,7 @@ struct
       val t2 = Time.now ()
     in
       print ("gpu " ^ device ^ " top_level_points_above_in_range("
-      ^ Int.toString (hi-lo) ^ "): " ^ tts [t0, t1]);
+      ^ Int.toString (hi-lo) ^ "): " ^ tts [t0, t1, t2]);
 
       ArraySlice.full res
     end
@@ -233,7 +233,7 @@ struct
       val () = Futhark.Int32Array1.free res_fut
       val t2 = Time.now ()
     in
-      print ("gpu " ^ device ^ " top_level_filter_then_semihull():"
+      print ("gpu " ^ device ^ " top_level_filter_then_semihull(): "
       ^ tts [t0, t1, t2]);
       Tree.fromArraySeq (ArraySlice.full res)
     end
@@ -369,21 +369,25 @@ struct
               dist lp rp i
 
             val (mid, _) =
-              HybridBasis.reduce_hybrid reduce_hybrid_outer_split
-                reduce_hybrid_inner_split reduce_hybrid_grain max
-                (~1, Real.negInf) (0, Seq.length idxs)
-                ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
-                , fn device =>
-                    fn (lo, hi) =>
-                      let
-                        val ctx = CtxSet.choose ctxSet device
-                        val points_fut = GpuData.choose points_fut_set device
-                        val i = point_furthest_from_line_gpu (device, ctx)
-                          (points_fut, l, r, Seq.subseq idxs (lo, hi - lo))
-                      in
-                        (i, d i)
-                      end
-                )
+              if Seq.length idxs >= semihull_hybrid_grain then
+                HybridBasis.reduce_hybrid reduce_hybrid_outer_split
+                  reduce_hybrid_inner_split reduce_hybrid_grain max
+                  (~1, Real.negInf) (0, Seq.length idxs)
+                  ( fn i => (Seq.nth idxs i, d (Seq.nth idxs i))
+                  , fn device =>
+                      fn (lo, hi) =>
+                        let
+                          val ctx = CtxSet.choose ctxSet device
+                          val points_fut = GpuData.choose points_fut_set device
+                          val i = point_furthest_from_line_gpu (device, ctx)
+                            (points_fut, l, r, Seq.subseq idxs (lo, hi - lo))
+                        in
+                          (i, d i)
+                        end
+                  )
+              else
+                SeqBasis.reduce 5000 max (~1, Real.negInf) (0, Seq.length idxs)
+                  (fn i => (Seq.nth idxs i, d (Seq.nth idxs i)))
 
             fun doLeft () =
               filter_then_semihull_choose idxs l mid
