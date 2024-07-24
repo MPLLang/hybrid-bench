@@ -51,7 +51,8 @@ val _ = print ("copied points to GPUs in " ^ Time.fmt 4 tm ^ "s\n")
 
 val bench =
   case impl of
-    "cpu" => (fn () => QuickhullCPU.hull_cpu points)
+    "cpu" => (fn () => QuickhullCPU.hull_cpu {vectorized=false} points)
+  | "cpu_vectorized" => (fn () => QuickhullCPU.hull_cpu {vectorized=true} points)
   | "gpu" =>
       (fn () =>
          Quickhull.hull_gpu default_ctx

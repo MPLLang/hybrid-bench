@@ -30,7 +30,8 @@ val points = FlatPointSeq.fromArraySeq points
 
 val bench =
   case impl of
-    "cpu" => (fn () => QuickhullCPU.hull_cpu points)
+    "cpu" => (fn () => QuickhullCPU.hull_cpu {vectorized=false} points)
+  | "cpu_vectorized" => (fn () => QuickhullCPU.hull_cpu {vectorized=true} points)
 
   | _ => Util.die ("unknown -impl " ^ impl)
 
