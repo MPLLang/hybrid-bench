@@ -1,0 +1,7 @@
+../../dep/dep.no-gpu.mlb
+
+sml/FlatPointSeq.sml
+sml/ParseFile.sml
+sml/QuickhullCPU.sml
+
+main.no-gpu.sml

@@ -4,6 +4,7 @@ futhark/quickhull.sml
 
 sml/FlatPointSeq.sml
 sml/ParseFile.sml
+sml/QuickhullCPU.sml
 sml/Quickhull.sml
 
 main.sml
