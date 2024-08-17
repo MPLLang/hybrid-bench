@@ -1,6 +1,6 @@
 include ../config.mk
 
-main.mpl.bin: phony futhark/quickhull.sml ispc/*.o
+main.mpl.bin: phony futhark/quickhull.sml ispc/max_dist_pt.o
 	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb futhark/quickhull.c futhark/quickhull.smlfut.c ispc/max_dist_pt.o
 
 # NOTE: REQUIRES: FUTHARK_BACKEND=c MPL=<desired/mpl>

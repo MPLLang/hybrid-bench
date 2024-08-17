@@ -39,11 +39,22 @@ struct
 
   type f64 = Real64.real
   type i64 = Int64.int
+  type w64 = Word64.word
+  type w8 = Word8.word
   type i32 = Int32.int
 
-  (* int32_t max_dist_pt_8(double * pts_data, int32_t * idxs_data, int64_t idxs_lo, double lx, double ly, double rx, double ry) *)
+  (* uint8_t max_dist_pt_8(double * pts_data, int32_t * idxs_data, int64_t idxs_lo, double lx, double ly, double rx, double ry) *)
   val max_dist_pt_8 =
-    _import "max_dist_pt_8": f64 array * i32 array * i64 * f64 * f64 * f64 * f64 -> i64;
+    _import "max_dist_pt_8": f64 array * i32 array * i64 * f64 * f64 * f64 * f64 -> w8;
+
+  val max_dist_pt_8 = fn args =>
+    let
+      val bitset = max_dist_pt_8 args
+      fun loop i =
+        if Word8.>> (bitset, i) = 0w1 then Word.toInt i else loop (i+0w1)
+    in
+      loop 0w0
+    end
 
   fun strip s =
     let
@@ -64,6 +75,9 @@ struct
       if hi-lo = 8 then
         let
           val i = max_dist_pt_8 (strip pts, strip idxs, lo, #1 lp, #2 lp, #1 rp, #2 rp)
+          (* val _ =
+            if 0 <= i andalso i < 8 then () else
+            raise Fail ("max_dist_pt_8 returned invalid result: " ^ Int.toString i) *)
           val i = Seq.nth idxs (lo + i)
         in
           (i, d i)
