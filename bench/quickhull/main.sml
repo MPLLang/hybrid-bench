@@ -38,13 +38,13 @@ val () = print "Done!\n"
 
 structure Quickhull = Quickhull(CtxSet)
 
-fun futharkPoints (points: FlatPointSeq.t) ctx =
-  Futhark.Real64Array2.new ctx (FlatPointSeq.viewData points)
-    (FlatPointSeq.length points, 2)
+fun futharkPoints (points: Real64.real FlatPairSeq.t) ctx =
+  Futhark.Real64Array2.new ctx (FlatPairSeq.viewData points)
+    (FlatPairSeq.length points, 2)
 
 (* structure FutharkPoints = GpuData(type t = Futhark.Real64Array2.t) *)
 
-val points = FlatPointSeq.fromArraySeq points
+val points = FlatPairSeq.fromArraySeq points
 val (points_fut_set, tm) = Util.getTime (fn _ =>
   (GpuData.initialize ctxSet (futharkPoints points)))
 val _ = print ("copied points to GPUs in " ^ Time.fmt 4 tm ^ "s\n")

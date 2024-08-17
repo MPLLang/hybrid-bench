@@ -1,18 +1,18 @@
-structure FlatPointSeq:
+structure FlatPairSeq:
 sig
-  type t
+  type 'a t
 
-  val fromArraySeq: (real * real) Seq.t -> t
-  val toArraySeq: t -> (real * real) Seq.t
+  val fromArraySeq: ('a * 'a) Seq.t -> 'a t
+  val toArraySeq: 'a t -> ('a * 'a) Seq.t
 
-  val length: t -> int
-  val nth: t -> int -> (real * real)
+  val length: 'a t -> int
+  val nth: 'a t -> int -> ('a * 'a)
 
-  val viewData: t -> real Seq.t
+  val viewData: 'a t -> 'a Seq.t
 end =
 struct
 
-  type t = real Seq.t (* of twice the length *)
+  type 'a t = 'a Seq.t (* of twice the length *)
 
   fun fromArraySeq s =
     let

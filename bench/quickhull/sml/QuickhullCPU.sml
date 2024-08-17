@@ -1,6 +1,6 @@
 structure QuickhullCPU:
 sig
-  val hull_cpu: {vectorized: bool} -> FlatPointSeq.t -> Int32.int Seq.t
+  val hull_cpu: {vectorized: bool} -> Real64.real FlatPairSeq.t -> Int32.int Seq.t
 end =
 struct
 
@@ -67,7 +67,7 @@ struct
   fun maxDistPtVectorized8 pts (idxs, lo, hi) (lp, rp) =
     let
       fun dist p q i =
-        G.Point.triArea (p, q, FlatPointSeq.nth pts (Int32.toInt i))
+        G.Point.triArea (p, q, FlatPairSeq.nth pts (Int32.toInt i))
       fun d i = dist lp rp i
       fun max ((i, di), (j, dj)) =
         if di > dj then (i, di) else (j, dj)
@@ -94,7 +94,7 @@ struct
   fun hull_cpu {vectorized: bool} pts =
     let
       fun pt i =
-        FlatPointSeq.nth pts (Int32.toInt i)
+        FlatPairSeq.nth pts (Int32.toInt i)
       fun dist p q i =
         G.Point.triArea (p, q, pt i)
       fun max ((i, di), (j, dj)) =
@@ -185,7 +185,7 @@ struct
 
       (* TODO: STILL NEEDS VECTORIZED *)
       val (l, r) =
-        SeqBasis.reduce 5000 minmax (0, 0) (0, FlatPointSeq.length pts) (fn i =>
+        SeqBasis.reduce 5000 minmax (0, 0) (0, FlatPairSeq.length pts) (fn i =>
           (Int32.fromInt i, Int32.fromInt i))
 
       val tm = tick tm "endpoints"
@@ -202,7 +202,7 @@ struct
                if d > 0.0 then 0w0 : Word8.word
                else if d < 0.0 then 0w1
                else 0w2
-             end) (FlatPointSeq.length pts)
+             end) (FlatPairSeq.length pts)
 
       val tm = tick tm "above/below flags"
 
@@ -211,16 +211,16 @@ struct
         ForkJoin.par
           ( fn _ =>
               ArraySlice.full
-                (SeqBasis.filter 2000 (0, FlatPointSeq.length pts)
+                (SeqBasis.filter 2000 (0, FlatPairSeq.length pts)
                    (fn i => Int32.fromInt i) (fn i => Seq.nth flags i = 0w0))
           , fn _ =>
               ArraySlice.full
-                (SeqBasis.filter 2000 (0, FlatPointSeq.length pts)
+                (SeqBasis.filter 2000 (0, FlatPairSeq.length pts)
                    (fn i => Int32.fromInt i) (fn i => Seq.nth flags i = 0w1))
           )
 
-      val _ = dump_pct "above" (Seq.length above) (FlatPointSeq.length pts)
-      val _ = dump_pct "below" (Seq.length below) (FlatPointSeq.length pts)
+      val _ = dump_pct "above" (Seq.length above) (FlatPairSeq.length pts)
+      val _ = dump_pct "below" (Seq.length below) (FlatPairSeq.length pts)
 
       val tm = tick tm "above/below filter"
 

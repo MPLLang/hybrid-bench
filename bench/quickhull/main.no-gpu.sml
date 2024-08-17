@@ -26,7 +26,7 @@ fun randomPoints n =
        , Real64.fromInt (rand (i + 1) n) / Real64.fromInt n
        )) n
 
-val points = FlatPointSeq.fromArraySeq points
+val points = FlatPairSeq.fromArraySeq points
 
 val bench =
   case impl of

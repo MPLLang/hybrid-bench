@@ -1,6 +1,6 @@
 ../../dep/dep.no-gpu.mlb
 
-sml/FlatPointSeq.sml
+sml/FlatPairSeq.sml
 sml/ParseFile.sml
 sml/QuickhullCPU.sml
 

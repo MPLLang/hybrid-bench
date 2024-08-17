@@ -2,7 +2,7 @@
 futhark/quickhull.sig
 futhark/quickhull.sml
 
-sml/FlatPointSeq.sml
+sml/FlatPairSeq.sml
 sml/ParseFile.sml
 sml/QuickhullCPU.sml
 sml/Quickhull.sml

@@ -4,7 +4,7 @@ sig
   val hull_gpu: Futhark.ctx -> Futhark.Real64Array2.array -> Int32.int Seq.t
 
   val hull_hybrid: CtxSet.t
-                   -> FlatPointSeq.t * (Futhark.Real64Array2.array GpuData.t)
+                   -> Real64.real FlatPairSeq.t * (Futhark.Real64Array2.array GpuData.t)
                    -> Int32.int Seq.t
 end =
 struct
@@ -205,7 +205,7 @@ struct
   fun hull_hybrid ctxSet (pts, points_fut_set) =
     let
       fun pt i =
-        FlatPointSeq.nth pts (Int32.toInt i)
+        FlatPairSeq.nth pts (Int32.toInt i)
       fun dist p q i =
         G.Point.triArea (p, q, pt i)
       fun max ((i, di), (j, dj)) =
@@ -338,7 +338,7 @@ struct
           val above =
             HybridBasis.filter_hybrid reduce_hybrid_outer_split
               reduce_hybrid_inner_split reduce_hybrid_grain
-              (0, FlatPointSeq.length pts)
+              (0, FlatPairSeq.length pts)
               ( fn i => Int32.fromInt i
               , fn i => dist lp rp (Int32.fromInt i) > 0.0
               , fn device =>
@@ -379,7 +379,7 @@ struct
       val (l, r, b, t) =
         HybridBasis.reduce_hybrid reduce_hybrid_outer_split
           reduce_hybrid_inner_split reduce_hybrid_grain minmax (0, 0, 0, 0)
-          (0, FlatPointSeq.length pts)
+          (0, FlatPairSeq.length pts)
           ( fn i =>
               let
                 val ii = Int32.fromInt i
