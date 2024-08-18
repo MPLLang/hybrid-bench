@@ -1,6 +1,8 @@
 structure QuickhullCPU:
 sig
-  val hull_cpu: {vectorized: bool} -> Real64.real FlatPairSeq.t -> Int32.int Seq.t
+  val hull_cpu: {vectorized: bool}
+                -> Real64.real FlatPairSeq.t
+                -> Int32.int Seq.t
 end =
 struct
 
@@ -13,7 +15,8 @@ struct
   fun par4 (f1, f2, f3, f4) =
     let
       val ((r1, r2), (r3, r4)) =
-        ForkJoin.par (fn _ => ForkJoin.par (f1, f2), fn _ => ForkJoin.par (f3, f4))
+        ForkJoin.par (fn _ => ForkJoin.par (f1, f2), fn _ =>
+          ForkJoin.par (f3, f4))
     in
       (r1, r2, r3, r4)
     end
@@ -45,36 +48,41 @@ struct
 
   (* uint8_t max_dist_pt_8(double * pts_data, int32_t * idxs_data, int64_t idxs_lo, double lx, double ly, double rx, double ry) *)
   val max_dist_pt_8 =
-    _import "max_dist_pt_8": f64 array * i32 array * i64 * f64 * f64 * f64 * f64 -> w8;
+    _import "max_dist_pt_8" : f64 array * i32 array * i64 * f64 * f64 * f64 * f64 -> w8;
 
   val max_dist_pt_8 = fn args =>
     let
       val bitset = max_dist_pt_8 args
+      (* SAM_NOTE: TODO: small optimization possible here, to count number of
+       * low-order zeros for efficiently... we just need the index of the set bit
+       *)
       fun loop i =
-        if Word8.>> (bitset, i) = 0w1 then Word.toInt i else loop (i+0w1)
+        if Word8.>> (bitset, i) = 0w1 then Word.toInt i else loop (i + 0w1)
     in
       loop 0w0
     end
 
   fun strip s =
-    let
-      val (arr, i, _) = ArraySlice.base s
-    in
-      if i = 0 then arr
-      else raise Fail "QuickhullCPU.strip: strip of slice"
+    let val (arr, i, _) = ArraySlice.base s
+    in if i = 0 then arr else raise Fail "QuickhullCPU.strip: strip of slice"
     end
+
+  val above_below_flags_8 =
+    _import "above_below_flags_8" : f64 array * i64 * f64 * f64 * f64 * f64 -> w64;
 
   fun maxDistPtVectorized8 pts (idxs, lo, hi) (lp, rp) =
     let
       fun dist p q i =
         G.Point.triArea (p, q, FlatPairSeq.nth pts (Int32.toInt i))
-      fun d i = dist lp rp i
+      fun d i =
+        dist lp rp i
       fun max ((i, di), (j, dj)) =
         if di > dj then (i, di) else (j, dj)
     in
-      if hi-lo = 8 then
+      if hi - lo = 8 then
         let
-          val i = max_dist_pt_8 (strip pts, strip idxs, lo, #1 lp, #2 lp, #1 rp, #2 rp)
+          val i = max_dist_pt_8
+            (strip pts, strip idxs, lo, #1 lp, #2 lp, #1 rp, #2 rp)
           (* val _ =
             if 0 <= i andalso i < 8 then () else
             raise Fail ("max_dist_pt_8 returned invalid result: " ^ Int.toString i) *)
@@ -83,8 +91,8 @@ struct
           (i, d i)
         end
       else
-        SeqBasis.foldl max (~1, Real.negInf) (lo, hi)
-          (fn i => (Seq.nth idxs i, d (Seq.nth idxs i)))
+        SeqBasis.foldl max (~1, Real.negInf) (lo, hi) (fn i =>
+          (Seq.nth idxs i, d (Seq.nth idxs i)))
     end
 
   (* ========================================================================
@@ -137,18 +145,19 @@ struct
 
                   val numBlocks = Util.ceilDiv (Seq.length idxs) blockSize
                 in
-                  SeqBasis.reduce 200 max (~1, Real.negInf) (0, numBlocks) (fn b =>
-                    let
-                      val lo = b*blockSize
-                      val hi = Int.min (Seq.length idxs, lo+blockSize)
-                    in
-                      maxDistPtVectorized8 pts (idxs, lo, hi) (lp, rp)
-                    end)
+                  SeqBasis.reduce 200 max (~1, Real.negInf) (0, numBlocks)
+                    (fn b =>
+                       let
+                         val lo = b * blockSize
+                         val hi = Int.min (Seq.length idxs, lo + blockSize)
+                       in
+                         maxDistPtVectorized8 pts (idxs, lo, hi) (lp, rp)
+                       end)
                 end
 
             val midp = pt mid
 
-            fun flag i =
+            fun flag i : Word8.word =
               if aboveLine lp midp i then 0w0
               else if aboveLine midp rp i then 0w1
               else 0w2
@@ -194,15 +203,73 @@ struct
       val rp = pt r
 
       val flags =
-        Seq.tabulate
-          (fn i =>
-             let
-               val d = dist lp rp (Int32.fromInt i)
-             in
-               if d > 0.0 then 0w0 : Word8.word
-               else if d < 0.0 then 0w1
-               else 0w2
-             end) (FlatPairSeq.length pts)
+        if not vectorized then
+          Seq.tabulate
+            (fn i =>
+               let
+                 val d = dist lp rp (Int32.fromInt i)
+               in
+                 if d > 0.0 then 0w0 : Word8.word
+                 else if d < 0.0 then 0w1
+                 else 0w2
+               end) (FlatPairSeq.length pts)
+        else
+          let
+            val n = FlatPairSeq.length pts
+            val output: Word8.word array = ForkJoin.alloc n
+            val blockSize = 8 (* don't change *)
+            val numBlocks = Util.ceilDiv n blockSize
+          in
+            ForkJoin.parfor 100 (0, numBlocks) (fn i =>
+              let
+                val lo = blockSize * i
+                val hi = Int.min (lo + blockSize, n)
+              in
+                if hi - lo = 8 then
+                  let
+                    val flagset = above_below_flags_8
+                      (strip pts, lo, #1 lp, #2 lp, #1 rp, #2 rp)
+                  in
+                    print ("flag set " ^ Int.toString lo ^ ": " ^ Word64.toString flagset ^ "\n");
+                    Util.for (0, 8) (fn j =>
+                      let
+                        val flag =
+                          Word8.fromLargeWord
+                            (Word64.toLargeWord (Word64.andb (0wxFF, Word64.>>
+                               (flagset, 0w8 * Word.fromInt j))))
+
+                        val expected_flag =
+                          let
+                            val d = dist lp rp (Int32.fromInt (lo+j))
+                          in
+                            if d > 0.0 then 0w0 : Word8.word
+                            else if d < 0.0 then 0w1
+                            else 0w2
+                          end
+                      in
+                        if flag = expected_flag then
+                          ()
+                        else
+                          raise Fail
+                            ("expected flag " ^ Word8.toString expected_flag
+                             ^ " but got " ^ Word8.toString flag);
+                        Array.update (output, lo + j, flag)
+                      end)
+                  end
+                else
+                  Util.for (lo, hi) (fn j =>
+                    let
+                      val d = dist lp rp (Int32.fromInt j)
+                      val flag =
+                        if d > 0.0 then 0w0 : Word8.word
+                        else if d < 0.0 then 0w1
+                        else 0w2
+                    in
+                      Array.update (output, j, flag)
+                    end)
+              end);
+            ArraySlice.full output
+          end
 
       val tm = tick tm "above/below flags"
 

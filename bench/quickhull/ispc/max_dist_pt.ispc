@@ -48,7 +48,7 @@ get_pt(uniform double * uniform pts_data, int32 idx) {
 
 
 export
-uniform unsigned int8
+uniform uint8
 max_dist_pt_8(
   uniform double * uniform pts_data,
   uniform int32 * uniform idxs_data,
@@ -68,7 +68,7 @@ max_dist_pt_8(
 
   uniform double max_dist = reduce_max(dist);
 
-  uniform unsigned int8 result = -1;
+  uniform uint8 result = -1;
   foreach (i = 0 ... 8) {
     if (dist == max_dist) {
       result = lanemask();
@@ -76,4 +76,34 @@ max_dist_pt_8(
   }
 
   return result;
+}
+
+export
+uniform uint64
+above_below_flags_8(
+  uniform double * uniform pts_data,
+  uniform int64 idxs_lo,
+  // uniform int32 idxs_hi,   // this is implicit: has to be idxs_lo+8
+  uniform double lx, uniform double ly,
+  uniform double rx, uniform double ry)
+{
+  uniform Pt left = { lx, ly };
+  uniform Pt right = { rx, ry };
+
+  uint64 flag = 2;
+  foreach (i = 0 ... 8) {
+    double dist = tri_area(left, right, get_pt(pts_data, idxs_lo+i));
+    if (dist > 0.0) {
+      flag = 0;
+    }
+    else if (dist < 0.0) {
+      flag = 1;
+    }
+    else {
+      flag = 2;
+    }
+    flag = flag << (8*i);
+  }
+
+  return reduce_add(flag);
 }
