@@ -90,20 +90,28 @@ above_below_flags_8(
   uniform Pt left = { lx, ly };
   uniform Pt right = { rx, ry };
 
-  uint64 flag = 2;
+  uniform uint8 flags[8];
   foreach (i = 0 ... 8) {
+    // assert(0 <= i && i < 8);
     double dist = tri_area(left, right, get_pt(pts_data, idxs_lo+i));
     if (dist > 0.0) {
-      flag = 0;
+      flags[i] = 0;
     }
     else if (dist < 0.0) {
-      flag = 1;
+      flags[i] = 1;
     }
     else {
-      flag = 2;
+      flags[i] = 2;
     }
-    flag = flag << (8*i);
+    // flag = flag << (8*i);
+    // uint64 mask = ~(0xFF << (8*i)) | (0xFC << (8*i));
+    // assert((mask & flag) == 0);
   }
 
-  return reduce_add(flag);
+  uniform uint64 result = 0;
+  for (uniform int i = 0; i < 8; i++) {
+    result |= flags[i] << (8*i);
+  }
+
+  return result;
 }

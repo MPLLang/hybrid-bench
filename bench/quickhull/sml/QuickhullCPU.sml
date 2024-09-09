@@ -230,7 +230,7 @@ struct
                     val flagset = above_below_flags_8
                       (strip pts, lo, #1 lp, #2 lp, #1 rp, #2 rp)
                   in
-                    print ("flag set " ^ Int.toString lo ^ ": " ^ Word64.toString flagset ^ "\n");
+                    (* print ("flag set " ^ Int.toString lo ^ ": " ^ Word64.toString flagset ^ "\n"); *)
                     Util.for (0, 8) (fn j =>
                       let
                         val flag =
@@ -252,7 +252,9 @@ struct
                         else
                           raise Fail
                             ("expected flag " ^ Word8.toString expected_flag
-                             ^ " but got " ^ Word8.toString flag);
+                             ^ " but got " ^ Word8.toString flag
+                             ^ " flag set " ^ Word64.toString flagset
+                             ^ " dist = " ^ Real64.toString (dist lp rp (Int32.fromInt (lo+j))));
                         Array.update (output, lo + j, flag)
                       end)
                   end
