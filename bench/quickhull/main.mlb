@@ -2,6 +2,10 @@
 futhark/quickhull.sig
 futhark/quickhull.sml
 
+sml/GEOMETRY.sml
+sml/FUTHARK_ENTRIES.sml
+sml/Geometry2D32.sml
+sml/Geometry2D64.sml
 sml/FlatPairSeq.sml
 sml/ParseFile.sml
 sml/QuickhullCPU.sml
