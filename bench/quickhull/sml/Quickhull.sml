@@ -55,7 +55,7 @@ struct
   fun top_level_points_above_in_range_gpu (device, ctx) (points_fut, lo, hi, l, r) =
     let
       val t0 = Time.now ()
-      val res_fut = Futhark.Entry.top_level_points_above_in_range ctx
+      val res_fut = Futhark.Entry.top_level_points_above_in_range_f64 ctx
         (points_fut, lo, hi, l, r)
       val t1 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
@@ -75,7 +75,7 @@ struct
       val t0 = Time.now ()
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
       val t1 = Time.now ()
-      val res_fut = Futhark.Entry.points_above ctx (points_fut, idxs_fut, l, r)
+      val res_fut = Futhark.Entry.points_above_f64 ctx (points_fut, idxs_fut, l, r)
       val t2 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
@@ -93,7 +93,7 @@ struct
     let
       val t0 = Time.now ()
       val res_fut =
-        Futhark.Entry.top_level_filter_then_semihull ctx (points_fut, l, r)
+        Futhark.Entry.top_level_filter_then_semihull_f64 ctx (points_fut, l, r)
       val t1 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
@@ -112,7 +112,7 @@ struct
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
       val t1 = Time.now ()
       val res_fut =
-        Futhark.Entry.filter_then_semihull ctx (points_fut, l, r, idxs_fut)
+        Futhark.Entry.filter_then_semihull_f64 ctx (points_fut, l, r, idxs_fut)
       val t2 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
@@ -131,7 +131,7 @@ struct
       val t0 = Time.now ()
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
       val t1 = Time.now ()
-      val res_fut = Futhark.Entry.semihull ctx (points_fut, l, r, idxs_fut)
+      val res_fut = Futhark.Entry.semihull_f64 ctx (points_fut, l, r, idxs_fut)
       val t2 = Time.now ()
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
@@ -149,7 +149,7 @@ struct
     let
       val t0 = Time.now ()
       val (l, r, b, t) =
-        Futhark.Entry.min_max_point_in_range ctx
+        Futhark.Entry.min_max_point_in_range_f64 ctx
           (points_fut, Int64.fromInt lo, Int64.fromInt hi)
       val t1 = Time.now ()
     in
@@ -166,7 +166,7 @@ struct
       val idxs_fut = Futhark.Int32Array1.new ctx idxs (Seq.length idxs)
       val t1 = Time.now ()
       val i =
-        Futhark.Entry.point_furthest_from_line ctx (points_fut, l, r, idxs_fut)
+        Futhark.Entry.point_furthest_from_line_f64 ctx (points_fut, l, r, idxs_fut)
       val () = Futhark.Int32Array1.free idxs_fut
       val t2 = Time.now ()
     in
@@ -179,7 +179,7 @@ struct
 
   fun hull_gpu ctx points_fut =
     let
-      val res_fut = Futhark.Entry.quickhull ctx points_fut
+      val res_fut = Futhark.Entry.quickhull_f64 ctx points_fut
       val res = Futhark.Int32Array1.values res_fut
       val () = Futhark.Int32Array1.free res_fut
     in
