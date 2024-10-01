@@ -1,0 +1,3 @@
+[submodule "bench/quickhull/baseline/parlaylib"]
+	path = bench/quickhull/baseline/parlaylib
+	url = git@github.com:cmuparlay/parlaylib.git
