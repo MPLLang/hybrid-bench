@@ -486,7 +486,7 @@ struct
                 else
                   ForkJoin.choice
                     { prefer_cpu = fn _ => (loop i j; NONE)
-                    , prefer_gpu = fn (device: string) =>
+                    , prefer_gpu = fn (device: int) =>
                         let
                           val t0 = Time.now ()
                           val ctx = CtxSet.choose ctxSet device

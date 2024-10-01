@@ -96,7 +96,8 @@ struct
 
       val () = print "Initialising Futhark context... "
       val ctxSet = CtxSet.fromList devices
-      val (default_device, default_ctx) = Seq.first ctxSet
+      val default_device = 0
+      val default_ctx = CtxSet.choose ctxSet default_device
       val () = print "Done!\n"
 
       fun futharkPoints (points: R.real FlatPairSeq.t) ctx =

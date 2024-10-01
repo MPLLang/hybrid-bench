@@ -76,7 +76,7 @@ struct
       val t2 = Time.now ()
     in
       print
-        ("gpu " ^ device ^ " top_level_points_above_in_range("
+        ("gpu " ^ Int.toString device ^ " top_level_points_above_in_range("
          ^ Int.toString (hi - lo) ^ "): " ^ tts [t0, t1, t2]);
 
       ArraySlice.full res
@@ -97,7 +97,7 @@ struct
       val t3 = Time.now ()
     in
       print
-        ("gpu " ^ device ^ " points_above(" ^ Int.toString (Seq.length idxs)
+        ("gpu " ^ Int.toString device ^ " points_above(" ^ Int.toString (Seq.length idxs)
          ^ "): " ^ tts [t0, t1, t2, t3]);
       ArraySlice.full res
     end
@@ -114,7 +114,7 @@ struct
       val t2 = Time.now ()
     in
       print
-        ("gpu " ^ device ^ " top_level_filter_then_semihull(): "
+        ("gpu " ^ Int.toString device ^ " top_level_filter_then_semihull(): "
          ^ tts [t0, t1, t2]);
       Tree.fromArraySeq (ArraySlice.full res)
     end
@@ -134,7 +134,7 @@ struct
       val t3 = Time.now ()
     in
       print
-        ("gpu " ^ device ^ " filter_then_semihull("
+        ("gpu " ^ Int.toString device ^ " filter_then_semihull("
          ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2, t3]);
       Tree.fromArraySeq (ArraySlice.full res)
     end
@@ -154,7 +154,7 @@ struct
       val t3 = Time.now ()
     in
       print
-        ("gpu " ^ device ^ " semihull_gpu(" ^ Int.toString (Seq.length idxs)
+        ("gpu " ^ Int.toString device ^ " semihull_gpu(" ^ Int.toString (Seq.length idxs)
          ^ "): " ^ tts [t0, t1, t2, t3]);
       Tree.fromArraySeq (ArraySlice.full res)
     end
@@ -170,7 +170,7 @@ struct
       val t1 = Time.now ()
     in
       print
-        ("gpu " ^ device ^ " min_max_point_in_range(" ^ Int.toString (hi - lo)
+        ("gpu " ^ Int.toString device ^ " min_max_point_in_range(" ^ Int.toString (hi - lo)
          ^ "): " ^ tts [t0, t1]);
       (l, r, b, t)
     end
@@ -188,7 +188,7 @@ struct
       val t2 = Time.now ()
     in
       print
-        ("gpu " ^ device ^ " point_furthest_from_line("
+        ("gpu " ^ Int.toString device ^ " point_furthest_from_line("
          ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2]);
       i
     end

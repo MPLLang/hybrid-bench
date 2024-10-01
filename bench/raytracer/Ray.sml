@@ -396,7 +396,7 @@ struct
               (FutRay.PreparedSceneSet.choose fut_prepared_scene_set device)
               (ArraySlice.slice (pixels, lo, SOME (hi - lo)))
         in
-          print ("gpu " ^ device ^ " (" ^ Int.toString (hi-lo) ^ "): " ^ Time.fmt 4 tm1 ^ "+" ^ Time.fmt 4 tm2 ^ "s\n")
+          print ("gpu " ^ Int.toString device ^ " (" ^ Int.toString (hi-lo) ^ "): " ^ Time.fmt 4 tm1 ^ "+" ^ Time.fmt 4 tm2 ^ "s\n")
         end
 
     in

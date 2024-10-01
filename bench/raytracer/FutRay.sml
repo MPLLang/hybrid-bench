@@ -68,35 +68,16 @@ struct
 
   structure PreparedSceneSet =
   struct
-    open CtxSet
+    type scene_set = prepared_scene GpuData.t
 
-    type scene_set = (device_identifier * prepared_scene) Seq.t
-
-    fun prepareFromCtxSet (ctxSet: ctx_set) (height, width) =
-      ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length ctxSet) (fn i =>
-        let
-          val (device, ctx) = Seq.nth ctxSet i
-          val scene = prepare_rgbbox_scene (ctx, height, width)
-        in
-          (device, scene)
-        end))
+    fun prepareFromCtxSet ctxSet (height, width) =
+      GpuData.initialize ctxSet (fn ctx => prepare_rgbbox_scene (ctx, height, width))
 
     fun freeScene (sceneSet: scene_set) =
-      SeqBasis.tabulate 1 (0, Seq.length sceneSet) (fn i =>
-        let
-          val (_, scene) = Seq.nth sceneSet i
-        in
-          prepare_rgbbox_scene_free scene
-        end)
+      GpuData.free sceneSet prepare_rgbbox_scene_free
 
-    fun choose (sceneSet: scene_set) (device: device_identifier) =
-      let
-        val i =
-          valOf (FindFirst.findFirstSerial (0, Seq.length sceneSet) (fn i =>
-            #1 (Seq.nth sceneSet i) = device))
-      in
-        #2 (Seq.nth sceneSet i)
-      end
+    fun choose sceneSet device =
+      GpuData.choose sceneSet device
   end
 
   fun render ctx {prepared, height, width} output : (Time.time * Time.time) =
