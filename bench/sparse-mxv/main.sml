@@ -36,7 +36,8 @@ val vec = Seq.tabulate (fn _ => M.R.fromInt 1) (M.I.toInt num_rows)
 val () = print "Initialising Futhark context... "
 val devices = String.fields (fn c => c = #",") (CLA.parseString "devices" "")
 val ctx_set = CtxSet.fromList devices
-val (default_device, default_ctx) = Seq.first ctx_set
+val default_device = 0
+val default_ctx = CtxSet.choose ctx_set default_device
 val () = print "Done!\n"
 
 

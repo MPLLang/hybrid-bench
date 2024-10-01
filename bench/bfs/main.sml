@@ -92,7 +92,8 @@ val do_bfs =
     | "gpu" =>
         (fn () =>
            let
-             val (dev, ctx) = Seq.first ctxSet
+             val dev = 0
+             val ctx = CtxSet.choose ctxSet dev
              val (graph_fut, _) = GpuData.choose graphs_fut dev
            in
              BFS.bfs_gpu ctx {diropt = diropt}

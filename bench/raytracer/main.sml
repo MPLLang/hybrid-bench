@@ -13,7 +13,8 @@ val scene =
   | s => raise Fail ("No such scene: " ^ s)
 
 val ctxSet = FutRay.init ()
-val (default_device, default_ctx) = Seq.first ctxSet
+val default_device = 0
+val default_ctx = FutRay.CtxSet.choose ctxSet default_device
 
 val _ = print ("h " ^ Int.toString height ^ "\n")
 val _ = print ("w " ^ Int.toString width ^ "\n")
