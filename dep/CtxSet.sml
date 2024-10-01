@@ -40,10 +40,10 @@ struct
   val logging = CommandLineArgs.parseFlag "logging"
 
   type ctx = F.ctx
-  type ctx_set = (device_identifier * F.ctx) Seq.t
+  type ctx_set = (gpu_identifier * F.ctx) Seq.t
   type t = ctx_set
 
-  fun fromList (devices: device_identifier list) =
+  fun fromList (devices: gpu_identifier list) =
     Seq.map
       (fn device =>
          let
@@ -65,8 +65,10 @@ struct
 
   fun choose (ctxSet: ctx_set) (device: device_identifier) =
     let
-      val (device, ctx) = Seq.first
-        (Seq.filter (fn (d, _) => d = device) ctxSet)
+    (* val () = print ("device is " ^ device ^ "\n") *)
+    val (_, ctx) = Seq.nth ctxSet device
+      (* val (device, ctx) = Seq.first
+        (Seq.filter (fn (d, _) => d = device) ctxSet) *)
       (*val _ = print ("chosen device: " ^ device ^ "\n")*)
     in
       ctx
