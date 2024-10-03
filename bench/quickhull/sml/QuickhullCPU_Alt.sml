@@ -37,6 +37,26 @@ struct
        Real.fmt (StringCvt.FIX (SOME 1))
          (100.0 * Real.fromInt n / Real.fromInt m) ^ "%\n")
 
+
+  structure SeqBasis =
+  struct
+    open SeqBasis
+
+    (* seems to perform slightly better than the normal reduce for some
+     * reason...
+     *)
+    fun reduce grain g b (lo, hi) f =
+      if hi-lo <= grain then
+        SeqBasis.foldl g b (lo, hi) f
+      else
+        let
+          val mid = lo + (hi-lo) div 2
+        in
+          g (ForkJoin.par (fn _ => reduce grain g b (lo, mid) f,
+                           fn _ => reduce grain g b (mid, hi) f))
+        end
+  end
+
   (* ========================================================================
    * quick hull
    *)
