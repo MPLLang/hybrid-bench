@@ -59,6 +59,7 @@ struct
     Quickhull (structure CtxSet = CtxSet structure G = G structure F = F)
 
   structure QuickhullCPU = QuickhullCPU(G)
+  structure QuickhullCPU_Alt = QuickhullCPU_Alt(G)
 
   fun fromReal x = R.fromLarge IEEEReal.TO_NEAREST x
 
@@ -114,6 +115,7 @@ struct
       val bench =
         case impl of
           "cpu" => (fn () => QuickhullCPU.hull_cpu {vectorized = false} points)
+        | "cpu_alt" => (fn () => QuickhullCPU_Alt.hull_cpu {vectorized = false} points)
         | "cpu_vectorized" =>
             (fn () => QuickhullCPU.hull_cpu {vectorized = true} points)
 
@@ -155,7 +157,7 @@ structure Main64 =
      val futhark_points_new = Futhark.Real64Array2.new
      val futhark_points_free = Futhark.Real64Array2.free)
 
-val precision = CLA.parseString "precision" "32"
+val precision = CLA.parseString "precision" "64"
 val _ = print ("precision " ^ precision ^ "\n")
 
 val _ =

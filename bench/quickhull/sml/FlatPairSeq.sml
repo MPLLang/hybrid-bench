@@ -12,7 +12,7 @@ sig
 end =
 struct
 
-  type 'a t = 'a Seq.t (* of twice the length *)
+  type 'a t = 'a array (* of twice the length *)
 
   fun fromArraySeq s =
     let
@@ -23,16 +23,16 @@ struct
         let val (x, y) = Seq.nth s i
         in Array.update (result, 2 * i, x); Array.update (result, 2 * i + 1, y)
         end);
-      ArraySlice.full result
+      result
     end
 
-
   fun nth fs i =
-    (Seq.nth fs (2 * i), Seq.nth fs (2 * i + 1))
-  fun length fs = Seq.length fs div 2
+    (Array.sub (fs, 2*i), Array.sub (fs, (2*i+1)))
+
+  fun length fs = Array.length fs div 2
 
   fun toArraySeq fs =
     Seq.tabulate (nth fs) (length fs)
 
-  fun viewData x = x
+  fun viewData x = ArraySlice.full x
 end

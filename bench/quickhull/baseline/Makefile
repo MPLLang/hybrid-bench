@@ -1,5 +1,6 @@
 CXX?=c++
-CFLAGS=-O3 -Wall -pthread
+#CFLAGS=-std=c++2a -O3 -Wall -pthread
+CFLAGS=-std=c++17 -O3 -Wall -pthread
 hull: hull.cpp
 	$(CXX) hull.cpp -o hull $(CFLAGS)
 

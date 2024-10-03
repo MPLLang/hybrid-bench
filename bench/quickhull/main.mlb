@@ -9,6 +9,7 @@ sml/Geometry2D64.sml
 sml/FlatPairSeq.sml
 sml/ParseFile.sml
 sml/QuickhullCPU.sml
+sml/QuickhullCPU_Alt.sml
 sml/Quickhull.sml
 
 main.sml
