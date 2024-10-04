@@ -135,7 +135,7 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
           ForkJoin.parfor 1000 (0, yhi - ylo) (fn i => putRow (ylo + i) (slice i))
         val t2 = Time.now ()
       in
-        print ("gpu " ^ device ^ " mandelbrot (" ^ Int.toString ((yhi-ylo) * w) ^ "): " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "+" ^ Time.fmt 4 (Time.- (t2, t1)) ^ "s\n")
+        print ("gpu " ^ Int.toString device ^ " mandelbrot (" ^ Int.toString ((yhi-ylo) * w) ^ "): " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "+" ^ Time.fmt 4 (Time.- (t2, t1)) ^ "s\n")
       end
 
     val outer_split = BenchParams.Mandelbrot.outer_split
