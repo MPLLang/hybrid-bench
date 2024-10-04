@@ -1,5 +1,7 @@
 val n = CommandLineArgs.parseInt "n" 8192
 val impl = CommandLineArgs.parseString "impl" "hybrid"
+val devices = ArraySlice.full (Array.fromList (String.fields (fn c => c = #",")
+  (CommandLineArgs.parseString "devices" "")))
 
 val input1 = MatReal32.tabulate {width = n, height = n} (fn _ => 1.0)
 val input2 = MatReal32.tabulate {width = n, height = n} (fn _ => 3.0)
@@ -11,9 +13,9 @@ val bench =
   case impl of
     "cpu" => MatReal32.cpu_multiply_nonsquare
   | "cpu-pow2" => MatReal32.cpu_multiply
-  | "gpu" => MatReal32.gpu_multiply
-  | "hybrid" => MatReal32.hybrid_multiply_nonsquare
-  | "hybrid-pow2" => MatReal32.hybrid_multiply
+  | "gpu" => MatReal32.gpu_multiply devices
+  | "hybrid" => MatReal32.hybrid_multiply_nonsquare devices
+  | "hybrid-pow2" => MatReal32.hybrid_multiply devices
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val result = Benchmark.run "dmm" (fn _ => bench (input1, input2))

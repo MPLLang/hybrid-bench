@@ -135,59 +135,6 @@ void* asyncdMMFunc(void* rawArg) {
   return NULL;
 }
 
-
-/* TODO: build the package, but otherwise shouldn't need to change much. 
- *
- * (NOTE: futhark_new_... is essentially a memcpy, these need to be replaced
- *  with stuff for cublas)
- */
-extern "C" struct dMMPackage * 
-dMMSpawn(
-  float * a,
-  float * b,
-  float * output,
-  int64_t inputLen)
-{
-  // struct futhark_context *ctx = futStuff->ctx;
-  struct dMMPackage *pack = (dMMPackage*)malloc(sizeof(struct dMMPackage));
-  // pack->futStuff = futStuff;
-  // pack->a = futhark_new_u8_1d(ctx, a, inputLen);
-
-  pack->a = a;
-  pack->b = b;
-  pack->output = output;
-  pack->inputLen = inputLen;
-  pack->finished = false;
-
-  asyncdMMFunc(pack);
-
-  // if (0 != pthread_create(&(pack->friends), NULL, &asyncdMMFunc, pack)) {
-  //   printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
-  //   exit(1);
-  // }
-
-  return pack;
-}
-
-// extern "C" uint8_t dMMPoll(struct dMMPackage *pack) {
-//   return pack->finished ? 1 : 0;
-// }
-
-
-/* TODO: memcpy from GPU back to pack->output
- *
- * (NOTE: futhark_values is equivalent of this memcpy. needs to be replaced) */
-extern "C" void dMMFinish(
-  struct dMMPackage * pack)
-{
-  // if (0 != pthread_join(pack->friends, NULL)) {
-  //   printf("ERROR: glue.c: pthread_join failed\n");
-  //   exit(1);
-  // }
-
-  free(pack);
-}
-
 // ==========================================================================
 
 extern "C"
@@ -373,11 +320,6 @@ fancy_dmm_spawn(
 
   return pack;
 }
-
-
-// extern "C" uint8_t fancy_dmm_poll(struct fancy_dmm_package *pack) {
-//   return pack->finished ? 1 : 0;
-// }
 
 
 /* TODO: memcpy from GPU back to pack->output
