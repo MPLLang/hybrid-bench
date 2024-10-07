@@ -110,7 +110,7 @@ above_below_flags_8(
 
   uniform uint64 result = 0;
   for (uniform int i = 0; i < 8; i++) {
-    result |= flags[i] << (8*i);
+    result |= ((uint64)flags[i]) << (8*i);
   }
 
   return result;
