@@ -98,15 +98,17 @@ class RayTracerTuner(HybridTuner):
         return '-h 4000 -w 4000'
 
     def params(self):
-        return [FloatParameter('render-hybrid-gpu-split', 0, 1)]
+        return [FloatParameter('raytracer-outer-split', 0, 1),
+                FloatParameter('raytracer-inner-split', 0, 1)]
 
 class MandelbrotTuner(HybridTuner):
     def workload(self):
         return ''
 
     def params(self):
-        return [FloatParameter('mandelbrot-parfor-split', 0, 1),
-                IntegerParameter('mandelbrot-parfor-grain', 1, 100)]
+        return [FloatParameter('mandelbrot-outer-split', 0, 1),
+                FloatParameter('mandelbrot-inner-split', 0, 1),
+                IntegerParameter('mandelbrot-grain', 1, 100)]
 
 class PrimesTuner(HybridTuner):
     def workload(self):
@@ -115,8 +117,7 @@ class PrimesTuner(HybridTuner):
 
     def params(self):
         return [FloatParameter('primes-block-size-factor', 1, 64),
-                FloatParameter('hybrid-gpu-split', 0, 1),
-                IntegerParameter('block_range_hybrid_threshold', 1e4, 1e6)]
+                FloatParameter('hybrid-gpu-split', 0, 1)]
 
 class BfsTuner(HybridTuner):
     def workload(self):

@@ -40,9 +40,10 @@ struct
   type i32 = Int32.int
   type u8 = Word8.word
 
-  fun mandelbrot ctx ylo yhi blo bhi : u8 array =
+  fun mandelbrot ctx maxIter ylo yhi blo bhi : u8 array =
     let
-      val output = FutharkMandelbrot.Entry.mandelbrot ctx (ylo, yhi, blo, bhi)
+      val output = FutharkMandelbrot.Entry.mandelbrot ctx
+        (Int32.fromInt maxIter, ylo, yhi, blo, bhi)
       val _ = FutharkMandelbrot.Context.sync ctx
       val arr = FutharkMandelbrot.Word8Array1.values output
     in
