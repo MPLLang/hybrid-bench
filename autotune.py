@@ -54,6 +54,8 @@ class HybridTuner(MeasurementInterface):
         cmd = './main.mpl.bin'
         # Basic scheduling
         cmd += f' @mpl procs {self.args.procs} -- -impl hybrid'
+        if self.args.devices:
+            cmd += f' -devices "{self.args.devices}"'
         # Measurement config
         cmd += ' -warmup 2 -repeat 10'
         # Workload - this should be modified for each benchmark.
@@ -147,8 +149,8 @@ class QuickhullTuner(HybridTuner):
     def params(self):
         return [IntegerParameter('quickhull-par-grain', 1, 10000),
                 IntegerParameter('quickhull-hybrid-grain', 1, 10000),
-                IntegerParameter('quickhull-reduce-hybrid-grain', 1, 10000),
-                FloatParameter('quickhull-reduce-hybrid-split', 0.001, 1)]
+                IntegerParameter('quickhull-reduce-inner-grain', 1, 10000),
+                FloatParameter('quickhull-reduce-outer-split', 0.001, 1)]
 
     def add_arguments(argparser):
         argparser.add_argument('--points', type=str, metavar='FILE', required=True)
@@ -209,4 +211,5 @@ if __name__ == '__main__':
     argparser = opentuner.default_argparser()
     tuner.add_arguments(argparser)
     argparser.add_argument('--procs', type=int, metavar='INT', default='64')
+    argparser.add_argument('--devices', type=str, metavar='STR', default=None)
     tuner.main(argparser.parse_args())

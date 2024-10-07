@@ -136,12 +136,12 @@ struct
      * which use the `reduce_hybrid_grain` and `reduce_hybrid_split`
      *)
 
-    val semihull_par_grain = 1000
-    val semihull_hybrid_grain = 500
+    val semihull_par_grain = CommandLineArgs.parseInt "quickhull-par-grain" 1000
+    val semihull_hybrid_grain = CommandLineArgs.parseInt "quickhull-hybrid-grain" 500
 
-    val reduce_hybrid_grain = 5000
-    val reduce_hybrid_inner_split = 0.5
-    val reduce_hybrid_outer_split = 0.2
+    val reduce_hybrid_grain = CommandLineArgs.parseInt "quickhull-reduce-grain" 5000
+    val reduce_hybrid_inner_split = CommandLineArgs.parseReal "quickhull-reduce-inner-split" 0.5
+    val reduce_hybrid_outer_split = CommandLineArgs.parseReal "quickhull-reduce-outer-split" 0.2
 
   end
 
