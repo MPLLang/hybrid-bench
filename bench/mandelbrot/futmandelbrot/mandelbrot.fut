@@ -4,7 +4,6 @@ let top = 1.0f32
 let bot = -1.0f32
 let left = -1.5f32
 let right = 0.5f32
-let maxIter = 50i32
 let divergeThresh = 4f32
 let resolution = 10000f32
 
@@ -22,10 +21,10 @@ let xyToComplex (x, y) =
   (r, i)
 
 
-def test x y =
+def test maxIter x y =
   let (cr, ci) = xyToComplex (x, y)
   in
-  loop (zr, zi, trmti, i) = (0.0f32, 0.0f32, 0.0f32, 0)
+  loop (zr, zi, trmti, i) = (0.0f32, 0.0f32, 0.0f32, 0i32)
   while i < maxIter && (zr * zr) + (zi * zi) <= divergeThresh do
     let zi = (2.0 * zr * zi) + ci
     let zr = trmti + cr
@@ -35,8 +34,8 @@ def test x y =
     (zr, zi, tr - ti, i + 1)
 
 
-def mark x y =
-  let (zr, zi, _, _) = test x y
+def mark maxIter x y =
+  let (zr, zi, _, _) = test maxIter x y
   in
   if (zr * zr) + (zi * zi) > divergeThresh then 0u8 else 1u8
 
@@ -49,11 +48,11 @@ def addPattern (y: i64) (byte: u8) =
     0x55 | byte
 
 
-def packByte y (xlo, xhi) =
+def packByte maxIter y (xlo, xhi) =
   let (byte, _) =
     loop (byte, x) = (0u8, xlo)
     while x < xhi do
-      let byte = (byte << 1) | mark x y
+      let byte = (byte << 1) | mark maxIter x y
       in (byte, x+1)
   let byte =
     if xhi-xlo == 8 then byte
@@ -62,14 +61,14 @@ def packByte y (xlo, xhi) =
   byte
 
 
-entry mandelbrot ylo yhi blo bhi =
+entry mandelbrot maxIter ylo yhi blo bhi =
   let numRows = yhi - ylo
   let numBytes = bhi - blo
   in
   flatten (tabulate_2d numRows numBytes (\y b ->
     let xlo = blo + b * 8
     let xhi = i64.min (xlo + 8) w
-    let byte = packByte (ylo + y) (xlo, xhi)
+    let byte = packByte maxIter (ylo + y) (xlo, xhi)
     let byte = addPattern y byte
     in
     byte))
