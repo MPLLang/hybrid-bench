@@ -508,6 +508,9 @@ struct
       (da, db, gpu_id)
     end
 
+  
+  val target_depth = CommandLineArgs.parseInt "dmm-target-depth" 2
+
 
   fun hybrid_multiply_nonsquare_inplace_gpu dev_id (da, db) (a, b, c) =
     let
@@ -548,7 +551,7 @@ struct
     end
 
 
-  fun hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c) =
+  fun hybrid_multiply_nonsquare_inplace devices depth outputMode (da, db) (a, b, c) =
     let
       val (m, n, k) = check_dims (a, b, c)
 
@@ -571,10 +574,10 @@ struct
         in
           par
             ( fn _ =>
-                hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace_choose devices (depth+1) outputMode (da, db)
                   (a1, b, c1)
             , fn _ =>
-                hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace devices (depth+1) outputMode (da, db)
                   (a2, b, c2)
             );
           ()
@@ -589,10 +592,10 @@ struct
         in
           par
             ( fn _ =>
-                hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace_choose devices (depth+1) outputMode (da, db)
                   (a, b1, c1)
             , fn _ =>
-                hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace devices (depth+1) outputMode (da, db)
                   (a, b2, c2)
             );
           ()
@@ -605,13 +608,13 @@ struct
           val (a1, a2) = splitVertical a {half_width = width a div 2}
           val (b1, b2) = splitHorizontal b {half_height = height b div 2}
         in
-          hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a1, b1, c);
-          hybrid_multiply_nonsquare_inplace devices Accumulate (da, db) (a2, b2, c)
+          hybrid_multiply_nonsquare_inplace devices depth outputMode (da, db) (a1, b1, c);
+          hybrid_multiply_nonsquare_inplace devices depth Accumulate (da, db) (a2, b2, c)
         end
     end
 
 
-  and hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db) (a, b, c) =
+  and hybrid_multiply_nonsquare_inplace_choose devices depth outputMode (da, db) (a, b, c) =
     let
       val (m, n, k) = check_dims (a, b, c)
       (* val _ = print
@@ -622,11 +625,13 @@ struct
       if maxdim < gpu_thresh then
         cpu_multiply_nonsquare_inplace outputMode (a, b, c)
         (* hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c) *)
+      else if depth < target_depth then
+        hybrid_multiply_nonsquare_inplace devices depth outputMode (da, db) (a, b, c)
       else
         let
           val choiceResult = ForkJoin.choice
             { prefer_cpu = fn _ =>
-                ( hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
+                ( hybrid_multiply_nonsquare_inplace devices depth outputMode (da, db)
                     (a, b, c)
                 ; NONE
                 )
@@ -672,7 +677,7 @@ struct
         val _ = print ("hybrid_multiply_nonsquare: setup time: " ^ Time.fmt 4 tm ^ "\n")
 
       in
-        hybrid_multiply_nonsquare_inplace devices Write (da, db) (a, b, c);
+        hybrid_multiply_nonsquare_inplace devices 0 Write (da, db) (a, b, c);
         freeFloatsGpuData da;
         freeFloatsGpuData db;
         c
