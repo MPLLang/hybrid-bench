@@ -1,6 +1,9 @@
 ../../dep/dep.mlb
 futhark/bfs.sig
 futhark/bfs.sml
+
+sml/MatCOO.sml
+
 sml/SerialBFS.sml
 sml/OffsetSearch.sml
 sml/NondetBFS.sml

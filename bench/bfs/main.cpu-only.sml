@@ -1,10 +1,10 @@
 structure CLA = CommandLineArgs
-structure CtxSet = CtxSetFn (structure F = Futhark)
-structure BFS = NondetBFS(CtxSet)
+structure BFS = NondetBFS_CPU
 structure G = BFS.G
+
 structure R32 = struct open MLton.Real32 open Real32 structure W = Word32 end
 structure M =
-  MatCOO (structure I = Int32 structure R = R32 structure CtxSet = CtxSet)
+  MatCOO (structure I = Int32 structure R = R32)
 
 fun mtx_to_graph (M.Mat {width, height, row_indices, col_indices, values}) : BFS.G.graph =
   let
@@ -32,12 +32,6 @@ fun mtx_to_graph (M.Mat {width, height, row_indices, col_indices, values}) : BFS
   in
     (offsets, ArraySlice.full row_lengths, col_indices)
   end
-
-val () = print "Initialising Futhark contexts... "
-val devices = String.fields (fn c => c = #",") (CLA.parseString "devices" "")
-val ctxSet = CtxSet.fromList devices
-val () = print "Done!\n"
-val _ = print ("devices: " ^ String.concatWith "," devices ^ "\n")
 
 val dontDirOpt = CLA.parseFlag "no-dir-opt"
 val diropt = not dontDirOpt
@@ -71,31 +65,6 @@ val (graph, tm) = Util.getTime (fn _ =>
 val _ = print ("num vertices: " ^ Int.toString (G.numVertices graph) ^ "\n")
 val _ = print ("num edges: " ^ Int.toString (G.numEdges graph) ^ "\n")
 
-(* val ((graph_fut, free_graph_fut), tm) = Util.getTime (fn _ => *)
-val (graphs_fut, tm) = Util.getTime (fn _ =>
-  GpuData.initialize ctxSet (fn ctx =>
-    let
-      val (offsets, _, edges) = graph
-      val n = G.numVertices graph
-      val m = G.numEdges graph
-
-      val offsets_i32 = Seq.map Int32.fromInt offsets
-      val offsets_fut = Futhark.Int32Array1.new ctx offsets_i32 n
-      val edges_fut = Futhark.Int32Array1.new ctx edges m
-      val graph_fut =
-        Futhark.Opaque.graph.new ctx {offsets = offsets_fut, edges = edges_fut}
-
-      fun free () =
-        ( Futhark.Int32Array1.free offsets_fut
-        ; Futhark.Int32Array1.free edges_fut
-        ; Futhark.Opaque.graph.free graph_fut
-        )
-    in
-      (graph_fut, free)
-    end))
-val _ = print ("futhark loaded graph in " ^ Time.fmt 4 tm ^ "s\n")
-
-
 val _ =
   if not diropt then
     ()
@@ -122,23 +91,6 @@ val do_bfs =
   in
     case impl of
       "cpu" => (fn () => BFS.bfs_cpu {diropt = diropt} graph s)
-    | "gpu" =>
-        (fn () =>
-           let
-             val dev = 0
-             val ctx = CtxSet.choose ctxSet dev
-             val (graph_fut, _) = GpuData.choose graphs_fut dev
-           in
-             BFS.bfs_gpu ctx {diropt = diropt}
-               (G.numVertices graph, G.numEdges graph, graph_fut) s
-           end)
-    | "hybrid" =>
-        let
-          val graphs_fut' = Seq.map (fn (dev, (g, f)) => (dev, g)) graphs_fut
-        in
-          fn () =>
-            BFS.bfs_hybrid ctxSet {diropt = diropt} (graph, graphs_fut') s
-        end
     | _ => Util.die ("unknown impl: " ^ impl ^ "\n")
   end
 
@@ -180,6 +132,3 @@ fun check () =
   end
 
 val _ = if doCheck then check () else ()
-
-val _ = GpuData.free graphs_fut (fn (_, free_fn) => free_fn ())
-val _ = CtxSet.free ctxSet

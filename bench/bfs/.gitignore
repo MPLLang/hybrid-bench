@@ -6,3 +6,5 @@ futhark/bfs.sig
 futhark/bfs.sml
 futhark/bfs.smlfut.c
 futhark.cache
+
+*.sysmpl.bin
