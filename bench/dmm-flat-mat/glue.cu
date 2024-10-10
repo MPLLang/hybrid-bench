@@ -73,7 +73,12 @@ void set_cpu_affinity(int cpu) {
 // ==========================================================================
 
 extern "C"
-void * memcpyFloatsToGpu(float *data, int64_t len) {
+void * memcpyFloatsToGpu(
+  unsigned char * gpu_id,
+  int64_t gpu_id_str_len,
+  float *data,
+  int64_t len)
+{
   struct my_timer_t t;
   timer_begin(&t, "memcpyFloatsToGpu");
 
@@ -86,12 +91,19 @@ void * memcpyFloatsToGpu(float *data, int64_t len) {
 }
 
 extern "C"
-void synchronizeGpu() {
+void synchronizeGpu(
+  unsigned char * gpu_id,
+  int64_t gpu_id_str_len)
+{
   cudaDeviceSynchronize();
 }
 
 extern "C"
-void freeFloatsOnGpu(void *devicePtr) {
+void freeFloatsOnGpu(
+  unsigned char * gpu_id,
+  int64_t gpu_id_str_len,
+  void *devicePtr)
+{
   cudaFree(devicePtr);
 }
 
@@ -207,6 +219,8 @@ void* fancy_dmm_func(void* rawArg) {
 
 extern "C" struct fancy_dmm_package * 
 fancy_dmm_spawn(
+  unsigned char * gpu_id,
+  int64_t gpu_id_str_len,
   float * a,     // on device
   int64_t aTop,
   int64_t aLeft,
@@ -378,6 +392,8 @@ void* fancy_two_dmm_func(void* rawArg) {
 
 extern "C" struct fancy_two_dmm_package * 
 fancy_two_dmm_spawn(
+  unsigned char * gpu_id,
+  int64_t gpu_id_str_len,
   float * a,     // on device
   int64_t aTop1,
   int64_t aLeft1,
