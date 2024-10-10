@@ -18,8 +18,11 @@ struct
   val memcpy_floats =
     _import "memcpy_floats" public : r32 array * i64 * r32 array * i64 * i64 -> unit;
 
+  val simple_cpu_sgemm =
+    _import "simple_cpu_sgemm" public : r32 array * r32 array * r32 array * i64 * i64 * i64 * bool -> unit;
+
   val cpu_sgemm =
-    _import "cpu_sgemm" public : r32 array * r32 array * r32 array * i64 * i64 * i64 * bool -> unit;
+    _import "cpu_sgemm" public : r32 array * i64 * i64 * r32 array * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * bool -> unit;
 
   val memcpyFloatsToGpu =
     _import "memcpyFloatsToGpu" public : string * i64 * r32 array * i64 -> MLton.Pointer.t;
@@ -310,6 +313,63 @@ struct
   | Write
 
 
+  (* fun simple_leaf outputMode (a, b, c) =
+    let
+      val m = height a
+      val n = width b
+      val k = width a
+    in
+      case outputMode of
+        Accumulate =>
+          let
+            val tmpA = makeCopy a
+            val tmpB = makeCopy b
+            val tmpC = makeCopy c
+          in
+            simple_cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
+            copy {src = tmpC, dst = c}
+          end
+
+      | Write =>
+          let
+            val tmpA = makeCopy a
+            val tmpB = makeCopy b
+            val tmpC = allocate {height = m, width = n}
+          in
+            simple_cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, false);
+            copy {src = tmpC, dst = c}
+          end
+    end *)
+
+  
+  fun better_leaf outputMode (a, b, c) =
+    let
+      val m = height a
+      val n = width b
+      val k = width a
+
+      val lda = rowskip a
+      val offa = rowskip a * top a + left a
+
+      val ldb = rowskip b
+      val offb = rowskip b * top b + left b
+
+      val ldc = rowskip c
+      val offc = rowskip c * top c + left c
+    in
+      cpu_sgemm (
+        data a, offa, lda,
+        data b, offb, ldb,
+        data c, offc, ldc,
+        m, n, k,
+        case outputMode of Accumulate => true | _ => false
+      )
+    end
+
+
+  (* val do_simple_leaf = CommandLineArgs.parseFlag "simple-leaf" *)
+
+
   fun cpu_multiply_nonsquare_inplace outputMode (a, b, c) =
     if
       not
@@ -328,27 +388,11 @@ struct
         val maxdim = Int.max (Int.max (m, n), k)
       in
         if maxdim <= leaf_size then
-          case outputMode of
-            Accumulate =>
-              let
-                val tmpA = makeCopy a
-                val tmpB = makeCopy b
-                val tmpC = makeCopy c
-              in
-                cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
-                copy {src = tmpC, dst = c}
-              end
-
-          | Write =>
-              let
-                val tmpA = makeCopy a
-                val tmpB = makeCopy b
-                val tmpC = allocate {height = m, width = n}
-              in
-                cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, false);
-                copy {src = tmpC, dst = c}
-              end
-
+          better_leaf outputMode (a, b, c)
+          (* if do_simple_leaf then
+            simple_leaf outputMode (a, b, c)
+          else
+            better_leaf outputMode (a, b, c) *)
 
         else if maxdim = m then
           (* split a horizontally *)

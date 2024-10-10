@@ -9,23 +9,6 @@ val input2 = MatReal32.tabulate {width = n, height = n} (fn _ => 3.0)
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
 
-fun initial_run () =
-  let
-    val _ = print
-      "============== INITIAL WARMUP ==============\n\
-      \(At least one full CPU run is needed to warm up the OpenBLAS\n\
-      \memory allocator. Subsequent normal benchmarking warmup runs\n\
-      \should then guarantee that everything is sufficiently warm...)\n"
-    val (result, tm) = Util.getTime (fn _ =>
-      MatReal32.cpu_multiply_nonsquare (input1, input2))
-    val arr = MatReal32.data result
-    val _ = print (Real32.toString (Array.sub (arr, 0)) ^ "\n")
-    val _ = print ("warmup_time " ^ Time.fmt 4 tm ^ "s\n")
-    val _ = print ("============================================\n")
-  in
-    ()
-  end
-
 val bench =
   case impl of
     "cpu" => MatReal32.cpu_multiply_nonsquare
@@ -35,7 +18,6 @@ val bench =
   (* | "hybrid-pow2" => MatReal32.hybrid_multiply devices *)
   | _ => Util.die ("unknown -impl " ^ impl)
 
-val () = initial_run ()
 val result = Benchmark.run "dmm" (fn _ => bench (input1, input2))
 val arr = MatReal32.data result
 val _ = print (Real32.toString (Array.sub (arr, 0)) ^ "\n")
