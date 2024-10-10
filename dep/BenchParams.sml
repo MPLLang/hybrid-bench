@@ -170,4 +170,12 @@ struct
       CommandLineArgs.parseReal "matcoo-hybrid-gpu-work-rat" 20.0
   end
 
+
+  structure DMM =
+  struct
+    val leaf_size = CommandLineArgs.parseInt "dmm-leaf-size" 256
+    val gpu_thresh = CommandLineArgs.parseInt "dmm-gpu-thresh" 512
+    val split_frac = CommandLineArgs.parseReal "dmm-split" 0.75
+  end
+
 end

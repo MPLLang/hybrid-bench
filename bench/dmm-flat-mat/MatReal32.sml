@@ -59,13 +59,12 @@ struct
 
   (* ======================== *)
 
-  val leafSize = CommandLineArgs.parseInt "leaf-size" 256
-  val gpuThresh = CommandLineArgs.parseInt "gpu-thresh" 512
-  val split_frac = CommandLineArgs.parseReal "split" 0.75
-
-  val _ = print ("leaf-size " ^ Int.toString leafSize ^ "\n")
-  val _ = print ("gpu-thresh " ^ Int.toString gpuThresh ^ "\n")
-  val _ = print ("split " ^ Real.toString split_frac ^ "\n")
+  val leaf_size = BenchParams.DMM.leaf_size
+  val gpu_thresh = BenchParams.DMM.gpu_thresh
+  val split_frac = BenchParams.DMM.split_frac
+  val _ = print ("dmm-leaf-size " ^ Int.toString leaf_size ^ "\n")
+  val _ = print ("dmm-gpu-thresh " ^ Int.toString gpu_thresh ^ "\n")
+  val _ = print ("dmm-split " ^ Real.toString split_frac ^ "\n")
 
   fun split n =
     Real.ceil (split_frac * Real.fromInt n)
@@ -320,7 +319,7 @@ struct
       raise MatrixFormat
 
     else if
-      width a <= leafSize
+      width a <= leaf_size
     then
       let
         val n = width a
@@ -393,7 +392,7 @@ struct
 
         val maxdim = Int.max (Int.max (m, n), k)
       in
-        if maxdim <= leafSize then
+        if maxdim <= leaf_size then
           case outputMode of
             Accumulate =>
               let
@@ -579,37 +578,39 @@ struct
          ^ Int.toString n ^ " " ^ Int.toString k ^ "\n") *)
 
       val maxdim = Int.max (Int.max (m, n), k)
+
+      fun doCPU() =
+        case outputMode of
+          Accumulate =>
+            let
+              val tmpA = makeCopy a
+              val tmpB = makeCopy b
+              val tmpC = makeCopy c
+            in
+              cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
+              copy {src = tmpC, dst = c};
+              ()
+            end
+
+        | Write =>
+            let
+              val tmpA = makeCopy a
+              val tmpB = makeCopy b
+              val tmpC = allocate {height = m, width = n}
+            in
+              cpu_sgemm
+                (data tmpA, data tmpB, data tmpC, m, n, k, false);
+              copy {src = tmpC, dst = c};
+              ()
+            end
     in
-      if maxdim <= leafSize then
+      if maxdim <= leaf_size then
         let
           val choiceResult = ForkJoin.choice
             { prefer_gpu = fn dev =>
                 SOME
                   (hybrid_multiply_nonsquare_inplace_gpu dev (da, db) (a, b, c))
-            , prefer_cpu = fn _ =>
-                case outputMode of
-                  Accumulate =>
-                    let
-                      val tmpA = makeCopy a
-                      val tmpB = makeCopy b
-                      val tmpC = makeCopy c
-                    in
-                      cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
-                      copy {src = tmpC, dst = c};
-                      NONE
-                    end
-
-                | Write =>
-                    let
-                      val tmpA = makeCopy a
-                      val tmpB = makeCopy b
-                      val tmpC = allocate {height = m, width = n}
-                    in
-                      cpu_sgemm
-                        (data tmpA, data tmpB, data tmpC, m, n, k, false);
-                      copy {src = tmpC, dst = c};
-                      NONE
-                    end
+            , prefer_cpu = fn () => (doCPU(); NONE)
             }
         in
           case choiceResult of
@@ -625,7 +626,6 @@ struct
                       v + Array.sub (arr, row * n + col))
                   end
         end
-
 
       else if maxdim = m then
         (* split a horizontally *)
@@ -684,7 +684,7 @@ struct
          ^ Int.toString n ^ " " ^ Int.toString k ^ "\n") *)
       val maxdim = Int.max (Int.max (m, n), k)
     in
-      if maxdim < gpuThresh then
+      if maxdim < gpu_thresh then
         hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c)
       else
         let
@@ -720,7 +720,9 @@ struct
       raise MatrixFormat
     else
       let
-        val c = allocate {height = height a, width = width b}
+        val (c, tm) = Util.getTime (fn () => allocate {height = height a, width = width b})
+        val _ = print ("hybrid_multiply_nonsquare: alloc output: " ^ Time.fmt 4 tm ^ "\n")
+
         val ((da, db), tm) = Util.getTime (fn () =>
           let
             val da = memcpyFloatsGpuData devices (data a, Array.length (data a))
@@ -729,7 +731,8 @@ struct
             syncGpus devices;
             (da, db)
           end)
-        val _ = print ("hybrid_multiply: setup time: " ^ Time.fmt 4 tm ^ "\n")
+        val _ = print ("hybrid_multiply_nonsquare: setup time: " ^ Time.fmt 4 tm ^ "\n")
+
       in
         hybrid_multiply_nonsquare_inplace devices Write (da, db) (a, b, c);
         freeFloatsGpuData da;
@@ -748,7 +751,7 @@ struct
       raise MatrixFormat
 
     else if
-      width a <= leafSize
+      width a <= leaf_size
     then
       let
         val n = width a
@@ -785,7 +788,7 @@ struct
 
 
   and hybrid_multiply_inplace_two_choose devices (a1, a2, da) (b1, b2, db) c =
-    if width a1 < gpuThresh then
+    if width a1 < gpu_thresh then
       ( hybrid_multiply_inplace devices (a1, da) (b1, db) c
       ; hybrid_multiply_inplace devices (a2, da) (b2, db) c
       )
@@ -845,7 +848,7 @@ struct
 
 
   and hybrid_multiply_inplace_choose devices (a, da: MLton.Pointer.t GpuData.t) (b, db: MLton.Pointer.t GpuData.t) c =
-    if width a < gpuThresh then
+    if width a < gpu_thresh then
       hybrid_multiply_inplace devices (a, da) (b, db) c
 
     else
