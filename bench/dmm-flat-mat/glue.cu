@@ -55,27 +55,6 @@ void timer_report_tick(struct my_timer_t *t, const char *msg) {
   }
 }
 
-
-// ==========================================================================
-// dMM boilerplate
-
-
-/* TODO: inputs and outputs for leaf DMM, dimension info, etc. */
-struct dMMPackage {
-  // struct futStuff *futStuff;  /* won't need this */
-
-  /* need to be specialized for DMM */
-  float * a;
-  float * b;
-  float * output;
-  uint64_t inputLen;
-
-  /* these should stay */
-  bool finished;
-  pthread_t friends;
-};
-
-
 void set_cpu_affinity(int cpu) {
   cpu_set_t cpuset;
   pthread_t thread;
@@ -89,50 +68,6 @@ void set_cpu_affinity(int cpu) {
     printf("ERROR: glue.c: could not set affinity\n");
     exit(1);
   }
-}
-
-
-void* asyncdMMFunc(void* rawArg) {
-  struct my_timer_t t;
-  timer_begin(&t, "asyncdMMFunc");
-
-  // set_cpu_affinity(31);
-
-  struct dMMPackage *pack = (struct dMMPackage *)rawArg;
-
-  float *device_a;
-  float *device_b;
-  float *device_output;
-
-  uint64_t n = pack->inputLen;
-  uint64_t bytes = n*n*sizeof(float);
-
-  cudaMalloc(&device_a, bytes);
-  cudaMemcpy(device_a, pack->a, bytes, cudaMemcpyHostToDevice);
-
-  cudaMalloc(&device_b, bytes);
-  cudaMemcpy(device_b, pack->b, bytes, cudaMemcpyHostToDevice);
-  
-  cudaMalloc(&(device_output), bytes);
-  cudaMemcpy(device_output, pack->output, bytes, cudaMemcpyHostToDevice);
-  // timer_report_tick(&t, "--- memcpy to gpu");
-
-  float alpha = 1.0;
-  float beta = 1.0;
-  cublasHandle_t handle;
-  cublasCreate(&handle);  
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, device_a, n, device_b, n, &beta, device_output, n);
-  cublasDestroy(handle);
-  // timer_report_tick(&t, "      cublasSgemm");
-
-  cudaMemcpy(pack->output, device_output, bytes, cudaMemcpyDeviceToHost);
-  cudaFree(device_a);
-  cudaFree(device_b);
-  cudaFree(device_output);
-  // timer_report_tick(&t, "  memcpy from gpu");
-
-  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST); /* VERY IMPORTANT! */
-  return NULL;
 }
 
 // ==========================================================================

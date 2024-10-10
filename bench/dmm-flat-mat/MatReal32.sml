@@ -9,14 +9,14 @@ struct
   (* ====================== *)
 
   val rawFancySpawn =
-    _import "fancy_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * i64 -> dmm_package;
+    _import "fancy_dmm_spawn" public : string * i64 * MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * i64 -> dmm_package;
 
   val rawFancyFinish = _import "fancy_dmm_finish" public : dmm_package -> unit;
 
   (* ====================== *)
 
   val rawFancyTwoSpawn =
-    _import "fancy_two_dmm_spawn" public : MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
+    _import "fancy_two_dmm_spawn" public : string * i64 * MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
 
   val rawFancyTwoFinish =
     _import "fancy_two_dmm_finish" public : dmm_package -> unit;
@@ -30,30 +30,32 @@ struct
     _import "cpu_sgemm" public : r32 array * r32 array * r32 array * i64 * i64 * i64 * bool -> unit;
 
   val memcpyFloatsToGpu =
-    _import "memcpyFloatsToGpu" public : char array * i64 * r32 array * i64 -> MLton.Pointer.t;
+    _import "memcpyFloatsToGpu" public : string * i64 * r32 array * i64 -> MLton.Pointer.t;
 
-  val syncGpu = _import "synchronizeGpu" public : unit -> unit;
+  val syncGpu = _import "synchronizeGpu" public : string * i64 -> unit;
 
   val freeFloatsOnGpu =
-    _import "freeFloatsOnGpu" public : char array * i64 * MLton.Pointer.t -> unit;
+    _import "freeFloatsOnGpu" public : string * i64 * MLton.Pointer.t -> unit;
 
   (* ======================== *)
 
   fun memcpyFloatsGpuData devices (arr, len) : MLton.Pointer.t GpuData.t =
     ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
-      let
-        val gpu_id = Seq.nth devices i
-      in
-        (gpu_id, memcpyFloatsToGpu (gpu_id, String.size gpu_id, arr, len))
+      let val gpu_id = Seq.nth devices i
+      in (gpu_id, memcpyFloatsToGpu (gpu_id, String.size gpu_id, arr, len))
       end))
 
   fun freeFloatsGpuData (data: MLton.Pointer.t GpuData.t) =
     ForkJoin.parfor 1 (0, Seq.length data) (fn i =>
-      let
-        val (gpu_id, ptr) = Seq.nth data i
-      in
-        freeFloatsOnGpu (gpu_id, String.size gpu_id, ptr)
+      let val (gpu_id, ptr) = Seq.nth data i
+      in freeFloatsOnGpu (gpu_id, String.size gpu_id, ptr)
       end)
+
+  fun syncGpus devices =
+    ForkJoin.parfor 1 (0, Seq.length devices) (fn i =>
+      let val gpu_id = Seq.nth devices i
+      in syncGpu (gpu_id, String.size gpu_id)
+      end);
 
   (* ======================== *)
 
@@ -467,19 +469,23 @@ struct
   (* ====================================================================== *)
 
 
-  fun gpu_multiply (a, b) =
+  fun gpu_multiply gpu_id (a, b) =
     if not (isSquare a andalso isSquare b andalso width a = width b) then
       raise MatrixFormat
     else
       let
         val n = width a
-        val device_a = memcpyFloatsToGpu (data a, Array.length (data a))
-        val device_b = memcpyFloatsToGpu (data b, Array.length (data b))
-        val _ = syncGpu ()
+        val device_a = memcpyFloatsToGpu
+          (gpu_id, String.size gpu_id, data a, Array.length (data a))
+        val device_b = memcpyFloatsToGpu
+          (gpu_id, String.size gpu_id, data b, Array.length (data b))
+        val _ = syncGpu (gpu_id, String.size gpu_id)
 
         val output = allocate {width = n, height = n}
         val pkg = rawFancySpawn
-          ( (*data a*) device_a
+          ( gpu_id
+          , String.size gpu_id
+          , (*data a*) device_a
           , top a
           , left a
           , rowskip a
@@ -497,8 +503,8 @@ struct
           )
       in
         rawFancyFinish pkg;
-        freeFloatsOnGpu device_a;
-        freeFloatsOnGpu device_b;
+        freeFloatsOnGpu (gpu_id, String.size gpu_id, device_a);
+        freeFloatsOnGpu (gpu_id, String.size gpu_id, device_b);
         output
       end
 
@@ -513,15 +519,30 @@ struct
     else raise MatrixFormat
 
 
-  fun hybrid_multiply_nonsquare_inplace_gpu (da, db) (a, b, c) =
+  fun get_device_ptrs (da: MLton.Pointer.t GpuData.t, db: MLton.Pointer.t GpuData.t, dev_id) =
+    let
+      val (gpu_id, da) = Seq.nth da dev_id
+      val (gpu_id', db) = Seq.nth db dev_id
+      val _ =
+        if gpu_id = gpu_id' then ()
+        else raise Fail "whoops: get_device_ptrs gpu_id mixup"
+    in
+      (da, db, gpu_id)
+    end
+
+
+  fun hybrid_multiply_nonsquare_inplace_gpu dev_id (da, db) (a, b, c) =
     let
       val t0 = Time.now ()
 
       val (m, n, k) = check_dims (a, b, c)
       (* val _ = print ("calling cuBLAS...\n") *)
       val tmpC = allocate {height = m, width = n}
+      val (da, db, gpu_id) = get_device_ptrs (da, db, dev_id)
       val pkg = rawFancySpawn
-        ( (*data a*) da
+        ( gpu_id
+        , String.size gpu_id
+        , (*data a*) da
         , top a
         , left a
         , rowskip a
@@ -549,7 +570,7 @@ struct
     end
 
 
-  fun hybrid_multiply_nonsquare_inplace outputMode (da, db) (a, b, c) =
+  fun hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c) =
     let
       val (m, n, k) = check_dims (a, b, c)
 
@@ -563,7 +584,8 @@ struct
         let
           val choiceResult = ForkJoin.choice
             { prefer_gpu = fn dev =>
-                SOME (hybrid_multiply_nonsquare_inplace_gpu (da, db) (a, b, c))
+                SOME
+                  (hybrid_multiply_nonsquare_inplace_gpu dev (da, db) (a, b, c))
             , prefer_cpu = fn _ =>
                 case outputMode of
                   Accumulate =>
@@ -614,10 +636,10 @@ struct
         in
           par
             ( fn _ =>
-                hybrid_multiply_nonsquare_inplace_choose outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db)
                   (a1, b, c1)
             , fn _ =>
-                hybrid_multiply_nonsquare_inplace outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
                   (a2, b, c2)
             );
           ()
@@ -632,10 +654,10 @@ struct
         in
           par
             ( fn _ =>
-                hybrid_multiply_nonsquare_inplace_choose outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db)
                   (a, b1, c1)
             , fn _ =>
-                hybrid_multiply_nonsquare_inplace outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
                   (a, b2, c2)
             );
           ()
@@ -648,13 +670,13 @@ struct
           val (a1, a2) = splitVertical a {half_width = width a div 2}
           val (b1, b2) = splitHorizontal b {half_height = height b div 2}
         in
-          hybrid_multiply_nonsquare_inplace outputMode (da, db) (a1, b1, c);
-          hybrid_multiply_nonsquare_inplace Accumulate (da, db) (a2, b2, c)
+          hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a1, b1, c);
+          hybrid_multiply_nonsquare_inplace devices Accumulate (da, db) (a2, b2, c)
         end
     end
 
 
-  and hybrid_multiply_nonsquare_inplace_choose outputMode (da, db) (a, b, c) =
+  and hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db) (a, b, c) =
     let
       val (m, n, k) = check_dims (a, b, c)
       (* val _ = print
@@ -663,17 +685,18 @@ struct
       val maxdim = Int.max (Int.max (m, n), k)
     in
       if maxdim < gpuThresh then
-        hybrid_multiply_nonsquare_inplace outputMode (da, db) (a, b, c)
+        hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c)
       else
         let
           val choiceResult = ForkJoin.choice
             { prefer_cpu = fn _ =>
-                ( hybrid_multiply_nonsquare_inplace outputMode (da, db)
+                ( hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
                     (a, b, c)
                 ; NONE
                 )
             , prefer_gpu = fn dev =>
-                SOME (hybrid_multiply_nonsquare_inplace_gpu (da, db) (a, b, c))
+                SOME
+                  (hybrid_multiply_nonsquare_inplace_gpu dev (da, db) (a, b, c))
             }
         in
           case choiceResult of
@@ -703,12 +726,12 @@ struct
             val da = memcpyFloatsGpuData devices (data a, Array.length (data a))
             val db = memcpyFloatsGpuData devices (data b, Array.length (data b))
           in
-            syncGpu ();
+            syncGpus devices;
             (da, db)
           end)
         val _ = print ("hybrid_multiply: setup time: " ^ Time.fmt 4 tm ^ "\n")
       in
-        hybrid_multiply_nonsquare_inplace Write (da, db) (a, b, c);
+        hybrid_multiply_nonsquare_inplace devices Write (da, db) (a, b, c);
         freeFloatsGpuData da;
         freeFloatsGpuData db;
         c
@@ -716,7 +739,7 @@ struct
 
   (* ====================================================================== *)
 
-  fun hybrid_multiply_inplace (a, da) (b, db) c =
+  fun hybrid_multiply_inplace devices (a, da) (b, db) c =
     if
       not
         (isSquare a andalso isSquare b andalso isSquare c
@@ -744,12 +767,12 @@ struct
         val (c11, c12, c21, c22) = blocks c
 
         fun doBlock (m1, m2, m3, m4, c) =
-          ( hybrid_multiply_inplace (m1, da) (m2, db) c
-          ; hybrid_multiply_inplace_choose (m3, da) (m4, db) c
+          ( hybrid_multiply_inplace devices (m1, da) (m2, db) c
+          ; hybrid_multiply_inplace_choose devices (m3, da) (m4, db) c
           )
 
         fun doBlockChoose (m1, m2, m3, m4, c) =
-          hybrid_multiply_inplace_two_choose (m1, m3, da) (m2, m4, db) c
+          hybrid_multiply_inplace_two_choose devices (m1, m3, da) (m2, m4, db) c
       in
         par4
           ( fn _ => doBlockChoose (a11, b11, a12, b21, c11)
@@ -761,10 +784,10 @@ struct
       end
 
 
-  and hybrid_multiply_inplace_two_choose (a1, a2, da) (b1, b2, db) c =
+  and hybrid_multiply_inplace_two_choose devices (a1, a2, da) (b1, b2, db) c =
     if width a1 < gpuThresh then
-      ( hybrid_multiply_inplace (a1, da) (b1, db) c
-      ; hybrid_multiply_inplace (a2, da) (b2, db) c
+      ( hybrid_multiply_inplace devices (a1, da) (b1, db) c
+      ; hybrid_multiply_inplace devices (a2, da) (b2, db) c
       )
 
     else
@@ -773,16 +796,19 @@ struct
 
         val choiceResult = ForkJoin.choice
           { prefer_cpu = fn () =>
-              ( hybrid_multiply_inplace (a1, da) (b1, db) c
-              ; hybrid_multiply_inplace_choose (a2, da) (b2, db) c
+              ( hybrid_multiply_inplace devices (a1, da) (b1, db) c
+              ; hybrid_multiply_inplace_choose devices (a2, da) (b2, db) c
               ; NONE
               )
 
           , prefer_gpu = fn dev =>
               let
                 val tmp = ForkJoin.alloc (n * n)
+                val (da, db, gpu_id) = get_device_ptrs (da, db, dev)
                 val pkg = rawFancyTwoSpawn
-                  ( (*data a*) da
+                  ( gpu_id
+                  , String.size gpu_id
+                  , (*data a*) da
                   , top a1
                   , left a1
                   , top a2
@@ -818,9 +844,9 @@ struct
       end
 
 
-  and hybrid_multiply_inplace_choose (a, da) (b, db) c =
+  and hybrid_multiply_inplace_choose devices (a, da: MLton.Pointer.t GpuData.t) (b, db: MLton.Pointer.t GpuData.t) c =
     if width a < gpuThresh then
-      hybrid_multiply_inplace (a, da) (b, db) c
+      hybrid_multiply_inplace devices (a, da) (b, db) c
 
     else
       let
@@ -828,13 +854,16 @@ struct
 
         val choiceResult = ForkJoin.choice
           { prefer_cpu = fn () =>
-              (hybrid_multiply_inplace (a, da) (b, db) c; NONE)
+              (hybrid_multiply_inplace devices (a, da) (b, db) c; NONE)
 
           , prefer_gpu = fn dev =>
               let
                 val tmp = ForkJoin.alloc (n * n)
+                val (da, db, gpu_id) = get_device_ptrs (da, db, dev)
                 val pkg = rawFancySpawn
-                  ( (*data a*) da
+                  ( gpu_id
+                  , String.size gpu_id
+                  , (*data a*) da
                   , top a
                   , left a
                   , rowskip a
@@ -877,10 +906,12 @@ struct
           ForkJoin.par
             ( fn () =>
                 let
-                  val da = memcpyFloatsGpuData devices (data a, Array.length (data a))
-                  val db = memcpyFloatsGpuData devices (data b, Array.length (data b))
+                  val da: MLton.Pointer.t GpuData.t = memcpyFloatsGpuData devices
+                    (data a, Array.length (data a))
+                  val db: MLton.Pointer.t GpuData.t = memcpyFloatsGpuData devices
+                    (data b, Array.length (data b))
                 in
-                  syncGpu ();
+                  syncGpus devices;
                   (da, db)
                 end
 
@@ -899,7 +930,7 @@ struct
 
 
         val (_, tm) = Util.getTime (fn () =>
-          hybrid_multiply_inplace (a, da) (b, db) c)
+          hybrid_multiply_inplace devices (a, da) (b, db) c)
 
       in
         print ("hybrid_multiply_inplace time: " ^ Time.fmt 4 tm ^ "\n");
