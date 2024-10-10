@@ -514,53 +514,9 @@ struct
 
       val maxdim = Int.max (Int.max (m, n), k)
 
-      fun doCPU() =
-        case outputMode of
-          Accumulate =>
-            let
-              val tmpA = makeCopy a
-              val tmpB = makeCopy b
-              val tmpC = makeCopy c
-            in
-              cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
-              copy {src = tmpC, dst = c};
-              ()
-            end
-
-        | Write =>
-            let
-              val tmpA = makeCopy a
-              val tmpB = makeCopy b
-              val tmpC = allocate {height = m, width = n}
-            in
-              cpu_sgemm
-                (data tmpA, data tmpB, data tmpC, m, n, k, false);
-              copy {src = tmpC, dst = c};
-              ()
-            end
     in
-      if maxdim <= leaf_size then
-        let
-          val choiceResult = ForkJoin.choice
-            { prefer_gpu = fn dev =>
-                SOME
-                  (hybrid_multiply_nonsquare_inplace_gpu dev (da, db) (a, b, c))
-            , prefer_cpu = fn () => (doCPU(); NONE)
-            }
-        in
-          case choiceResult of
-            NONE => ()
-          | SOME tmpC =>
-              case outputMode of
-                Write => copy {src = tmpC, dst = c}
-              | Accumulate =>
-                  let
-                    val arr = data tmpC
-                  in
-                    modify c (fn {row, col, v} =>
-                      v + Array.sub (arr, row * n + col))
-                  end
-        end
+      if maxdim < gpu_thresh then
+        cpu_multiply_nonsquare_inplace outputMode (a, b, c)
 
       else if maxdim = m then
         (* split a horizontally *)
@@ -620,7 +576,8 @@ struct
       val maxdim = Int.max (Int.max (m, n), k)
     in
       if maxdim < gpu_thresh then
-        hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c)
+        cpu_multiply_nonsquare_inplace outputMode (a, b, c)
+        (* hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c) *)
       else
         let
           val choiceResult = ForkJoin.choice
@@ -655,15 +612,17 @@ struct
       raise MatrixFormat
     else
       let
-        val (c, tm) = Util.getTime (fn () => allocate {height = height a, width = width b})
-        val _ = print ("hybrid_multiply_nonsquare: alloc output: " ^ Time.fmt 4 tm ^ "\n")
+        (* SAM_NOTE: no need to worry about this cost, this is essentially
+         * free because it is uninitialized
+         *)
+        val c = allocate {height = height a, width = width b}
 
         val ((da, db), tm) = Util.getTime (fn () =>
           let
             val da = memcpyFloatsGpuData devices (data a, Array.length (data a))
             val db = memcpyFloatsGpuData devices (data b, Array.length (data b))
           in
-            syncGpus devices;
+            (* syncGpus devices; *)
             (da, db)
           end)
         val _ = print ("hybrid_multiply_nonsquare: setup time: " ^ Time.fmt 4 tm ^ "\n")

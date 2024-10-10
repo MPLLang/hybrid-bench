@@ -135,7 +135,8 @@ void * memcpyFloatsToGpu(
 
   float *p;
   cudaMalloc(&p, len*sizeof(float));
-  cudaMemcpyAsync(p, data, len*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(p, data, len*sizeof(float), cudaMemcpyHostToDevice);
+  // cudaDeviceSynchronize();
 
   timer_report_tick(&t, "done");
   return p;
