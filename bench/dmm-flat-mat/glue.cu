@@ -70,17 +70,68 @@ void set_cpu_affinity(int cpu) {
   }
 }
 
+#define GPU_ID_BUFFER_SIZE 16
+
+// static long parse_long(const char *str)
+// {
+//   errno = 0;
+//   char *temp;
+//   long val = strtol(str, &temp, 0);
+
+//   if (temp == str || *temp != '\0' ||
+//       ((val == LONG_MIN || val == LONG_MAX) && errno == ERANGE))
+//   {
+//     fprintf(stderr, "Could not convert '%s' to long and leftover string is: '%s'\n",
+//             str, temp);
+//     exit(1);
+//   }
+//   return val;
+// }
+
+int parse_cuda_device(
+  char * gpu_id,
+  int64_t gpu_id_str_len)
+{
+  char buf[GPU_ID_BUFFER_SIZE];
+  if (gpu_id_str_len <= 0 || gpu_id_str_len > GPU_ID_BUFFER_SIZE || gpu_id[0] != '#') {
+    printf("ERROR: glue.cu: parse_cuda_device: bad gpu_id\n");
+    exit(1);
+  }
+  strncpy(&(buf[0]), gpu_id+1, gpu_id_str_len-1);
+  buf[gpu_id_str_len-1] = '\0';
+  char *end;
+  long result = strtol(buf, &end, 10);
+  if (end != buf + gpu_id_str_len-1) {
+    printf("ERROR: glue.cu: parse_cuda_device: strtol failed\n");
+    printf("buf contents: %s\n", buf);
+    printf("result %ld\n", result);
+    printf("buf %p gpu_id_str_len %ld end %p\n", (void*)buf, gpu_id_str_len, (void*)end);
+    exit(1);
+  }
+
+  return (int)result;
+}
+
+void set_cuda_device(
+  char * gpu_id,
+  int64_t gpu_id_str_len)
+{
+  cudaSetDevice(parse_cuda_device(gpu_id, gpu_id_str_len));
+}
+
 // ==========================================================================
 
 extern "C"
 void * memcpyFloatsToGpu(
-  unsigned char * gpu_id,
+  char * gpu_id,
   int64_t gpu_id_str_len,
   float *data,
   int64_t len)
 {
   struct my_timer_t t;
   timer_begin(&t, "memcpyFloatsToGpu");
+
+  set_cuda_device(gpu_id, gpu_id_str_len);
 
   float *p;
   cudaMalloc(&p, len*sizeof(float));
@@ -92,18 +143,20 @@ void * memcpyFloatsToGpu(
 
 extern "C"
 void synchronizeGpu(
-  unsigned char * gpu_id,
+  char * gpu_id,
   int64_t gpu_id_str_len)
 {
+  set_cuda_device(gpu_id, gpu_id_str_len);
   cudaDeviceSynchronize();
 }
 
 extern "C"
 void freeFloatsOnGpu(
-  unsigned char * gpu_id,
+  char * gpu_id,
   int64_t gpu_id_str_len,
   void *devicePtr)
 {
+  set_cuda_device(gpu_id, gpu_id_str_len);
   cudaFree(devicePtr);
 }
 
@@ -219,7 +272,7 @@ void* fancy_dmm_func(void* rawArg) {
 
 extern "C" struct fancy_dmm_package * 
 fancy_dmm_spawn(
-  unsigned char * gpu_id,
+  char * gpu_id,
   int64_t gpu_id_str_len,
   float * a,     // on device
   int64_t aTop,
@@ -260,6 +313,7 @@ fancy_dmm_spawn(
 
   pack->finished = false;
 
+  set_cuda_device(gpu_id, gpu_id_str_len);
   fancy_dmm_func(pack);
 
   // if (0 != pthread_create(&(pack->friends), NULL, &fancy_dmm_func, pack)) {
@@ -392,7 +446,7 @@ void* fancy_two_dmm_func(void* rawArg) {
 
 extern "C" struct fancy_two_dmm_package * 
 fancy_two_dmm_spawn(
-  unsigned char * gpu_id,
+  char * gpu_id,
   int64_t gpu_id_str_len,
   float * a,     // on device
   int64_t aTop1,
@@ -437,6 +491,7 @@ fancy_two_dmm_spawn(
 
   pack->finished = false;
 
+  set_cuda_device(gpu_id, gpu_id_str_len);
   fancy_two_dmm_func(pack);
 
   // if (0 != pthread_create(&(pack->friends), NULL, &fancy_two_dmm_func, pack)) {
