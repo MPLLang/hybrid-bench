@@ -563,8 +563,8 @@ struct
       val t1 = Time.now ()
     in
       print
-        ("gpu dmm " ^ Int.toString m ^ " " ^ Int.toString n ^ " "
-         ^ Int.toString k ^ ": " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n");
+        ("gpu " ^ Int.toString dev_id ^ ":" ^ gpu_id ^ " dmm(" ^ Int.toString m ^ "," ^ Int.toString n ^ ","
+         ^ Int.toString k ^ ") " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n");
 
       tmpC
     end
