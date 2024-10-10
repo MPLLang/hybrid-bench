@@ -25,7 +25,7 @@ def dmm(procs, gpus, impl):
   row = {
     "tag": "dmm",
     "cwd": "bench/dmm-flat-mat",
-    "cmd": cmd(procs, gpus, impl, "-n 8192"),
+    "cmd": cmd(procs, gpus, impl, "-n 10000"),
     "procs": procs,
     "gpus": gpus,
     "impl": impl
