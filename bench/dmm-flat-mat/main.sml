@@ -29,10 +29,10 @@ fun initial_run () =
 val bench =
   case impl of
     "cpu" => MatReal32.cpu_multiply_nonsquare
-  | "cpu-pow2" => MatReal32.cpu_multiply
+  (* | "cpu-pow2" => MatReal32.cpu_multiply *)
   | "gpu" => MatReal32.gpu_multiply (Seq.first devices)
   | "hybrid" => MatReal32.hybrid_multiply_nonsquare devices
-  | "hybrid-pow2" => MatReal32.hybrid_multiply devices
+  (* | "hybrid-pow2" => MatReal32.hybrid_multiply devices *)
   | _ => Util.die ("unknown -impl " ^ impl)
 
 val () = initial_run ()

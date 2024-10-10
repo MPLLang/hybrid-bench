@@ -338,3 +338,183 @@ extern "C" void fancy_dmm_finish(
 
   free(pack);
 }
+
+
+// ===========================================================================
+
+
+struct fancy_two_dmm_package {
+  float * a;  // on device
+  int64_t aTop1;
+  int64_t aLeft1;
+  int64_t aTop2;
+  int64_t aLeft2;
+  int64_t aRowskip;
+  float * b;  // on device
+  int64_t bTop1;
+  int64_t bLeft1;
+  int64_t bTop2;
+  int64_t bLeft2;
+  int64_t bRowskip;
+  float * c;  // on host
+  int64_t cTop;
+  int64_t cLeft;
+  int64_t cRowskip;
+  int64_t n;
+
+  /* these should stay */
+  bool finished;
+  pthread_t friends;
+};
+
+
+
+extern "C"
+void* fancy_two_dmm_func(void* rawArg) {
+  struct my_timer_t t;
+  timer_begin(&t, "fancy_two_dmm_func");
+
+  struct fancy_two_dmm_package *pack = (struct fancy_two_dmm_package *)rawArg;
+
+  uint64_t n = pack->n;
+  uint64_t rowbytes = n*sizeof(float);
+  uint64_t bytes = n*rowbytes;
+
+
+  float *device_c;
+  cudaMalloc(&device_c, bytes);
+  // for (int64_t j = 0; j < n; j++) {
+  //   float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
+  //   cudaMemcpyAsync(device_c + j*n, host_start, rowbytes, cudaMemcpyHostToDevice);
+  // }
+
+  // cudaDeviceSynchronize();
+  // timer_report_tick(&t, "----- memcpy C to gpu");
+
+  float *tmp_a;
+  float *tmp_b;
+  cudaMalloc(&tmp_a, bytes);
+  cudaMalloc(&tmp_b, bytes);
+
+
+  int GRID = ((n*n)+(SIZE-1))/SIZE;
+  if(GRID == 0) {
+    GRID = 1;
+  }
+  copy_block<<<GRID, SIZE>>>(tmp_a, n, n, pack->a, pack->aTop1, pack->aLeft1, pack->aRowskip);
+  copy_block<<<GRID, SIZE>>>(tmp_b, n, n, pack->b, pack->bTop1, pack->bLeft1, pack->bRowskip);
+  cudaDeviceSynchronize();
+  timer_report_tick(&t, "- memcpy A1,B1 on gpu");
+
+  float alpha = 1.0;
+  float beta = 0.0;
+  cublasHandle_t handle;
+  cublasCreate(&handle);  
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, tmp_a, n, tmp_b, n, &beta, device_c, n);
+  cublasDestroy(handle);
+  timer_report_tick(&t, "   cublasSgemm(A1,B1)");
+  
+
+  copy_block<<<GRID, SIZE>>>(tmp_a, n, n, pack->a, pack->aTop2, pack->aLeft2, pack->aRowskip);
+  copy_block<<<GRID, SIZE>>>(tmp_b, n, n, pack->b, pack->bTop2, pack->bLeft2, pack->bRowskip);
+  cudaDeviceSynchronize();
+  timer_report_tick(&t, "  memcpy A2,B2 on gpu");
+
+
+  beta = 1.0;
+  cublasCreate(&handle);  
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, n, n, n, &alpha, tmp_a, n, tmp_b, n, &beta, device_c, n);
+  cublasDestroy(handle);
+  timer_report_tick(&t, "   cublasSgemm(A2,B2)");
+
+  // for (int64_t j = 0; j < n; j++) {
+  //   float *host_start = pack->c + (pack->cTop + j) * pack->cRowskip + pack->cLeft;
+  //   cudaMemcpyAsync(host_start, device_c + j*n, rowbytes, cudaMemcpyDeviceToHost);
+  // }
+  // cudaDeviceSynchronize();
+
+  cudaMemcpy(pack->c, device_c, bytes, cudaMemcpyDeviceToHost);
+  cudaFree(tmp_a);
+  cudaFree(tmp_b);
+  cudaFree(device_c);
+  timer_report_tick(&t, "    memcpy C from gpu");
+
+  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST); /* VERY IMPORTANT! */
+  return NULL;
+}
+
+
+extern "C" struct fancy_two_dmm_package * 
+fancy_two_dmm_spawn(
+  char * gpu_id,
+  int64_t gpu_id_str_len,
+  float * a,     // on device
+  int64_t aTop1,
+  int64_t aLeft1,
+  int64_t aTop2,
+  int64_t aLeft2,
+  int64_t aRowskip,
+  float * b,     // on device
+  int64_t bTop1,
+  int64_t bLeft1,
+  int64_t bTop2,
+  int64_t bLeft2,
+  int64_t bRowskip,
+  float * c,     // on host
+  int64_t cTop,
+  int64_t cLeft,
+  int64_t cRowskip,
+  int64_t n)
+{
+  struct fancy_two_dmm_package *pack = (fancy_two_dmm_package*)malloc(sizeof(struct fancy_two_dmm_package));
+
+  pack->a = a;
+  pack->aTop1 = aTop1;
+  pack->aLeft1 = aLeft1;
+  pack->aTop2 = aTop2;
+  pack->aLeft2 = aLeft2;
+  pack->aRowskip = aRowskip;
+
+  pack->b = b;
+  pack->bTop1 = bTop1;
+  pack->bLeft1 = bLeft1;
+  pack->bTop2 = bTop2;
+  pack->bLeft2 = bLeft2;
+  pack->bRowskip = bRowskip;
+
+  pack->c = c;
+  pack->cTop = cTop;
+  pack->cLeft = cLeft;
+  pack->cRowskip = cRowskip;
+
+  pack->n = n;
+
+  pack->finished = false;
+
+  set_cuda_device(gpu_id, gpu_id_str_len);
+  fancy_two_dmm_func(pack);
+
+  // if (0 != pthread_create(&(pack->friends), NULL, &fancy_two_dmm_func, pack)) {
+  //   printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
+  //   exit(1);
+  // }
+
+  return pack;
+}
+
+
+// extern "C" uint8_t fancy_two_dmm_poll(struct fancy_two_dmm_package *pack) {
+//   return pack->finished ? 1 : 0;
+// }
+
+
+extern "C" void fancy_two_dmm_finish(
+  struct fancy_two_dmm_package * pack)
+{
+  // if (0 != pthread_join(pack->friends, NULL)) {
+  //   printf("ERROR: glue.c: pthread_join failed\n");
+  //   exit(1);
+  // }
+
+  free(pack);
+}
