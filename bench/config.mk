@@ -10,7 +10,7 @@
 FUTHARK_BACKEND ?= cuda
 
 # Path to MPL binary.
-MPL ?= /home/ec2-user/proj/mpl/hybrid-sched/build/bin/mpl
+MPL ?= /home/cc/proj/hybrid-sched/build/bin/mpl
 
 MLTON ?= mlton
 
@@ -23,8 +23,8 @@ MLTONFLAGS = \
 	-disable-pass splitTypes2
 
 OPENBLAS_MLTONFLAGS = \
-	-cc-opt '-I/home/ec2-user/openblas-v0.3.23/installed/include/' \
-	-link-opt '-L/home/ec2-user/openblas-v0.3.23/installed/lib/ -lopenblas'
+	-cc-opt '-I/home/cc/installs/openblas-0.3.28/build/include/' \
+	-link-opt '-L/home/cc/installs/openblas-0.3.28/build/lib/ -lopenblas'
 
 ifeq ($(FUTHARK_BACKEND), c)
 MLTONFLAGS += \

@@ -15,14 +15,19 @@ struct
 
   (* ====================== *)
 
+  val rawFancyTwoSpawn =
+    _import "fancy_two_dmm_spawn" public : string * i64 * MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 -> dmm_package;
+
+  val rawFancyTwoFinish =
+    _import "fancy_two_dmm_finish" public : dmm_package -> unit;
+
+  (* ====================== *)
+
   val memcpy_floats =
     _import "memcpy_floats" public : r32 array * i64 * r32 array * i64 * i64 -> unit;
 
-  val simple_cpu_sgemm =
-    _import "simple_cpu_sgemm" public : r32 array * r32 array * r32 array * i64 * i64 * i64 * bool -> unit;
-
   val cpu_sgemm =
-    _import "cpu_sgemm" public : r32 array * i64 * i64 * r32 array * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * bool -> unit;
+    _import "cpu_sgemm" public : r32 array * r32 array * r32 array * i64 * i64 * i64 * bool -> unit;
 
   val memcpyFloatsToGpu =
     _import "memcpyFloatsToGpu" public : string * i64 * r32 array * i64 -> MLton.Pointer.t;
@@ -302,72 +307,72 @@ struct
       whole
     end
 
+  (* ====================================================================== *)
+
+
+  fun cpu_multiply_inplace (a, b, c) =
+    if
+      not
+        (isSquare a andalso isSquare b andalso isSquare c
+         andalso width a = width b andalso width a = width c)
+    then
+      raise MatrixFormat
+
+    else if
+      width a <= leaf_size
+    then
+      let
+        val n = width a
+        val tmpA = makeCopy a
+        val tmpB = makeCopy b
+        val tmpC = makeCopy c
+      in
+        cpu_sgemm (data tmpA, data tmpB, data tmpC, n, n, n, true);
+        copy {src = tmpC, dst = c}
+      end
+
+    else
+      let
+        val (a11, a12, a21, a22) = blocks a
+        val (b11, b12, b21, b22) = blocks b
+        val (c11, c12, c21, c22) = blocks c
+
+        fun doBlock (m1, m2, m3, m4, c) =
+          (cpu_multiply_inplace (m1, m2, c); cpu_multiply_inplace (m3, m4, c))
+      in
+        par4
+          ( fn _ => doBlock (a11, b11, a12, b21, c11)
+          , fn _ => doBlock (a11, b12, a12, b22, c12)
+          , fn _ => doBlock (a21, b11, a22, b21, c21)
+          , fn _ => doBlock (a21, b12, a22, b22, c22)
+          );
+        ()
+      end
+
+
+  and cpu_multiply (a, b) =
+    if not (isSquare a andalso isSquare b andalso width a = width b) then
+      raise MatrixFormat
+    else
+      let
+        val n = width a
+        val c = tabulate {width = n, height = n} (fn _ => 0.0)
+      in
+        cpu_multiply_inplace (a, b, c);
+        c
+      end
+
 
   (* ======================================================================
    * This is the more general algorithm, which allows for non-square sizes
+   *
+   * TODO: hybridize this algorithm.
    *)
 
 
   datatype output_mode =
     Accumulate
   | Write
-
-
-  (* fun simple_leaf outputMode (a, b, c) =
-    let
-      val m = height a
-      val n = width b
-      val k = width a
-    in
-      case outputMode of
-        Accumulate =>
-          let
-            val tmpA = makeCopy a
-            val tmpB = makeCopy b
-            val tmpC = makeCopy c
-          in
-            simple_cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
-            copy {src = tmpC, dst = c}
-          end
-
-      | Write =>
-          let
-            val tmpA = makeCopy a
-            val tmpB = makeCopy b
-            val tmpC = allocate {height = m, width = n}
-          in
-            simple_cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, false);
-            copy {src = tmpC, dst = c}
-          end
-    end *)
-
-  
-  fun better_leaf outputMode (a, b, c) =
-    let
-      val m = height a
-      val n = width b
-      val k = width a
-
-      val lda = rowskip a
-      val offa = rowskip a * top a + left a
-
-      val ldb = rowskip b
-      val offb = rowskip b * top b + left b
-
-      val ldc = rowskip c
-      val offc = rowskip c * top c + left c
-    in
-      cpu_sgemm (
-        data a, offa, lda,
-        data b, offb, ldb,
-        data c, offc, ldc,
-        m, n, k,
-        case outputMode of Accumulate => true | _ => false
-      )
-    end
-
-
-  (* val do_simple_leaf = CommandLineArgs.parseFlag "simple-leaf" *)
 
 
   fun cpu_multiply_nonsquare_inplace outputMode (a, b, c) =
@@ -388,11 +393,27 @@ struct
         val maxdim = Int.max (Int.max (m, n), k)
       in
         if maxdim <= leaf_size then
-          better_leaf outputMode (a, b, c)
-          (* if do_simple_leaf then
-            simple_leaf outputMode (a, b, c)
-          else
-            better_leaf outputMode (a, b, c) *)
+          case outputMode of
+            Accumulate =>
+              let
+                val tmpA = makeCopy a
+                val tmpB = makeCopy b
+                val tmpC = makeCopy c
+              in
+                cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
+                copy {src = tmpC, dst = c}
+              end
+
+          | Write =>
+              let
+                val tmpA = makeCopy a
+                val tmpB = makeCopy b
+                val tmpC = allocate {height = m, width = n}
+              in
+                cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, false);
+                copy {src = tmpC, dst = c}
+              end
+
 
         else if maxdim = m then
           (* split a horizontally *)
@@ -435,7 +456,7 @@ struct
       end
 
 
-  fun cpu_multiply_nonsquare (a, b) =
+  and cpu_multiply_nonsquare (a, b) =
     if not (width a = height b) then
       raise MatrixFormat
     else
@@ -508,9 +529,6 @@ struct
       (da, db, gpu_id)
     end
 
-  
-  val target_depth = CommandLineArgs.parseInt "dmm-target-depth" 2
-
 
   fun hybrid_multiply_nonsquare_inplace_gpu dev_id (da, db) (a, b, c) =
     let
@@ -551,7 +569,7 @@ struct
     end
 
 
-  fun hybrid_multiply_nonsquare_inplace devices depth outputMode (da, db) (a, b, c) =
+  fun hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c) =
     let
       val (m, n, k) = check_dims (a, b, c)
 
@@ -561,9 +579,53 @@ struct
 
       val maxdim = Int.max (Int.max (m, n), k)
 
+      fun doCPU() =
+        case outputMode of
+          Accumulate =>
+            let
+              val tmpA = makeCopy a
+              val tmpB = makeCopy b
+              val tmpC = makeCopy c
+            in
+              cpu_sgemm (data tmpA, data tmpB, data tmpC, m, n, k, true);
+              copy {src = tmpC, dst = c};
+              ()
+            end
+
+        | Write =>
+            let
+              val tmpA = makeCopy a
+              val tmpB = makeCopy b
+              val tmpC = allocate {height = m, width = n}
+            in
+              cpu_sgemm
+                (data tmpA, data tmpB, data tmpC, m, n, k, false);
+              copy {src = tmpC, dst = c};
+              ()
+            end
     in
-      if maxdim < gpu_thresh then
-        cpu_multiply_nonsquare_inplace outputMode (a, b, c)
+      if maxdim <= leaf_size then
+        let
+          val choiceResult = ForkJoin.choice
+            { prefer_gpu = fn dev =>
+                SOME
+                  (hybrid_multiply_nonsquare_inplace_gpu dev (da, db) (a, b, c))
+            , prefer_cpu = fn () => (doCPU(); NONE)
+            }
+        in
+          case choiceResult of
+            NONE => ()
+          | SOME tmpC =>
+              case outputMode of
+                Write => copy {src = tmpC, dst = c}
+              | Accumulate =>
+                  let
+                    val arr = data tmpC
+                  in
+                    modify c (fn {row, col, v} =>
+                      v + Array.sub (arr, row * n + col))
+                  end
+        end
 
       else if maxdim = m then
         (* split a horizontally *)
@@ -574,10 +636,10 @@ struct
         in
           par
             ( fn _ =>
-                hybrid_multiply_nonsquare_inplace_choose devices (depth+1) outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db)
                   (a1, b, c1)
             , fn _ =>
-                hybrid_multiply_nonsquare_inplace devices (depth+1) outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
                   (a2, b, c2)
             );
           ()
@@ -592,10 +654,10 @@ struct
         in
           par
             ( fn _ =>
-                hybrid_multiply_nonsquare_inplace_choose devices (depth+1) outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db)
                   (a, b1, c1)
             , fn _ =>
-                hybrid_multiply_nonsquare_inplace devices (depth+1) outputMode (da, db)
+                hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
                   (a, b2, c2)
             );
           ()
@@ -608,13 +670,13 @@ struct
           val (a1, a2) = splitVertical a {half_width = width a div 2}
           val (b1, b2) = splitHorizontal b {half_height = height b div 2}
         in
-          hybrid_multiply_nonsquare_inplace devices depth outputMode (da, db) (a1, b1, c);
-          hybrid_multiply_nonsquare_inplace devices depth Accumulate (da, db) (a2, b2, c)
+          hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a1, b1, c);
+          hybrid_multiply_nonsquare_inplace devices Accumulate (da, db) (a2, b2, c)
         end
     end
 
 
-  and hybrid_multiply_nonsquare_inplace_choose devices depth outputMode (da, db) (a, b, c) =
+  and hybrid_multiply_nonsquare_inplace_choose devices outputMode (da, db) (a, b, c) =
     let
       val (m, n, k) = check_dims (a, b, c)
       (* val _ = print
@@ -623,15 +685,12 @@ struct
       val maxdim = Int.max (Int.max (m, n), k)
     in
       if maxdim < gpu_thresh then
-        cpu_multiply_nonsquare_inplace outputMode (a, b, c)
-        (* hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c) *)
-      else if depth < target_depth then
-        hybrid_multiply_nonsquare_inplace devices depth outputMode (da, db) (a, b, c)
+        hybrid_multiply_nonsquare_inplace devices outputMode (da, db) (a, b, c)
       else
         let
           val choiceResult = ForkJoin.choice
             { prefer_cpu = fn _ =>
-                ( hybrid_multiply_nonsquare_inplace devices depth outputMode (da, db)
+                ( hybrid_multiply_nonsquare_inplace devices outputMode (da, db)
                     (a, b, c)
                 ; NONE
                 )
@@ -656,28 +715,228 @@ struct
     end
 
 
-  fun hybrid_multiply_nonsquare (devices: Device.gpu_identifier Seq.t) (a, b) =
+  and hybrid_multiply_nonsquare (devices: Device.gpu_identifier Seq.t) (a, b) =
     if not (width a = height b) then
       raise MatrixFormat
     else
       let
-        (* SAM_NOTE: no need to worry about this cost, this is essentially
-         * free because it is uninitialized
-         *)
-        val c = allocate {height = height a, width = width b}
+        val (c, tm) = Util.getTime (fn () => allocate {height = height a, width = width b})
+        val _ = print ("hybrid_multiply_nonsquare: alloc output: " ^ Time.fmt 4 tm ^ "\n")
 
         val ((da, db), tm) = Util.getTime (fn () =>
           let
             val da = memcpyFloatsGpuData devices (data a, Array.length (data a))
             val db = memcpyFloatsGpuData devices (data b, Array.length (data b))
           in
-            (* syncGpus devices; *)
+            syncGpus devices;
             (da, db)
           end)
         val _ = print ("hybrid_multiply_nonsquare: setup time: " ^ Time.fmt 4 tm ^ "\n")
 
       in
-        hybrid_multiply_nonsquare_inplace devices 0 Write (da, db) (a, b, c);
+        hybrid_multiply_nonsquare_inplace devices Write (da, db) (a, b, c);
+        freeFloatsGpuData da;
+        freeFloatsGpuData db;
+        c
+      end
+
+  (* ====================================================================== *)
+
+  fun hybrid_multiply_inplace devices (a, da) (b, db) c =
+    if
+      not
+        (isSquare a andalso isSquare b andalso isSquare c
+         andalso width a = width b andalso width a = width c)
+    then
+      raise MatrixFormat
+
+    else if
+      width a <= leaf_size
+    then
+      let
+        val n = width a
+        val tmpA = makeCopy a
+        val tmpB = makeCopy b
+        val tmpC = makeCopy c
+      in
+        cpu_sgemm (data tmpA, data tmpB, data tmpC, n, n, n, true);
+        copy {src = tmpC, dst = c}
+      end
+
+    else
+      let
+        val (a11, a12, a21, a22) = blocks a
+        val (b11, b12, b21, b22) = blocks b
+        val (c11, c12, c21, c22) = blocks c
+
+        fun doBlock (m1, m2, m3, m4, c) =
+          ( hybrid_multiply_inplace devices (m1, da) (m2, db) c
+          ; hybrid_multiply_inplace_choose devices (m3, da) (m4, db) c
+          )
+
+        fun doBlockChoose (m1, m2, m3, m4, c) =
+          hybrid_multiply_inplace_two_choose devices (m1, m3, da) (m2, m4, db) c
+      in
+        par4
+          ( fn _ => doBlockChoose (a11, b11, a12, b21, c11)
+          , fn _ => doBlockChoose (a11, b12, a12, b22, c12)
+          , fn _ => doBlockChoose (a21, b11, a22, b21, c21)
+          , fn _ => doBlock (a21, b12, a22, b22, c22)
+          );
+        ()
+      end
+
+
+  and hybrid_multiply_inplace_two_choose devices (a1, a2, da) (b1, b2, db) c =
+    if width a1 < gpu_thresh then
+      ( hybrid_multiply_inplace devices (a1, da) (b1, db) c
+      ; hybrid_multiply_inplace devices (a2, da) (b2, db) c
+      )
+
+    else
+      let
+        val n = width a1
+
+        val choiceResult = ForkJoin.choice
+          { prefer_cpu = fn () =>
+              ( hybrid_multiply_inplace devices (a1, da) (b1, db) c
+              ; hybrid_multiply_inplace_choose devices (a2, da) (b2, db) c
+              ; NONE
+              )
+
+          , prefer_gpu = fn dev =>
+              let
+                val tmp = ForkJoin.alloc (n * n)
+                val (da, db, gpu_id) = get_device_ptrs (da, db, dev)
+                val pkg = rawFancyTwoSpawn
+                  ( gpu_id
+                  , String.size gpu_id
+                  , (*data a*) da
+                  , top a1
+                  , left a1
+                  , top a2
+                  , left a2
+                  , rowskip a1
+                  , (*data b*) db
+                  , top b1
+                  , left b1
+                  , top b2
+                  , left b2
+                  , rowskip b1
+
+                  (* TODO: get rid of unused parameters, the 0s here *)
+                  , (*data c*) tmp
+                  , (*top c*) 0
+                  , (*left c*) 0
+                  , (*rowskip c*) 0
+                  , n
+                  )
+              in
+                rawFancyTwoFinish pkg;
+                SOME tmp
+              end
+          }
+      in
+        case choiceResult of
+          NONE => ()
+        | SOME tmp =>
+            (* if the gpu branch was used, then we still need to copy the result
+             * back into the output.
+             *)
+            modify c (fn {row, col, v} => v + Array.sub (tmp, row * n + col))
+      end
+
+
+  and hybrid_multiply_inplace_choose devices (a, da: MLton.Pointer.t GpuData.t) (b, db: MLton.Pointer.t GpuData.t) c =
+    if width a < gpu_thresh then
+      hybrid_multiply_inplace devices (a, da) (b, db) c
+
+    else
+      let
+        val n = width a
+
+        val choiceResult = ForkJoin.choice
+          { prefer_cpu = fn () =>
+              (hybrid_multiply_inplace devices (a, da) (b, db) c; NONE)
+
+          , prefer_gpu = fn dev =>
+              let
+                val tmp = ForkJoin.alloc (n * n)
+                val (da, db, gpu_id) = get_device_ptrs (da, db, dev)
+                val pkg = rawFancySpawn
+                  ( gpu_id
+                  , String.size gpu_id
+                  , (*data a*) da
+                  , top a
+                  , left a
+                  , rowskip a
+                  , (*data b*) db
+                  , top b
+                  , left b
+                  , rowskip b
+                  , (*data c*) tmp
+                  , (*top c*) 0
+                  , (*left c*) 0
+                  , (*rowskip c*) 0
+                  , n
+                  , n
+                  , n
+                  )
+              in
+                rawFancyFinish pkg;
+                SOME tmp
+              end
+          }
+      in
+        case choiceResult of
+          NONE => ()
+        | SOME tmp =>
+            (* if the gpu branch was used, then we still need to copy the result
+             * back into the output.
+             *)
+            modify c (fn {row, col, v} => v + Array.sub (tmp, row * n + col))
+      end
+
+
+  and hybrid_multiply (devices: Device.gpu_identifier Seq.t) (a, b) =
+    if not (isSquare a andalso isSquare b andalso width a = width b) then
+      raise MatrixFormat
+    else
+      let
+        val n = width a
+
+        val (((da, db), c), tm) = Util.getTime (fn () =>
+          ForkJoin.par
+            ( fn () =>
+                let
+                  val da: MLton.Pointer.t GpuData.t = memcpyFloatsGpuData devices
+                    (data a, Array.length (data a))
+                  val db: MLton.Pointer.t GpuData.t = memcpyFloatsGpuData devices
+                    (data b, Array.length (data b))
+                in
+                  syncGpus devices;
+                  (da, db)
+                end
+
+            , fn () =>
+                let
+                  val c = allocate {width = n, height = n}
+                  val cData = data c
+                  val _ = ForkJoin.parfor 5000 (0, n * n) (fn i =>
+                    Array.update (cData, i, 0.0))
+                in
+                  c
+                end
+            ))
+
+        val _ = print ("hybrid_multiply: setup time: " ^ Time.fmt 4 tm ^ "\n")
+
+
+        val (_, tm) = Util.getTime (fn () =>
+          hybrid_multiply_inplace devices (a, da) (b, db) c)
+
+      in
+        print ("hybrid_multiply_inplace time: " ^ Time.fmt 4 tm ^ "\n");
         freeFloatsGpuData da;
         freeFloatsGpuData db;
         c
