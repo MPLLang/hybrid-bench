@@ -1,5 +1,7 @@
 val n = CommandLineArgs.parseInt "n" 8192
 val impl = CommandLineArgs.parseString "impl" "hybrid"
+val doPreallocate = CommandLineArgs.parseFlag "preallocate"
+val doPrepopulate = CommandLineArgs.parseFlag "prepopulate"
 val devices = ArraySlice.full (Array.fromList (String.fields (fn c => c = #",")
   (CommandLineArgs.parseString "devices" "")))
 
@@ -8,13 +10,43 @@ val input2 = MatReal32.tabulate {width = n, height = n} (fn _ => 3.0)
 
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
+val _ = print ("preallocate? " ^ (if doPreallocate then "yes" else "no") ^ "\n")
+val _ = print ("prepopulate? " ^ (if doPrepopulate then "yes" else "no") ^ "\n")
+
+val _ =
+  if doPreallocate andalso doPrepopulate then
+    Util.die ("pass either --preallocate or --prepopulate but not both.\n\
+              \(preallocate: exclude measurement of cudaMalloc for input matrices)\n\
+              \(prepopulate: exclude measurement of cudaMalloc AND cudaMemcpy for input matrices)")
+  else ()
+
+(* val ptrs = ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
+  let
+    val gpu_id = Seq.nth devices i
+    val len1 = Array.length (MatReal32.data input1)
+    val len2 = Array.length (MatReal32.data input2)
+    val d_input1 = allocDeviceMemory (gpu_id, String.size gpu_id, len1)
+    val d_input2 = allocDeviceMemory (gpu_id, String.size gpu_id, len2)
+  in
+    (d_input1, d_input2)
+  end)) *)
+
+val gpu_input1 = 
+  if doPreallocate then MatReal32.preallocate devices input1
+  else if doPrepopulate then MatReal32.prepopulate devices input1
+  else MatReal32.GpuNone
+
+val gpu_input2 = 
+  if doPreallocate then MatReal32.preallocate devices input2
+  else if doPrepopulate then MatReal32.prepopulate devices input2
+  else MatReal32.GpuNone
 
 val bench =
   case impl of
     "cpu" => MatReal32.cpu_multiply_nonsquare
   (* | "cpu-pow2" => MatReal32.cpu_multiply *)
-  | "gpu" => MatReal32.gpu_multiply (Seq.first devices)
-  | "hybrid" => MatReal32.hybrid_multiply_nonsquare devices
+  | "gpu" => MatReal32.gpu_multiply devices (gpu_input1, gpu_input2)
+  | "hybrid" => MatReal32.hybrid_multiply_nonsquare devices (gpu_input1, gpu_input2)
   (* | "hybrid-pow2" => MatReal32.hybrid_multiply devices *)
   | _ => Util.die ("unknown -impl " ^ impl)
 

@@ -122,10 +122,46 @@ void set_cuda_device(
 // ==========================================================================
 
 extern "C"
+void * allocDeviceMemory(
+  char * gpu_id,
+  int64_t gpu_id_str_len,
+  int64_t len)
+{
+  set_cuda_device(gpu_id, gpu_id_str_len);
+  float *p;
+  cudaMalloc(&p, len * sizeof(float));
+  return p;
+}
+
+
+extern "C"
 void * memcpyFloatsToGpu(
   char * gpu_id,
   int64_t gpu_id_str_len,
-  float *data,
+  float *dst,   // device
+  float *data,  // host
+  int64_t len)
+{
+  struct my_timer_t t;
+  timer_begin(&t, "memcpyFloatsToGpu");
+
+  set_cuda_device(gpu_id, gpu_id_str_len);
+
+  // float *p;
+  // cudaMalloc(&p, len*sizeof(float));
+  float *p = dst;
+  cudaMemcpy(p, data, len*sizeof(float), cudaMemcpyHostToDevice);
+  // cudaDeviceSynchronize();
+
+  timer_report_tick(&t, "done");
+  return p;
+}
+
+extern "C"
+void * allocAndMemcpyFloatsToGpu(
+  char * gpu_id,
+  int64_t gpu_id_str_len,
+  float *data,  // host
   int64_t len)
 {
   struct my_timer_t t;

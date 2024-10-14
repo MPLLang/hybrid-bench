@@ -24,33 +24,19 @@ struct
   val cpu_sgemm =
     _import "cpu_sgemm" public : r32 array * i64 * i64 * r32 array * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * bool -> unit;
 
+  val allocAndMemcpyFloatsToGpu =
+    _import "allocAndMemcpyFloatsToGpu" public : string * i64 * r32 array * i64 -> MLton.Pointer.t;
+
   val memcpyFloatsToGpu =
-    _import "memcpyFloatsToGpu" public : string * i64 * r32 array * i64 -> MLton.Pointer.t;
+    _import "memcpyFloatsToGpu" public : string * i64 * MLton.Pointer.t * r32 array * i64 -> MLton.Pointer.t;
 
   val syncGpu = _import "synchronizeGpu" public : string * i64 -> unit;
 
   val freeFloatsOnGpu =
     _import "freeFloatsOnGpu" public : string * i64 * MLton.Pointer.t -> unit;
 
-  (* ======================== *)
-
-  fun memcpyFloatsGpuData devices (arr, len) : MLton.Pointer.t GpuData.t =
-    ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
-      let val gpu_id = Seq.nth devices i
-      in (gpu_id, memcpyFloatsToGpu (gpu_id, String.size gpu_id, arr, len))
-      end))
-
-  fun freeFloatsGpuData (data: MLton.Pointer.t GpuData.t) =
-    ForkJoin.parfor 1 (0, Seq.length data) (fn i =>
-      let val (gpu_id, ptr) = Seq.nth data i
-      in freeFloatsOnGpu (gpu_id, String.size gpu_id, ptr)
-      end)
-
-  fun syncGpus devices =
-    ForkJoin.parfor 1 (0, Seq.length devices) (fn i =>
-      let val gpu_id = Seq.nth devices i
-      in syncGpu (gpu_id, String.size gpu_id)
-      end);
+  val allocDeviceMemory =
+    _import "allocDeviceMemory" : string * Int64.int * Int64.int -> MLton.Pointer.t;
 
   (* ======================== *)
 
@@ -303,6 +289,74 @@ struct
     end
 
 
+  (* ====================================================================== *)
+
+  (* GpuNone: doesn't exist on GPU at all yet
+   * GpuAllocated: space is malloc'ed on GPU side, but not memcopied yet
+   * GpuPopulated: space is malloc'ed and populated on the GPU side
+   *
+   * Gpu-side data is represented as (MLton.Pointer.t Seq.t), i.e., a sequence
+   * of device pointers (one for each device)
+   *)
+  datatype input_state =
+    GpuNone
+  | GpuAllocated of MLton.Pointer.t Seq.t
+  | GpuPopulated of MLton.Pointer.t Seq.t
+
+  (* ======================== *)
+
+  fun preallocate devices mat : input_state =
+    GpuAllocated (ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
+      let
+        val gpu_id = Seq.nth devices i
+      in 
+        allocDeviceMemory (gpu_id, String.size gpu_id, Array.length (data mat))
+      end)))
+
+
+  fun prepopulate devices mat : input_state =
+    GpuPopulated (ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
+      let
+        val gpu_id = Seq.nth devices i
+      in 
+        allocAndMemcpyFloatsToGpu (gpu_id, String.size gpu_id, data mat, Array.length (data mat))
+      end)))
+
+
+  fun ensurePopulated devices input_state (arr, len) : MLton.Pointer.t GpuData.t =
+    case input_state of
+      GpuPopulated x => Seq.zip (devices, x)
+    | GpuAllocated ptrs =>
+        ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
+          let
+            val gpu_id = Seq.nth devices i
+            val ptr = Seq.nth ptrs i
+          in 
+            (gpu_id, memcpyFloatsToGpu (gpu_id, String.size gpu_id, ptr, arr, len))
+          end))
+    | GpuNone =>
+        ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
+          let
+            val gpu_id = Seq.nth devices i
+          in 
+            (gpu_id, allocAndMemcpyFloatsToGpu (gpu_id, String.size gpu_id, arr, len))
+          end))
+
+  fun freeFloatsGpuData (data: MLton.Pointer.t GpuData.t) =
+    ForkJoin.parfor 1 (0, Seq.length data) (fn i =>
+      let val (gpu_id, ptr) = Seq.nth data i
+      in freeFloatsOnGpu (gpu_id, String.size gpu_id, ptr)
+      end)
+
+  fun syncGpus devices =
+    ForkJoin.parfor 1 (0, Seq.length devices) (fn i =>
+      let val gpu_id = Seq.nth devices i
+      in syncGpu (gpu_id, String.size gpu_id)
+      end);
+
+  (* ======================================================================  *)
+
+
   (* ======================================================================
    * This is the more general algorithm, which allows for non-square sizes
    *)
@@ -447,18 +501,32 @@ struct
   (* ====================================================================== *)
 
 
-  fun gpu_multiply gpu_id (a, b) =
+  fun gpu_multiply devices (da, db) (a, b) =
     if not (isSquare a andalso isSquare b andalso width a = width b) then
       raise MatrixFormat
     else
       let
-        val n = width a
-        val device_a = memcpyFloatsToGpu
-          (gpu_id, String.size gpu_id, data a, Array.length (data a))
-        val device_b = memcpyFloatsToGpu
-          (gpu_id, String.size gpu_id, data b, Array.length (data b))
-        val _ = syncGpu (gpu_id, String.size gpu_id)
+        val gpu_id =
+          if Seq.length devices = 1 then Seq.first devices else
+          Util.die ("error: gpu_multiply: only one device supported at the moment")
 
+        val n = width a
+
+        val need_to_free_a = case da of GpuNone => true | _ => false
+        val need_to_free_b = case db of GpuNone => true | _ => false
+
+        val ((da, db), tm) = Util.getTime (fn () =>
+          let
+            val da = ensurePopulated devices da (data a, Array.length (data a))
+            val db = ensurePopulated devices db (data b, Array.length (data b))
+          in
+            (da, db)
+          end)
+        val _ = print ("gpu_multiply: setup time: " ^ Time.fmt 4 tm ^ "\n")
+
+        val (_, device_a) = Seq.first da
+        val (_, device_b) = Seq.first db
+        
         val output = allocate {width = n, height = n}
         val pkg = rawFancySpawn
           ( gpu_id
@@ -481,8 +549,8 @@ struct
           )
       in
         rawFancyFinish pkg;
-        freeFloatsOnGpu (gpu_id, String.size gpu_id, device_a);
-        freeFloatsOnGpu (gpu_id, String.size gpu_id, device_b);
+        if need_to_free_a then freeFloatsGpuData da else ();
+        if need_to_free_b then freeFloatsGpuData db else ();
         output
       end
 
@@ -656,7 +724,7 @@ struct
     end
 
 
-  fun hybrid_multiply_nonsquare (devices: Device.gpu_identifier Seq.t) (a, b) =
+  fun hybrid_multiply_nonsquare (devices: Device.gpu_identifier Seq.t) (da: input_state, db: input_state) (a, b) =
     if not (width a = height b) then
       raise MatrixFormat
     else
@@ -666,20 +734,22 @@ struct
          *)
         val c = allocate {height = height a, width = width b}
 
+        val need_to_free_a = case da of GpuNone => true | _ => false
+        val need_to_free_b = case db of GpuNone => true | _ => false
+
         val ((da, db), tm) = Util.getTime (fn () =>
           let
-            val da = memcpyFloatsGpuData devices (data a, Array.length (data a))
-            val db = memcpyFloatsGpuData devices (data b, Array.length (data b))
+            val da = ensurePopulated devices da (data a, Array.length (data a))
+            val db = ensurePopulated devices db (data b, Array.length (data b))
           in
-            (* syncGpus devices; *)
             (da, db)
           end)
         val _ = print ("hybrid_multiply_nonsquare: setup time: " ^ Time.fmt 4 tm ^ "\n")
 
       in
         hybrid_multiply_nonsquare_inplace devices 0 Write (da, db) (a, b, c);
-        freeFloatsGpuData da;
-        freeFloatsGpuData db;
+        if need_to_free_a then freeFloatsGpuData da else ();
+        if need_to_free_b then freeFloatsGpuData db else ();
         c
       end
 
