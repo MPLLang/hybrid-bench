@@ -149,7 +149,8 @@ class QuickhullTuner(HybridTuner):
     def params(self):
         return [IntegerParameter('quickhull-par-grain', 1, 10000),
                 IntegerParameter('quickhull-hybrid-grain', 1, 10000),
-                IntegerParameter('quickhull-reduce-inner-grain', 1, 10000),
+                IntegerParameter('quickhull-reduce-grain', 1, 50000),
+                FloatParameter('quickhull-reduce-inner-split', 0.001, 1),
                 FloatParameter('quickhull-reduce-outer-split', 0.001, 1)]
 
     def add_arguments(argparser):

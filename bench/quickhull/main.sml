@@ -73,6 +73,8 @@ struct
       val devices = String.fields (fn c => c = #",")
         (CLA.parseString "devices" "")
 
+      val log = CLA.parseBool "log" false
+
       val points: (R.real * R.real) Seq.t =
         if file = "" then
           raise Fail "Need -points FILE"
