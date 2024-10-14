@@ -53,7 +53,7 @@ class HybridTuner(MeasurementInterface):
         # Program to run
         cmd = './main.mpl.bin'
         # Basic scheduling
-        cmd += f' @mpl procs {self.args.procs} -- -impl hybrid'
+        cmd += f' @mpl procs {self.args.procs} -- -impl hybrid --quiet'
         if self.args.devices:
             cmd += f' -devices "{self.args.devices}"'
         # Measurement config
