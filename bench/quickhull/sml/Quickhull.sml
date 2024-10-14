@@ -14,6 +14,7 @@ struct
 
   structure AS = ArraySlice
   structure Tree = TreeSeq
+  structure CLA = CommandLineArgs
 
   structure R =
   struct
@@ -22,6 +23,10 @@ struct
   end
   
   val zero = R.fromReal 0.0
+
+  val quiet = CLA.parseFlag "quiet"
+
+  fun log f = if not quiet then f () else ()
 
   fun startTiming () = Time.now ()
 
@@ -38,7 +43,7 @@ struct
     let
       val tm' = Time.now ()
     in
-      print ("tick: " ^ msg ^ ": " ^ Time.fmt 4 (Time.- (tm', tm)) ^ "s\n");
+      log (fn () => print ("tick: " ^ msg ^ ": " ^ Time.fmt 4 (Time.- (tm', tm)) ^ "s\n"));
       tm'
     end
 
@@ -75,9 +80,9 @@ struct
       val () = Futhark.Int32Array1.free res_fut
       val t2 = Time.now ()
     in
-      print
+      log (fn () => print
         ("gpu " ^ Int.toString device ^ " top_level_points_above_in_range("
-         ^ Int.toString (hi - lo) ^ "): " ^ tts [t0, t1, t2]);
+         ^ Int.toString (hi - lo) ^ "): " ^ tts [t0, t1, t2]));
 
       ArraySlice.full res
     end
@@ -96,9 +101,9 @@ struct
       val () = Futhark.Int32Array1.free idxs_fut
       val t3 = Time.now ()
     in
-      print
+      log (fn () => print
         ("gpu " ^ Int.toString device ^ " points_above(" ^ Int.toString (Seq.length idxs)
-         ^ "): " ^ tts [t0, t1, t2, t3]);
+         ^ "): " ^ tts [t0, t1, t2, t3]));
       ArraySlice.full res
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
@@ -113,9 +118,9 @@ struct
       val () = Futhark.Int32Array1.free res_fut
       val t2 = Time.now ()
     in
-      print
+      log (fn () => print
         ("gpu " ^ Int.toString device ^ " top_level_filter_then_semihull(): "
-         ^ tts [t0, t1, t2]);
+         ^ tts [t0, t1, t2]));
       Tree.fromArraySeq (ArraySlice.full res)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
@@ -133,9 +138,9 @@ struct
       val () = Futhark.Int32Array1.free idxs_fut
       val t3 = Time.now ()
     in
-      print
+      log (fn () => print
         ("gpu " ^ Int.toString device ^ " filter_then_semihull("
-         ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2, t3]);
+         ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2, t3]));
       Tree.fromArraySeq (ArraySlice.full res)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
@@ -153,9 +158,9 @@ struct
       val () = Futhark.Int32Array1.free idxs_fut
       val t3 = Time.now ()
     in
-      print
+      log (fn () => print
         ("gpu " ^ Int.toString device ^ " semihull_gpu(" ^ Int.toString (Seq.length idxs)
-         ^ "): " ^ tts [t0, t1, t2, t3]);
+         ^ "): " ^ tts [t0, t1, t2, t3]));
       Tree.fromArraySeq (ArraySlice.full res)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
@@ -169,9 +174,9 @@ struct
           (points_fut, Int64.fromInt lo, Int64.fromInt hi)
       val t1 = Time.now ()
     in
-      print
+      log (fn () => print
         ("gpu " ^ Int.toString device ^ " min_max_point_in_range(" ^ Int.toString (hi - lo)
-         ^ "): " ^ tts [t0, t1]);
+         ^ "): " ^ tts [t0, t1]));
       (l, r, b, t)
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
@@ -187,9 +192,9 @@ struct
       val () = Futhark.Int32Array1.free idxs_fut
       val t2 = Time.now ()
     in
-      print
+      log (fn () => print
         ("gpu " ^ Int.toString device ^ " point_furthest_from_line("
-         ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2]);
+         ^ Int.toString (Seq.length idxs) ^ "): " ^ tts [t0, t1, t2]));
       i
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
