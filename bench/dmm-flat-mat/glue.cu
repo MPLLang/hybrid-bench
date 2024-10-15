@@ -229,7 +229,7 @@ void freeFloatsOnGpu(
 
 
 // copy into dst[0..n*n)
-__global__
+/*__global__
 void copy_block(
   float *dst,
   uint64_t height,
@@ -249,7 +249,7 @@ void copy_block(
     int srcIdx = (top + row) * rowskip + left + col;
     dst[i] = src[srcIdx];
   }
-}
+}*/
 
 
 // ==========================================================================
@@ -281,17 +281,18 @@ do_dmm(
 
   set_cuda_device(gpu_id, gpu_id_str_len);
 
-  uint64_t abytes = m*k*sizeof(float);
-  uint64_t bbytes = k*n*sizeof(float);
+  // uint64_t abytes = m*k*sizeof(float);
+  // uint64_t bbytes = k*n*sizeof(float);
   uint64_t cbytes = m*n*sizeof(float);
 
-  float *device_a;
-  float *device_b;
+  // float *device_a;
+  // float *device_b;
   float *device_c;
-  cudaMallocAsync(&device_a, abytes, streams[dev_id]);
-  cudaMallocAsync(&device_b, bbytes, streams[dev_id]);
+  // cudaMallocAsync(&device_a, abytes, streams[dev_id]);
+  // cudaMallocAsync(&device_b, bbytes, streams[dev_id]);
   cudaMallocAsync(&device_c, cbytes, streams[dev_id]);
 
+  /*
   int GRID = ((n*n)+(SIZE-1))/SIZE;
   if(GRID == 0) {
     GRID = 1;
@@ -300,22 +301,29 @@ do_dmm(
   // cudaDeviceSynchronize();
 
   copy_block<<<GRID, SIZE, 0, streams[dev_id]>>>(device_b, k, n, b, bTop, bLeft, bRowskip);
+  */
 
-  timer_report_tick(&t, "--- memcpy to gpu");
+  // timer_report_tick(&t, "--- memcpy to gpu");
 
   float alpha = 1.0;
   float beta = 0.0;
   cublasHandle_t handle;
   cublasCreate(&handle);  
   cublasSetStream(handle, streams[dev_id]);
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha, device_a, m, device_b, k, &beta, device_c, m);
+  cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T,
+    m, n, k,
+    &alpha,
+    /*device_a, m,*/ a + (aTop * aRowskip + aLeft), aRowskip,
+    /*device_b, k,*/ b + (bTop * bRowskip + bLeft), bRowskip,
+    &beta,
+    device_c, m);
   cublasDestroy(handle);
   timer_report_tick(&t, "      cublasSgemm");
 
   cudaMemcpyAsync(c, device_c, cbytes, cudaMemcpyDeviceToHost, streams[dev_id]);
 
-  cudaFreeAsync(device_a, streams[dev_id]);
-  cudaFreeAsync(device_b, streams[dev_id]);
+  // cudaFreeAsync(device_a, streams[dev_id]);
+  // cudaFreeAsync(device_b, streams[dev_id]);
   cudaFreeAsync(device_c, streams[dev_id]);
   timer_report_tick(&t, "  memcpy from gpu");
 
