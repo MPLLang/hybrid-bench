@@ -5,6 +5,13 @@ val doPrepopulate = CommandLineArgs.parseFlag "prepopulate"
 val devices = ArraySlice.full (Array.fromList (String.fields (fn c => c = #",")
   (CommandLineArgs.parseString "devices" "")))
 
+val () = Seq.foreach devices (fn (dev_id, gpu_id) =>
+  let
+    val init = _import "initialize_stream": Int64.int * string * Int64.int -> unit;
+  in
+    init(dev_id, gpu_id, String.size gpu_id)
+  end)
+
 val input1 = MatReal32.tabulate {width = n, height = n} (fn _ => 1.0)
 val input2 = MatReal32.tabulate {width = n, height = n} (fn _ => 3.0)
 

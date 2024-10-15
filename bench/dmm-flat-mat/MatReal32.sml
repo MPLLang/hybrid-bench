@@ -9,7 +9,7 @@ struct
   (* ====================== *)
 
   val rawFancySpawn =
-    _import "fancy_dmm_spawn" public : string * i64 * MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * i64 -> dmm_package;
+    _import "fancy_dmm_spawn" public : i64 * string * i64 * MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * i64 -> dmm_package;
 
   val rawFancyFinish = _import "fancy_dmm_finish" public : dmm_package -> unit;
 
@@ -25,18 +25,18 @@ struct
     _import "cpu_sgemm" public : r32 array * i64 * i64 * r32 array * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * bool -> unit;
 
   val allocAndMemcpyFloatsToGpu =
-    _import "allocAndMemcpyFloatsToGpu" public : string * i64 * r32 array * i64 -> MLton.Pointer.t;
+    _import "allocAndMemcpyFloatsToGpu" public : i64 * string * i64 * r32 array * i64 -> MLton.Pointer.t;
 
   val memcpyFloatsToGpu =
-    _import "memcpyFloatsToGpu" public : string * i64 * MLton.Pointer.t * r32 array * i64 -> MLton.Pointer.t;
+    _import "memcpyFloatsToGpu" public : i64 * string * i64 * MLton.Pointer.t * r32 array * i64 -> MLton.Pointer.t;
 
-  val syncGpu = _import "synchronizeGpu" public : string * i64 -> unit;
+  val syncGpu = _import "synchronizeGpu" public : i64 * string * i64 -> unit;
 
   val freeFloatsOnGpu =
-    _import "freeFloatsOnGpu" public : string * i64 * MLton.Pointer.t -> unit;
+    _import "freeFloatsOnGpu" public : i64 * string * i64 * MLton.Pointer.t -> unit;
 
   val allocDeviceMemory =
-    _import "allocDeviceMemory" : string * Int64.int * Int64.int -> MLton.Pointer.t;
+    _import "allocDeviceMemory" : i64 * string * Int64.int * Int64.int -> MLton.Pointer.t;
 
   (* ======================== *)
 
@@ -310,7 +310,7 @@ struct
       let
         val gpu_id = Seq.nth devices i
       in 
-        allocDeviceMemory (gpu_id, String.size gpu_id, Array.length (data mat))
+        allocDeviceMemory (i, gpu_id, String.size gpu_id, Array.length (data mat))
       end)))
 
 
@@ -319,7 +319,7 @@ struct
       let
         val gpu_id = Seq.nth devices i
       in 
-        allocAndMemcpyFloatsToGpu (gpu_id, String.size gpu_id, data mat, Array.length (data mat))
+        allocAndMemcpyFloatsToGpu (i, gpu_id, String.size gpu_id, data mat, Array.length (data mat))
       end)))
 
 
@@ -332,26 +332,26 @@ struct
             val gpu_id = Seq.nth devices i
             val ptr = Seq.nth ptrs i
           in 
-            (gpu_id, memcpyFloatsToGpu (gpu_id, String.size gpu_id, ptr, data mat, Array.length (data mat)))
+            (gpu_id, memcpyFloatsToGpu (i, gpu_id, String.size gpu_id, ptr, data mat, Array.length (data mat)))
           end))
     | GpuNone =>
         ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
           let
             val gpu_id = Seq.nth devices i
           in 
-            (gpu_id, allocAndMemcpyFloatsToGpu (gpu_id, String.size gpu_id, data mat, Array.length (data mat)))
+            (gpu_id, allocAndMemcpyFloatsToGpu (i, gpu_id, String.size gpu_id, data mat, Array.length (data mat)))
           end))
 
   fun freeFloatsGpuData (data: MLton.Pointer.t GpuData.t) =
     ForkJoin.parfor 1 (0, Seq.length data) (fn i =>
       let val (gpu_id, ptr) = Seq.nth data i
-      in freeFloatsOnGpu (gpu_id, String.size gpu_id, ptr)
+      in freeFloatsOnGpu (i, gpu_id, String.size gpu_id, ptr)
       end)
 
   fun syncGpus devices =
     ForkJoin.parfor 1 (0, Seq.length devices) (fn i =>
       let val gpu_id = Seq.nth devices i
-      in syncGpu (gpu_id, String.size gpu_id)
+      in syncGpu (i, gpu_id, String.size gpu_id)
       end);
 
   (* ======================================================================  *)
@@ -528,8 +528,10 @@ struct
         val (_, device_b) = Seq.first db
         
         val output = allocate {width = n, height = n}
+        val _ = syncGpu (0, gpu_id, String.size gpu_id)
         val pkg = rawFancySpawn
-          ( gpu_id
+          ( 0
+          , gpu_id
           , String.size gpu_id
           , (*data a*) device_a
           , top a
@@ -588,8 +590,10 @@ struct
       (* val _ = print ("calling cuBLAS...\n") *)
       val tmpC = allocate {height = m, width = n}
       val (da, db, gpu_id) = get_device_ptrs (da, db, dev_id)
+      val _ = syncGpu (dev_id, gpu_id, String.size gpu_id)
       val pkg = rawFancySpawn
-        ( gpu_id
+        ( dev_id
+        , gpu_id
         , String.size gpu_id
         , (*data a*) da
         , top a

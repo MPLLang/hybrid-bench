@@ -10,6 +10,9 @@
 
 #define ENABLE_TIMER_TICKS false
 
+#define MAX_NUM_STREAMS 10
+cudaStream_t streams[MAX_NUM_STREAMS];
+
 // ==========================================================================
 // timer stuff
 
@@ -102,27 +105,47 @@ int parse_cuda_device(
   char *end;
   long result = strtol(buf, &end, 10);
   if (end != buf + gpu_id_str_len-1) {
-    printf("ERROR: glue.cu: parse_cuda_device: strtol failed\n");
-    printf("buf contents: %s\n", buf);
-    printf("result %ld\n", result);
-    printf("buf %p gpu_id_str_len %ld end %p\n", (void*)buf, gpu_id_str_len, (void*)end);
+    fprintf(stderr, "ERROR: glue.cu: parse_cuda_device: strtol failed\n");
+    fprintf(stderr, "buf contents: %s\n", buf);
+    fprintf(stderr, "result %ld\n", result);
+    fprintf(stderr, "buf %p gpu_id_str_len %ld end %p\n", (void*)buf, gpu_id_str_len, (void*)end);
     exit(1);
   }
 
   return (int)result;
 }
 
-void set_cuda_device(
+int set_cuda_device(
   char * gpu_id,
   int64_t gpu_id_str_len)
 {
-  cudaSetDevice(parse_cuda_device(gpu_id, gpu_id_str_len));
+  int dev = parse_cuda_device(gpu_id, gpu_id_str_len);
+  cudaSetDevice(dev);
+  return dev;
+}
+
+extern "C"
+void initialize_stream(
+  int64_t dev_id,
+  char * gpu_id,
+  int64_t gpu_id_str_len)
+{
+  if (dev_id >= MAX_NUM_STREAMS) {
+    fprintf(stderr,
+      "ERROR: initialize_stream: dev_id (%ld) >= MAX_NUM_STREAMS (%d)\n",
+      dev_id,
+      MAX_NUM_STREAMS);
+    exit(1);
+  }
+  set_cuda_device(gpu_id, gpu_id_str_len);
+  cudaStreamCreate( &(streams[dev_id]) );
 }
 
 // ==========================================================================
 
 extern "C"
 void * allocDeviceMemory(
+  int64_t dev_id,
   char * gpu_id,
   int64_t gpu_id_str_len,
   int64_t len)
@@ -136,6 +159,7 @@ void * allocDeviceMemory(
 
 extern "C"
 void * memcpyFloatsToGpu(
+  int64_t dev_id,
   char * gpu_id,
   int64_t gpu_id_str_len,
   float *dst,   // device
@@ -150,7 +174,7 @@ void * memcpyFloatsToGpu(
   // float *p;
   // cudaMalloc(&p, len*sizeof(float));
   float *p = dst;
-  cudaMemcpy(p, data, len*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpyAsync(p, data, len*sizeof(float), cudaMemcpyHostToDevice, streams[dev_id]);
   // cudaDeviceSynchronize();
 
   timer_report_tick(&t, "done");
@@ -159,6 +183,7 @@ void * memcpyFloatsToGpu(
 
 extern "C"
 void * allocAndMemcpyFloatsToGpu(
+  int64_t dev_id,
   char * gpu_id,
   int64_t gpu_id_str_len,
   float *data,  // host
@@ -171,7 +196,7 @@ void * allocAndMemcpyFloatsToGpu(
 
   float *p;
   cudaMalloc(&p, len*sizeof(float));
-  cudaMemcpy(p, data, len*sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpyAsync(p, data, len*sizeof(float), cudaMemcpyHostToDevice, streams[dev_id]);
   // cudaDeviceSynchronize();
 
   timer_report_tick(&t, "done");
@@ -180,15 +205,17 @@ void * allocAndMemcpyFloatsToGpu(
 
 extern "C"
 void synchronizeGpu(
+  int64_t dev_id,
   char * gpu_id,
   int64_t gpu_id_str_len)
 {
   set_cuda_device(gpu_id, gpu_id_str_len);
-  cudaDeviceSynchronize();
+  cudaStreamSynchronize(streams[dev_id]);
 }
 
 extern "C"
 void freeFloatsOnGpu(
+  int64_t dev_id,
   char * gpu_id,
   int64_t gpu_id_str_len,
   void *devicePtr)
@@ -253,7 +280,7 @@ struct fancy_dmm_package {
 
 
 extern "C"
-void* fancy_dmm_func(void* rawArg) {
+void* fancy_dmm_func(int64_t dev_id, void* rawArg) {
   struct my_timer_t t;
   timer_begin(&t, "fancy_dmm_func");
 
@@ -278,10 +305,10 @@ void* fancy_dmm_func(void* rawArg) {
   if(GRID == 0) {
     GRID = 1;
   }
-  copy_block<<<GRID, SIZE>>>(device_a, m, k, pack->a, pack->aTop, pack->aLeft, pack->aRowskip);
+  copy_block<<<GRID, SIZE, 0, streams[dev_id]>>>(device_a, m, k, pack->a, pack->aTop, pack->aLeft, pack->aRowskip);
   // cudaDeviceSynchronize();
 
-  copy_block<<<GRID, SIZE>>>(device_b, k, n, pack->b, pack->bTop, pack->bLeft, pack->bRowskip);
+  copy_block<<<GRID, SIZE, 0, streams[dev_id]>>>(device_b, k, n, pack->b, pack->bTop, pack->bLeft, pack->bRowskip);
   cudaDeviceSynchronize();
 
   timer_report_tick(&t, "--- memcpy to gpu");
@@ -290,6 +317,7 @@ void* fancy_dmm_func(void* rawArg) {
   float beta = 0.0;
   cublasHandle_t handle;
   cublasCreate(&handle);  
+  cublasSetStream(handle, streams[dev_id]);
   cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha, device_a, m, device_b, k, &beta, device_c, m);
   cublasDestroy(handle);
   timer_report_tick(&t, "      cublasSgemm");
@@ -309,6 +337,7 @@ void* fancy_dmm_func(void* rawArg) {
 
 extern "C" struct fancy_dmm_package * 
 fancy_dmm_spawn(
+  int64_t dev_id,
   char * gpu_id,
   int64_t gpu_id_str_len,
   float * a,     // on device
@@ -351,7 +380,7 @@ fancy_dmm_spawn(
   pack->finished = false;
 
   set_cuda_device(gpu_id, gpu_id_str_len);
-  fancy_dmm_func(pack);
+  fancy_dmm_func(dev_id, pack);
 
   // if (0 != pthread_create(&(pack->friends), NULL, &fancy_dmm_func, pack)) {
   //   printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
