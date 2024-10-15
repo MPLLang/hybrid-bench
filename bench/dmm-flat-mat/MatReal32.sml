@@ -4,14 +4,14 @@ struct
   type r32 = Real32.real
   type i64 = Int64.int
 
-  type dmm_package = MLton.Pointer.t
+  (* type dmm_package = MLton.Pointer.t *)
 
   (* ====================== *)
 
-  val rawFancySpawn =
-    _import "fancy_dmm_spawn" public : i64 * string * i64 * MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * i64 -> dmm_package;
+  val do_dmm =
+    _import "do_dmm" public : i64 * string * i64 * MLton.Pointer.t * i64 * i64 * i64 * MLton.Pointer.t * i64 * i64 * i64 * r32 array * i64 * i64 * i64 * i64 * i64 * i64 -> unit;
 
-  val rawFancyFinish = _import "fancy_dmm_finish" public : dmm_package -> unit;
+  (* val rawFancyFinish = _import "fancy_dmm_finish" public : dmm_package -> unit; *)
 
   (* ====================== *)
 
@@ -528,8 +528,8 @@ struct
         val (_, device_b) = Seq.first db
         
         val output = allocate {width = n, height = n}
-        val _ = syncGpu (0, gpu_id, String.size gpu_id)
-        val pkg = rawFancySpawn
+        val () = syncGpu (0, gpu_id, String.size gpu_id)
+        val () = do_dmm
           ( 0
           , gpu_id
           , String.size gpu_id
@@ -550,7 +550,6 @@ struct
           , n
           )
       in
-        rawFancyFinish pkg;
         if need_to_free_a then freeFloatsGpuData da else ();
         if need_to_free_b then freeFloatsGpuData db else ();
         output
@@ -591,7 +590,7 @@ struct
       val tmpC = allocate {height = m, width = n}
       val (da, db, gpu_id) = get_device_ptrs (da, db, dev_id)
       val _ = syncGpu (dev_id, gpu_id, String.size gpu_id)
-      val pkg = rawFancySpawn
+      val () = do_dmm
         ( dev_id
         , gpu_id
         , String.size gpu_id
@@ -612,7 +611,6 @@ struct
         , k
         )
 
-      val _ = rawFancyFinish pkg
       val t1 = Time.now ()
     in
       Quiet.println (fn () =>

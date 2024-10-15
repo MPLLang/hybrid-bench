@@ -254,85 +254,9 @@ void copy_block(
 
 // ==========================================================================
 
-
-struct fancy_dmm_package {
-  float * a;  // on device
-  int64_t aTop;
-  int64_t aLeft;
-  int64_t aRowskip;
-  float * b;  // on device
-  int64_t bTop;
-  int64_t bLeft;
-  int64_t bRowskip;
-  float * c;  // on host
-  int64_t cTop;
-  int64_t cLeft;
-  int64_t cRowskip;
-  int64_t m;
-  int64_t n;
-  int64_t k;
-};
-
-
-
 extern "C"
-void* fancy_dmm_func(int64_t dev_id, void* rawArg) {
-  struct my_timer_t t;
-  timer_begin(&t, "fancy_dmm_func");
-
-  struct fancy_dmm_package *pack = (struct fancy_dmm_package *)rawArg;
-
-  uint64_t m = pack->m;
-  uint64_t n = pack->n;
-  uint64_t k = pack->k;
-
-  uint64_t abytes = m*k*sizeof(float);
-  uint64_t bbytes = k*n*sizeof(float);
-  uint64_t cbytes = m*n*sizeof(float);
-
-  float *device_a;
-  float *device_b;
-  float *device_c;
-  cudaMallocAsync(&device_a, abytes, streams[dev_id]);
-  cudaMallocAsync(&device_b, bbytes, streams[dev_id]);
-  cudaMallocAsync(&device_c, cbytes, streams[dev_id]);
-
-  int GRID = ((n*n)+(SIZE-1))/SIZE;
-  if(GRID == 0) {
-    GRID = 1;
-  }
-  copy_block<<<GRID, SIZE, 0, streams[dev_id]>>>(device_a, m, k, pack->a, pack->aTop, pack->aLeft, pack->aRowskip);
-  // cudaDeviceSynchronize();
-
-  copy_block<<<GRID, SIZE, 0, streams[dev_id]>>>(device_b, k, n, pack->b, pack->bTop, pack->bLeft, pack->bRowskip);
-
-  timer_report_tick(&t, "--- memcpy to gpu");
-
-  float alpha = 1.0;
-  float beta = 0.0;
-  cublasHandle_t handle;
-  cublasCreate(&handle);  
-  cublasSetStream(handle, streams[dev_id]);
-  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha, device_a, m, device_b, k, &beta, device_c, m);
-  cublasDestroy(handle);
-  timer_report_tick(&t, "      cublasSgemm");
-
-
-  cudaMemcpyAsync(pack->c, device_c, cbytes, cudaMemcpyDeviceToHost, streams[dev_id]);
-
-  cudaFreeAsync(device_a, streams[dev_id]);
-  cudaFreeAsync(device_b, streams[dev_id]);
-  cudaFreeAsync(device_c, streams[dev_id]);
-  timer_report_tick(&t, "  memcpy from gpu");
-
-  cudaStreamSynchronize(streams[dev_id]);
-
-  return NULL;
-}
-
-
-extern "C" struct fancy_dmm_package * 
-fancy_dmm_spawn(
+void
+do_dmm(
   int64_t dev_id,
   char * gpu_id,
   int64_t gpu_id_str_len,
@@ -352,44 +276,48 @@ fancy_dmm_spawn(
   int64_t n,
   int64_t k)
 {
-  struct fancy_dmm_package *pack = (fancy_dmm_package*)malloc(sizeof(struct fancy_dmm_package));
-
-  pack->a = a;
-  pack->aTop = aTop;
-  pack->aLeft = aLeft;
-  pack->aRowskip = aRowskip;
-
-  pack->b = b;
-  pack->bTop = bTop;
-  pack->bLeft = bLeft;
-  pack->bRowskip = bRowskip;
-
-  pack->c = c;
-  pack->cTop = cTop;
-  pack->cLeft = cLeft;
-  pack->cRowskip = cRowskip;
-
-  pack->m = m;
-  pack->n = n;
-  pack->k = k;
+  struct my_timer_t t;
+  timer_begin(&t, "do_dmm");
 
   set_cuda_device(gpu_id, gpu_id_str_len);
-  fancy_dmm_func(dev_id, pack);
 
-  return pack;
-}
+  uint64_t abytes = m*k*sizeof(float);
+  uint64_t bbytes = k*n*sizeof(float);
+  uint64_t cbytes = m*n*sizeof(float);
 
+  float *device_a;
+  float *device_b;
+  float *device_c;
+  cudaMallocAsync(&device_a, abytes, streams[dev_id]);
+  cudaMallocAsync(&device_b, bbytes, streams[dev_id]);
+  cudaMallocAsync(&device_c, cbytes, streams[dev_id]);
 
-/* TODO: memcpy from GPU back to pack->output
- *
- * (NOTE: futhark_values is equivalent of this memcpy. needs to be replaced) */
-extern "C" void fancy_dmm_finish(
-  struct fancy_dmm_package * pack)
-{
-  // if (0 != pthread_join(pack->friends, NULL)) {
-  //   printf("ERROR: glue.c: pthread_join failed\n");
-  //   exit(1);
-  // }
+  int GRID = ((n*n)+(SIZE-1))/SIZE;
+  if(GRID == 0) {
+    GRID = 1;
+  }
+  copy_block<<<GRID, SIZE, 0, streams[dev_id]>>>(device_a, m, k, a, aTop, aLeft, aRowskip);
+  // cudaDeviceSynchronize();
 
-  free(pack);
+  copy_block<<<GRID, SIZE, 0, streams[dev_id]>>>(device_b, k, n, b, bTop, bLeft, bRowskip);
+
+  timer_report_tick(&t, "--- memcpy to gpu");
+
+  float alpha = 1.0;
+  float beta = 0.0;
+  cublasHandle_t handle;
+  cublasCreate(&handle);  
+  cublasSetStream(handle, streams[dev_id]);
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, m, n, k, &alpha, device_a, m, device_b, k, &beta, device_c, m);
+  cublasDestroy(handle);
+  timer_report_tick(&t, "      cublasSgemm");
+
+  cudaMemcpyAsync(c, device_c, cbytes, cudaMemcpyDeviceToHost, streams[dev_id]);
+
+  cudaFreeAsync(device_a, streams[dev_id]);
+  cudaFreeAsync(device_b, streams[dev_id]);
+  cudaFreeAsync(device_c, streams[dev_id]);
+  timer_report_tick(&t, "  memcpy from gpu");
+
+  cudaStreamSynchronize(streams[dev_id]);
 }
