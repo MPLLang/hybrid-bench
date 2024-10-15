@@ -41,6 +41,21 @@ val gpu_input2 =
   else if doPrepopulate then MatReal32.prepopulate devices input2
   else MatReal32.GpuNone
 
+
+(* This is an attempt to avoid the performance instability of the initial
+ * cudaMalloc+cudaMemcpy in the benchmark. It doesn't seem to be working,
+ * though.
+ *)
+val tmp = MatReal32.tabulate {width = 1000, height = 1000} (fn _ => 1.0)
+fun prep () =
+  let
+    val stuff = MatReal32.prepopulate devices tmp
+    val stuff = MatReal32.ensurePopulated devices stuff tmp
+  in
+    MatReal32.freeFloatsGpuData stuff;
+    MatReal32.syncGpus devices
+  end
+
 val bench =
   case impl of
     "cpu" => MatReal32.cpu_multiply_nonsquare
@@ -50,7 +65,7 @@ val bench =
   (* | "hybrid-pow2" => MatReal32.hybrid_multiply devices *)
   | _ => Util.die ("unknown -impl " ^ impl)
 
-val result = Benchmark.run "dmm" (fn _ => bench (input1, input2))
+val result = Benchmark.run_with_prep "dmm" {prep = prep, bench = fn () => bench (input1, input2)}
 val arr = MatReal32.data result
 val _ = print (Real32.toString (Array.sub (arr, 0)) ^ "\n")
 

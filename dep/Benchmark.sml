@@ -1,11 +1,12 @@
 structure Benchmark =
 struct
 
-  fun getTimes msg n f =
+  fun getTimes msg n (prep, bench) =
     let
       fun loop tms n =
         let
-          val (result, tm) = Util.getTime f
+          val () = prep ()
+          val (result, tm) = Util.getTime bench
         in
           print (msg ^ " " ^ Time.fmt 4 tm ^ "s\n");
 
@@ -18,7 +19,7 @@ struct
       loop [] n
     end
 
-  fun run msg f =
+  fun run_with_prep msg {prep, bench} =
     let
       val warmup = Time.fromReal (CommandLineArgs.parseReal "warmup" 0.0)
       val rep = CommandLineArgs.parseInt "repeat" 1
@@ -34,7 +35,8 @@ struct
           () (* warmup done! *)
         else
           let
-            val (_, tm) = Util.getTime f
+            val () = prep ()
+            val (_, tm) = Util.getTime bench
           in
             print ("warmup_run " ^ Time.fmt 4 tm ^ "s\n");
             warmupLoop startTime
@@ -49,7 +51,7 @@ struct
 
       val _ = print (msg ^ "\n")
       val t0 = Time.now ()
-      val (result, tms) = getTimes "time" rep f
+      val (result, tms) = getTimes "time" rep (prep, bench)
       val t1 = Time.now ()
       val endToEnd = Time.- (t1, t0)
 
@@ -68,5 +70,9 @@ struct
       print ("end-to-end " ^ Time.fmt 4 endToEnd ^ "s\n");
       result
     end
+
+
+  fun run msg f =
+    run_with_prep msg {prep = (fn () => ()), bench = f}
 
 end

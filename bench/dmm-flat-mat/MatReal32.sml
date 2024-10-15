@@ -323,7 +323,7 @@ struct
       end)))
 
 
-  fun ensurePopulated devices input_state (arr, len) : MLton.Pointer.t GpuData.t =
+  fun ensurePopulated devices input_state mat : MLton.Pointer.t GpuData.t =
     case input_state of
       GpuPopulated x => Seq.zip (devices, x)
     | GpuAllocated ptrs =>
@@ -332,14 +332,14 @@ struct
             val gpu_id = Seq.nth devices i
             val ptr = Seq.nth ptrs i
           in 
-            (gpu_id, memcpyFloatsToGpu (gpu_id, String.size gpu_id, ptr, arr, len))
+            (gpu_id, memcpyFloatsToGpu (gpu_id, String.size gpu_id, ptr, data mat, Array.length (data mat)))
           end))
     | GpuNone =>
         ArraySlice.full (SeqBasis.tabulate 1 (0, Seq.length devices) (fn i =>
           let
             val gpu_id = Seq.nth devices i
           in 
-            (gpu_id, allocAndMemcpyFloatsToGpu (gpu_id, String.size gpu_id, arr, len))
+            (gpu_id, allocAndMemcpyFloatsToGpu (gpu_id, String.size gpu_id, data mat, Array.length (data mat)))
           end))
 
   fun freeFloatsGpuData (data: MLton.Pointer.t GpuData.t) =
@@ -517,8 +517,8 @@ struct
 
         val ((da, db), tm) = Util.getTime (fn () =>
           let
-            val da = ensurePopulated devices da (data a, Array.length (data a))
-            val db = ensurePopulated devices db (data b, Array.length (data b))
+            val da = ensurePopulated devices da a
+            val db = ensurePopulated devices db b
           in
             (da, db)
           end)
@@ -739,8 +739,8 @@ struct
 
         val ((da, db), tm) = Util.getTime (fn () =>
           let
-            val da = ensurePopulated devices da (data a, Array.length (data a))
-            val db = ensurePopulated devices db (data b, Array.length (data b))
+            val da = ensurePopulated devices da a
+            val db = ensurePopulated devices db b
           in
             (da, db)
           end)
