@@ -31,6 +31,10 @@ def get_avgtime(s):
     ts = get_times(s)
     return sum(ts)/len(ts)
 
+def get_medtime(s):
+    ts = get_times(s)
+    return sorted(ts)[len(ts) // 2]
+
 class HybridTuner(MeasurementInterface):
     def __init__(self, args, *pargs, **kwargs):
         super(HybridTuner, self).__init__(args, *pargs, **kwargs)
@@ -75,6 +79,13 @@ class HybridTuner(MeasurementInterface):
 
         cmd = self.gen_run_cmd(data)
 
+        if self.args.average_by == "median":
+          parser = get_medtime
+        elif self.args.average_by == "mean":
+          parser = get_avgtime
+        else:
+          raise Exception(f"unknown average_by: {self.args.average_by}")
+
         result = self.call_program(cmd)
         if result['returncode'] != 0:
             stdout=result['stdout'].decode('utf8')
@@ -82,7 +93,7 @@ class HybridTuner(MeasurementInterface):
             self.log.info(f'Command failed:\n{cmd}\nstdout:\n{stdout}\nstderr:{stderr}')
             return Result(state='ERROR', time=float('inf'))
         else:
-            return Result(time=get_avgtime(result['stdout'].decode('utf8')))
+            return Result(time=parser(result['stdout'].decode('utf8')))
 
     def save_final_config(self, cfg):
         """called at the end of tuning"""
@@ -159,6 +170,20 @@ class QuickhullTuner(HybridTuner):
     def workload(self):
         return f'-points {self.args.points}'
 
+
+class DmmTuner(HybridTuner):
+    def params(self):
+        return [IntegerParameter('dmm-leaf-size', 10, 1000),
+                IntegerParameter('dmm-gpu-thresh', 100, 10000),
+                FloatParameter('dmm-split', 0.1, 0.9)]
+
+    def add_arguments(argparser):
+        argparser.add_argument('--size', type=int, metavar='SIZE', required=True)
+
+    def workload(self):
+        return f'-n {self.args.size}'
+
+
 class SparseMxvTuner(HybridTuner):
     def params(self):
         return [IntegerParameter('matcoo-nnz-grain', 1, 10000),
@@ -196,7 +221,8 @@ problems = {
     'kmeans': KmeansTuner,
     'quickhull': QuickhullTuner,
     'sparse-mxv': SparseMxvTuner,
-    'mergesort': MergesortTuner
+    'mergesort': MergesortTuner,
+    'dmm': DmmTuner
 }
 
 problem=sys.argv[1]
@@ -213,4 +239,5 @@ if __name__ == '__main__':
     tuner.add_arguments(argparser)
     argparser.add_argument('--procs', type=int, metavar='INT', default='64')
     argparser.add_argument('--devices', type=str, metavar='STR', default=None)
+    argparser.add_argument('--average_by', type=str, metavar='[mean|median]', default='mean')
     tuner.main(argparser.parse_args())

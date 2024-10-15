@@ -173,9 +173,9 @@ struct
 
   structure DMM =
   struct
-    val leaf_size = CommandLineArgs.parseInt "dmm-leaf-size" 100
-    val gpu_thresh = CommandLineArgs.parseInt "dmm-gpu-thresh" 1000
-    val split_frac = CommandLineArgs.parseReal "dmm-split" 0.5
+    val leaf_size = CommandLineArgs.parseInt "dmm-leaf-size" 500
+    val gpu_thresh = CommandLineArgs.parseInt "dmm-gpu-thresh" 1500
+    val split_frac = CommandLineArgs.parseReal "dmm-split" 0.65
   end
 
 end
