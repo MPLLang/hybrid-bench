@@ -66,6 +66,7 @@ fun prep () =
 val bench =
   case impl of
     "cpu" => MatReal32.cpu_multiply_nonsquare
+  | "cpu-openblas" => MatReal32.cpu_multiply_openblas
   (* | "cpu-pow2" => MatReal32.cpu_multiply *)
   | "gpu" => MatReal32.gpu_multiply devices (gpu_input1, gpu_input2)
   | "hybrid" => MatReal32.hybrid_multiply_nonsquare devices (gpu_input1, gpu_input2)

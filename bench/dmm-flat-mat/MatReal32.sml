@@ -498,6 +498,15 @@ struct
       end
 
 
+  fun cpu_multiply_openblas (a, b) =
+    if not (width a = height b) then
+      raise MatrixFormat
+    else
+      let val c = allocate {height = height a, width = width b}
+      in better_leaf Write (a, b, c); c
+      end
+
+
   (* ====================================================================== *)
 
 
