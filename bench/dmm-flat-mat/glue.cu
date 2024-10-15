@@ -152,7 +152,7 @@ void * allocDeviceMemory(
 {
   set_cuda_device(gpu_id, gpu_id_str_len);
   float *p;
-  cudaMalloc(&p, len * sizeof(float));
+  cudaMallocAsync(&p, len * sizeof(float), streams[dev_id]);
   return p;
 }
 
@@ -195,7 +195,7 @@ void * allocAndMemcpyFloatsToGpu(
   set_cuda_device(gpu_id, gpu_id_str_len);
 
   float *p;
-  cudaMalloc(&p, len*sizeof(float));
+  cudaMallocAsync(&p, len*sizeof(float), streams[dev_id]);
   cudaMemcpyAsync(p, data, len*sizeof(float), cudaMemcpyHostToDevice, streams[dev_id]);
   // cudaDeviceSynchronize();
 
@@ -221,7 +221,7 @@ void freeFloatsOnGpu(
   void *devicePtr)
 {
   set_cuda_device(gpu_id, gpu_id_str_len);
-  cudaFree(devicePtr);
+  cudaFreeAsync(devicePtr, streams[dev_id]);
 }
 
 
@@ -271,10 +271,6 @@ struct fancy_dmm_package {
   int64_t m;
   int64_t n;
   int64_t k;
-
-  /* these should stay */
-  bool finished;
-  pthread_t friends;
 };
 
 
@@ -297,9 +293,9 @@ void* fancy_dmm_func(int64_t dev_id, void* rawArg) {
   float *device_a;
   float *device_b;
   float *device_c;
-  cudaMalloc(&device_a, abytes);
-  cudaMalloc(&device_b, bbytes);
-  cudaMalloc(&device_c, cbytes);
+  cudaMallocAsync(&device_a, abytes, streams[dev_id]);
+  cudaMallocAsync(&device_b, bbytes, streams[dev_id]);
+  cudaMallocAsync(&device_c, cbytes, streams[dev_id]);
 
   int GRID = ((n*n)+(SIZE-1))/SIZE;
   if(GRID == 0) {
@@ -309,7 +305,6 @@ void* fancy_dmm_func(int64_t dev_id, void* rawArg) {
   // cudaDeviceSynchronize();
 
   copy_block<<<GRID, SIZE, 0, streams[dev_id]>>>(device_b, k, n, pack->b, pack->bTop, pack->bLeft, pack->bRowskip);
-  cudaDeviceSynchronize();
 
   timer_report_tick(&t, "--- memcpy to gpu");
 
@@ -323,14 +318,15 @@ void* fancy_dmm_func(int64_t dev_id, void* rawArg) {
   timer_report_tick(&t, "      cublasSgemm");
 
 
-  cudaMemcpy(pack->c, device_c, cbytes, cudaMemcpyDeviceToHost);
+  cudaMemcpyAsync(pack->c, device_c, cbytes, cudaMemcpyDeviceToHost, streams[dev_id]);
 
-  cudaFree(device_a);
-  cudaFree(device_b);
-  cudaFree(device_c);
+  cudaFreeAsync(device_a, streams[dev_id]);
+  cudaFreeAsync(device_b, streams[dev_id]);
+  cudaFreeAsync(device_c, streams[dev_id]);
   timer_report_tick(&t, "  memcpy from gpu");
 
-  __atomic_store_n(&(pack->finished), (bool)true, __ATOMIC_SEQ_CST); /* VERY IMPORTANT! */
+  cudaStreamSynchronize(streams[dev_id]);
+
   return NULL;
 }
 
@@ -377,15 +373,8 @@ fancy_dmm_spawn(
   pack->n = n;
   pack->k = k;
 
-  pack->finished = false;
-
   set_cuda_device(gpu_id, gpu_id_str_len);
   fancy_dmm_func(dev_id, pack);
-
-  // if (0 != pthread_create(&(pack->friends), NULL, &fancy_dmm_func, pack)) {
-  //   printf("ERROR: glue.c: futdMMSpawn: pthread_create failed\n");
-  //   exit(1);
-  // }
 
   return pack;
 }
