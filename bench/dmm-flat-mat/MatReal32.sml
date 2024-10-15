@@ -522,7 +522,7 @@ struct
           in
             (da, db)
           end)
-        val _ = print ("gpu_multiply: setup time: " ^ Time.fmt 4 tm ^ "\n")
+        val _ = Quiet.println (fn () => "gpu_multiply: setup time: " ^ Time.fmt 4 tm)
 
         val (_, device_a) = Seq.first da
         val (_, device_b) = Seq.first db
@@ -611,9 +611,9 @@ struct
       val _ = rawFancyFinish pkg
       val t1 = Time.now ()
     in
-      print
-        ("gpu " ^ Int.toString dev_id ^ ":" ^ gpu_id ^ " dmm(" ^ Int.toString m ^ "," ^ Int.toString n ^ ","
-         ^ Int.toString k ^ ") " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s\n");
+      Quiet.println (fn () =>
+        "gpu " ^ Int.toString dev_id ^ ":" ^ gpu_id ^ " dmm(" ^ Int.toString m ^ "," ^ Int.toString n ^ ","
+        ^ Int.toString k ^ ") " ^ Time.fmt 4 (Time.- (t1, t0)) ^ "s");
 
       tmpC
     end
@@ -744,7 +744,8 @@ struct
           in
             (da, db)
           end)
-        val _ = print ("hybrid_multiply_nonsquare: setup time: " ^ Time.fmt 4 tm ^ "\n")
+        val _ = Quiet.println (fn () =>
+          "hybrid_multiply_nonsquare: setup time: " ^ Time.fmt 4 tm)
 
       in
         hybrid_multiply_nonsquare_inplace devices 0 Write (da, db) (a, b, c);
