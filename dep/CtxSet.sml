@@ -31,6 +31,7 @@ functor CtxSetFn
      sig
        val new: cfg -> ctx
        val free: ctx -> unit
+       val report: ctx -> string
      end
    end): CTX_SET where type ctx = F.ctx =
 struct
@@ -57,11 +58,40 @@ struct
            (device, ctx)
          end) (Seq.fromList devices)
 
-  fun free (ctxSet: ctx_set) =
-    let val _ = Seq.map (fn (_, ctx) => F.Context.free ctx) ctxSet
-    in ()
+  fun writeFile fname s =
+    let val os = TextIO.openOut fname
+    in TextIO.output (os, s) before TextIO.closeOut os
     end
 
+  fun toCtxList (ctxSet: ctx_set) =
+    Seq.toList (Seq.map (fn (_, ctx) => ctx) ctxSet)
+
+  fun report (ctxSet: ctx_set) =
+    if profile then
+        let
+          val _ =
+            List.foldl
+              (fn (ctx, idx) =>
+                 let
+                   val fname = "futhark" ^ (Int.toString idx) ^ ".json"
+                   val () = print ("Writing " ^ fname ^ "\n")
+                   val _ =
+                     (writeFile fname
+                        (F.Context.report ctx))
+                 in
+                   idx + 1
+                 end) 0 (toCtxList ctxSet)
+        in
+          ()
+        end
+      else
+        ()
+
+  fun free (ctxSet: ctx_set) =
+    let val () = report ctxSet
+        val _ = Seq.map (fn (_, ctx) => F.Context.free ctx) ctxSet
+    in ()
+    end
 
   fun choose (ctxSet: ctx_set) (device: device_identifier) =
     let
@@ -73,7 +103,4 @@ struct
     in
       ctx
     end
-
-  fun toCtxList (ctxSet: ctx_set) =
-    Seq.toList (Seq.map (fn (_, ctx) => ctx) ctxSet)
 end
