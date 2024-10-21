@@ -10,4 +10,6 @@ sig
   val choose: ctx_set -> device_identifier -> ctx
   val toCtxList: ctx_set -> ctx list
   val free: ctx_set -> unit
+  val pauseProfiling: ctx_set -> unit
+  val unpauseProfiling: ctx_set -> unit
 end

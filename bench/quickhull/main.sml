@@ -107,10 +107,12 @@ struct
 
       (* structure FutharkPoints = GpuData(type t = Futhark.Real64Array2.t) *)
 
+      val () = CtxSet.pauseProfiling ctxSet
       val points = FlatPairSeq.fromArraySeq points
       val (points_fut_set, tm) = Util.getTime (fn _ =>
         (GpuData.initialize ctxSet (futharkPoints points)))
       val _ = print ("copied points to GPUs in " ^ Time.fmt 4 tm ^ "s\n")
+      val () = CtxSet.unpauseProfiling ctxSet
 
       val bench =
         case impl of

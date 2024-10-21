@@ -32,6 +32,8 @@ functor CtxSetFn
        val new: cfg -> ctx
        val free: ctx -> unit
        val report: ctx -> string
+       val pauseProfiling: ctx -> unit
+       val unpauseProfiling: ctx -> unit
      end
    end): CTX_SET where type ctx = F.ctx =
 struct
@@ -103,4 +105,10 @@ struct
     in
       ctx
     end
+
+  fun pauseProfiling (ctxSet: ctx_set) =
+    List.app F.Context.pauseProfiling (toCtxList ctxSet)
+
+  fun unpauseProfiling (ctxSet: ctx_set) =
+    List.app F.Context.unpauseProfiling (toCtxList ctxSet)
 end
