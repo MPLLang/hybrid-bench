@@ -263,15 +263,15 @@ do_dmm(
   float * a,     // on device
   int64_t aTop,
   int64_t aLeft,
-  int64_t aRowskip,
+  int64_t aColskip,
   float * b,     // on device
   int64_t bTop,
   int64_t bLeft,
-  int64_t bRowskip,
+  int64_t bColskip,
   float * c,     // on host
   int64_t cTop,
   int64_t cLeft,
-  int64_t cRowskip,
+  int64_t cColskip,
   int64_t m,
   int64_t n,
   int64_t k)
@@ -310,11 +310,11 @@ do_dmm(
   cublasHandle_t handle;
   cublasCreate(&handle);  
   cublasSetStream(handle, streams[dev_id]);
-  cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_T,
+  cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N,
     m, n, k,
     &alpha,
-    /*device_a, m,*/ a + (aTop * aRowskip + aLeft), aRowskip,
-    /*device_b, k,*/ b + (bTop * bRowskip + bLeft), bRowskip,
+    /*device_a, m,*/ a + (aLeft * aColskip + aTop), aColskip,
+    /*device_b, k,*/ b + (bLeft * bColskip + bTop), bColskip,
     &beta,
     device_c, m);
   cublasDestroy(handle);

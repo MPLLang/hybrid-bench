@@ -12,8 +12,10 @@ val () = Seq.foreach devices (fn (dev_id, gpu_id) =>
     init(dev_id, gpu_id, String.size gpu_id)
   end)
 
-val input1 = MatReal32.tabulate {width = n, height = n} (fn _ => 1.0)
-val input2 = MatReal32.tabulate {width = n, height = n} (fn _ => 3.0)
+val input1 = MatReal32.tabulate {width = n, height = n} (fn {row, col} =>
+  Real32.fromInt (Util.hash (col*n + row) mod 10000000) / 100000000.0)
+val input2 = MatReal32.tabulate {width = n, height = n} (fn {row, col} =>
+  Real32.fromInt (Util.hash (n*n + col*n + row) mod 10000000) / 100000000.0)
 
 val _ = print ("n " ^ Int.toString n ^ "\n")
 val _ = print ("impl " ^ impl ^ "\n")
@@ -78,12 +80,15 @@ val arr = MatReal32.data result
 val _ = print (Real32.toString (Array.sub (arr, 0)) ^ "\n")
 
 
+val expected = MatReal32.data (MatReal32.gpu_multiply (Seq.singleton (Seq.first devices)) (MatReal32.GpuNone, MatReal32.GpuNone) (input1, input2))
+
+
 fun closeEnough (a, b) =
-  Real32.abs (a - b) <= 0.0000001
+  Real32.abs (a - b) <= 0.001
 
 
 val error = FindFirst.findFirst 1000 (0, n * n) (fn i =>
-  not (closeEnough (Array.sub (arr, i), Real32.fromInt n * 3.0)))
+  not (closeEnough (Array.sub (arr, i), Array.sub (expected, i))))
 
 val _ =
   case error of
@@ -91,7 +96,7 @@ val _ =
   | SOME i =>
       print
         ("correct? NO!\nfound error: output[" ^ Int.toString i ^ "] = "
-         ^ Real32.toString (Array.sub (arr, i)) ^ "\n")
+         ^ Real32.toString (Array.sub (arr, i)) ^ "; expected " ^ Real32.toString (Array.sub (expected, i)) ^ "\n")
 
 val _ =
   if n > 20 then
@@ -99,6 +104,6 @@ val _ =
   else
     Util.for (0, n) (fn i =>
       ( Util.for (0, n) (fn j =>
-          (print (Real32.toString (Array.sub (arr, i * n + j))); print " "))
+          (print (Real32.toString (Array.sub (arr, i + (n * j)))); print " "))
       ; print "\n"
       ))

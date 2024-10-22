@@ -148,15 +148,18 @@ struct
   fun mat (Slice {mat = m, ...}) = m
   fun data (Slice {mat = Mat {data = d, ...}, ...}) = d
   fun rowskip (Slice {mat = Mat {width = w, ...}, ...}) = w
-
+  fun colskip (Slice {mat = Mat {height = h, ...}, ...}) = h
 
   fun isSquare x =
     (width x = height x)
 
 
   fun copy {src, dst} =
-    if width src * height src <= 100000 then
-      let
+    if width src <> width dst orelse height src <> height dst then
+      raise MatrixFormat
+    else if width src * height src <= 100000 then
+      (* OLD CODE: ROW-MAJOR ORDERING *)
+      (* let
         val Mat {width = dstBigWidth, data = dstData, ...} = mat dst
         val Mat {width = srcBigWidth, data = srcData, ...} = mat src
 
@@ -169,7 +172,23 @@ struct
           end
       in
         Util.for (0, height src) blockRow
+      end *)
+
+      (* NEW CODE: COL-MAJOR ORDERING *)
+      let
+        val Mat {height = dstBigHeight, data = dstData, ...} = mat dst
+        val Mat {height = srcBigHeight, data = srcData, ...} = mat src
+        fun blockCol j =
+          let
+            val dstStart = (j + left dst) * dstBigHeight + top dst
+            val srcStart = (j + left src) * srcBigHeight + top src
+          in
+            memcpy_floats (dstData, dstStart, srcData, srcStart, height src)
+          end
+      in
+        Util.for (0, width src) blockCol
       end
+
     else
       let
         val (s11, s12, s21, s22) = blocks src
@@ -212,7 +231,8 @@ struct
 
       fun doit slice =
         if width slice * height slice <= 10000 then
-          let
+          (* OLD CODE: ROW-MAJOR ORDERING *)
+          (* let
             fun blockRow j =
               let
                 val bigRow = j + top slice
@@ -230,7 +250,35 @@ struct
               end
           in
             Util.for (0, height slice) blockRow
+          end *)
+
+          (* NEW CODE: COL-MAJOR ORDERING *)
+          let
+            (* bigRow -> bigCol *)
+            (* thisRow -> thisCol *)
+            (* t -> l *)
+            (* l -> t *)
+            (* ll -> tt *)
+            (* left -> top *)
+            (* top -> left *)
+            fun blockCol j =
+              let
+                val arr = data slice
+                val thisCol = left slice + j - l
+                val tt = top slice
+                val start = colskip slice * (j + left slice) + tt
+              in
+                Util.for (0, height slice) (fn i =>
+                  Array.update (arr, start + i, f
+                    { row = tt + i - t
+                    , col = thisCol
+                    , v = Array.sub (arr, start + i)
+                    }))
+              end
+          in
+            Util.for (0, width slice) blockCol
           end
+
         else
           let
             val (b11, b12, b21, b22) = blocks slice
@@ -250,7 +298,8 @@ struct
 
       fun fillIn slice =
         if width slice * height slice <= 10000 then
-          let
+          (* OLD CODE: ROW-MAJOR *)
+          (* let
             fun blockRow j =
               let
                 val bigRow = j + top slice
@@ -262,7 +311,23 @@ struct
               end
           in
             Util.for (0, height slice) blockRow
+          end *)
+
+          (* NEW CODE: COL-MAJOR *)
+          let
+            fun blockCol j =
+              let
+                val jj = j + left slice
+                val start = h * jj + top slice
+              in
+                Util.for (0, height slice) (fn i =>
+                  Array.update (data, start + i, f
+                    {row = top slice + i, col = jj}))
+              end
+          in
+            Util.for (0, width slice) blockCol
           end
+
         else
           let
             val (b11, b12, b21, b22) = blocks slice
@@ -402,14 +467,14 @@ struct
       val n = width b
       val k = width a
 
-      val lda = rowskip a
-      val offa = rowskip a * top a + left a
+      val lda = colskip a
+      val offa = colskip a * left a + top a
 
-      val ldb = rowskip b
-      val offb = rowskip b * top b + left b
+      val ldb = colskip b
+      val offb = colskip b * left b + top b
 
-      val ldc = rowskip c
-      val offc = rowskip c * top c + left c
+      val ldc = colskip c
+      val offc = colskip c * left c + top c
     in
       cpu_sgemm (
         data a, offa, lda,
@@ -545,11 +610,11 @@ struct
           , (*data a*) device_a
           , top a
           , left a
-          , rowskip a
+          , colskip a
           , (*data b*) device_b
           , top b
           , left b
-          , rowskip b
+          , colskip b
           , (*data c*) data output
           , (*top c*) 0
           , (*left c*) 0
@@ -606,11 +671,11 @@ struct
         , (*data a*) da
         , top a
         , left a
-        , rowskip a
+        , colskip a
         , (*data b*) db
         , top b
         , left b
-        , rowskip b
+        , colskip b
         , (*data c*) data tmpC
         , (*top c*) 0
         , (*left c*) 0
@@ -729,7 +794,7 @@ struct
                     val arr = data tmpC
                   in
                     modify c (fn {row, col, v} =>
-                      v + Array.sub (arr, row * n + col))
+                      v + Array.sub (arr, col * m + row))
                   end
         end
     end

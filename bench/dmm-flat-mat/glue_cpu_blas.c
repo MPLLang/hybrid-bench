@@ -28,10 +28,10 @@ void simple_cpu_sgemm(
   int32_t bool_accumulate)
 {
   if (bool_accumulate) {
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1, k, input2, n, 1.0, output, n);
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1, k, input2, n, 1.0, output, n);
   }
   else {
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1, k, input2, n, 0.0, output, n);
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1, k, input2, n, 0.0, output, n);
   }
 }
 
@@ -51,10 +51,10 @@ void cpu_sgemm(
   int32_t bool_accumulate)
 {
   if (bool_accumulate) {
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1+off1, ld1, input2+off2, ld2, 1.0, output+offo, ldo);
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1+off1, ld1, input2+off2, ld2, 1.0, output+offo, ldo);
   }
   else {
-    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1+off1, ld1, input2+off2, ld2, 0.0, output+offo, ldo);
+    cblas_sgemm(CblasColMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, input1+off1, ld1, input2+off2, ld2, 0.0, output+offo, ldo);
   }
 }
 
