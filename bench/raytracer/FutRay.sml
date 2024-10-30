@@ -68,39 +68,31 @@ struct
 
   structure PreparedSceneSet =
   struct
-    open CtxSet
+    type scene_set = prepared_scene GpuData.t
 
-    type scene_set = (device_identifier * prepared_scene) Seq.t
-
-    fun prepareFromCtxSet (ctxSet: ctx_set) (height, width) =
-      Seq.map
-        (fn (device, ctx) =>
-           let val scene = prepare_rgbbox_scene (ctx, height, width)
-           in (device, scene)
-           end) ctxSet
+    fun prepareFromCtxSet ctxSet (height, width) =
+      GpuData.initialize ctxSet (fn ctx => prepare_rgbbox_scene (ctx, height, width))
 
     fun freeScene (sceneSet: scene_set) =
-      Seq.map (fn (_, scene) => prepare_rgbbox_scene_free scene) sceneSet
+      GpuData.free sceneSet prepare_rgbbox_scene_free
 
-    fun choose (sceneSet: scene_set) (device: device_identifier) =
-      let
-        val i =
-          valOf (FindFirst.findFirstSerial (0, Seq.length sceneSet) (fn i =>
-            #1 (Seq.nth sceneSet i) = device))
-      in
-        #2 (Seq.nth sceneSet i)
-      end
+    fun choose sceneSet device =
+      GpuData.choose sceneSet device
   end
 
-  fun render ctx {prepared, height, width} output : unit =
+  fun render ctx {prepared, height, width} output : (Time.time * Time.time) =
     let
+      val t0 = Time.now ()
       val (_, start, len) = ArraySlice.base output
       val arr = Futhark.Entry.render_pixels ctx
         (height, width, start, len, prepared)
+      val () = Futhark.Context.sync ctx
+      val t1 = Time.now ()
       val () = Futhark.Int32Array1.values_into arr output
       val () = Futhark.Int32Array1.free arr
+      val t2 = Time.now ()
     in
-      ()
+      (Time.- (t1, t0), Time.- (t2, t1))
     end
     handle Futhark.Error msg => Util.die ("Futhark error: " ^ msg)
 

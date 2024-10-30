@@ -1,13 +1,13 @@
 structure CLA = CommandLineArgs
 
-val maxIter = (*CLA.parseInt "max-iter"*) 50
+val maxIter = CLA.parseInt "max-iter" 50
 val divergeThresh = (*CLA.parseReal "diverge-thresh"*) 4.0
 
 val _ = print ("max-iter " ^ Int.toString maxIter ^ "\n")
 val _ = print ("diverge-thresh " ^ Real.toString divergeThresh ^ "\n")
 
 (* pixels per unit of the complex plane *)
-val resolution = (*CLA.parseInt "resolution"*) 5000
+val resolution = CLA.parseInt "resolution" 10000
 val _ = print ("resolution " ^ Int.toString resolution ^ "\n")
 
 (* rectangular query region *)
@@ -29,6 +29,9 @@ val _ = print ("w " ^ Int.toString w ^ "\n")
 
 val dx = (right - left) / Real.fromInt w
 val dy = (top - bot) / Real.fromInt h
+
+val dx32 = Real32.fromLarge IEEEReal.TO_NEAREST (Real.toLarge dx)
+val dy32 = Real32.fromLarge IEEEReal.TO_NEAREST (Real.toLarge dy)
 
 (* convert pixel coordinate to complex coordinate *)
 fun xyToComplex (x, y) =
@@ -60,7 +63,7 @@ fun mark x y =
   end
 
 
-fun packByte y (xlo, xhi) =
+(* fun packByte y (xlo, xhi) =
   let
     fun loop byte x =
       if x >= xhi then
@@ -81,8 +84,15 @@ fun packByte y (xlo, xhi) =
       else Word8.<< (byte, Word.fromInt (8 - (xhi - xlo)))
   in
     byte
-  end
+  end *)
 
+fun packByte y (xlo, xhi) =
+  (_import "mandelbrot_pack_byte" : Int32.int * Int32.int * Int32.int * Real32.real * Real32.real -> Word8.word;)
+    (Int32.fromInt y, Int32.fromInt xlo, Int32.fromInt xhi, dx32, dy32)
+
+fun packByteFull y xlo =
+  (_import "mandelbrot_pack_byte_full" : Int32.int * Int32.int * Real32.real * Real32.real -> Word8.word;)
+    (Int32.fromInt y, Int32.fromInt xlo, dx32, dy32)
 
 (* ======================================================================== *)
 (* ======================================================================== *)
@@ -103,29 +113,36 @@ fun hybridMandelbrot () : Word8.word Seq.t Seq.t =
     fun do_cpu_row y =
       putRow y
         (ArraySlice.full (SeqBasis.tabulate 100 (0, numBytesPerRow) (fn b =>
-           let
-             val xlo = b * 8
-             val xhi = Int.min (xlo + 8, w)
-             val byte = packByte y (xlo, xhi)
-           in
-             byte
+           let val xlo = b * 8
+           in if xlo + 8 <= w then packByteFull y xlo else packByte y (xlo, w)
            end)))
 
     fun do_gpu_rows device (ylo, yhi) =
       let
+        val t0 = Time.now ()
         val outputArr =
           FutMandelbrot.mandelbrot (FutMandelbrot.CtxSet.choose ctxSet device)
-            ylo yhi 0 numBytesPerRow
+            maxIter ylo yhi 0 numBytesPerRow
         fun slice i =
           ArraySlice.slice (outputArr, i * numBytesPerRow, SOME numBytesPerRow)
+        val t1 = Time.now ()
+        val _ = ForkJoin.parfor 1000 (0, yhi - ylo) (fn i =>
+          putRow (ylo + i) (slice i))
+        val t2 = Time.now ()
       in
-        ForkJoin.parfor 1000 (0, yhi - ylo) (fn i => putRow (ylo + i) (slice i))
+        print
+          ("gpu " ^ Int.toString device ^ " mandelbrot ("
+           ^ Int.toString ((yhi - ylo) * w) ^ "): "
+           ^ Time.fmt 4 (Time.- (t1, t0)) ^ "+" ^ Time.fmt 4 (Time.- (t2, t1))
+           ^ "s\n")
       end
 
-    val split = BenchParams.Mandelbrot.parfor_split
-    val grain = BenchParams.Mandelbrot.parfor_grain
+    val outer_split = BenchParams.Mandelbrot.outer_split
+    val inner_split = BenchParams.Mandelbrot.inner_split
+    val grain = BenchParams.Mandelbrot.grain
   in
-    HybridBasis.parfor_hybrid split grain (0, h) (do_cpu_row, do_gpu_rows);
+    HybridBasis.parfor_hybrid outer_split inner_split grain (0, h)
+      (do_cpu_row, do_gpu_rows);
 
     ArraySlice.full rows
   end
@@ -137,12 +154,8 @@ fun cpuMandelbrot () =
   in
     ArraySlice.full (SeqBasis.tabulate 1 (0, h) (fn y =>
       ArraySlice.full (SeqBasis.tabulate 1000 (0, numBytesPerRow) (fn b =>
-        let
-          val xlo = b * 8
-          val xhi = Int.min (xlo + 8, w)
-          val byte = packByte y (xlo, xhi)
-        in
-          byte
+        let val xlo = b * 8
+        in if xlo + 8 <= w then packByteFull y xlo else packByte y (xlo, w)
         end))))
   end
 
@@ -158,7 +171,8 @@ fun gpuMandelbrot () =
         , prefer_gpu = fn _ =>
             let
               val outputArr =
-                FutMandelbrot.mandelbrot default_ctx 0 h 0 numBytesPerRow
+                FutMandelbrot.mandelbrot default_ctx maxIter 0 h 0
+                  numBytesPerRow
               fun slice i =
                 ArraySlice.slice
                   (outputArr, i * numBytesPerRow, SOME numBytesPerRow)

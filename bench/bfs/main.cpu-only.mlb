@@ -1,0 +1,8 @@
+../../dep/lib/github.com/mpllang/mpllib/sources.mpl.mlb
+
+sml/MatCOO.sml
+
+sml/SerialBFS.sml
+sml/OffsetSearch.sml
+sml/NondetBFS_CPU.sml
+main.cpu-only.sml

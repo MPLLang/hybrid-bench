@@ -2,4 +2,6 @@
 futmandelbrot/mandelbrot.sig
 futmandelbrot/mandelbrot.sml
 FutMandelbrot.sml
+ann "allowFFI true" in
 main.sml
+end

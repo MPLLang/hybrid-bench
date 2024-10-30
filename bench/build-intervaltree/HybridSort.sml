@@ -28,9 +28,8 @@ struct
 
   fun chooseCtx ctxSet device =
     let
-      val (device, ctx) = Seq.first
-        (Seq.filter (fn (d, _) => d = device) ctxSet)
-      val _ = print ("chosen device: " ^ device ^ "\n")
+      val (gpu, ctx) = Seq.nth ctxSet device
+      val _ = print ("chosen device: " ^ Int.toString device ^ ":" ^ gpu ^ "\n")
     in
       ctx
     end

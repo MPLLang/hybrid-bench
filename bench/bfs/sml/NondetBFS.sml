@@ -35,7 +35,7 @@ struct
     in sub (a, i+s)
     end *)
 
-  val GRAIN = 10000
+  val GRAIN = 1000
 
   fun strip s =
     let val (s', start, _) = ArraySlice.base s
@@ -153,6 +153,8 @@ struct
           val mf = sub (offsets, nf)
           val outNbrs: vertex array = ForkJoin.alloc mf
 
+          (* val _ = print (Int.toString nf ^ " " ^ Int.toString mf ^ "\n") *)
+
           (* attempt to claim parent of u as v *)
           fun claim (u, v) =
             sub (parent, vtoi u) = ~1
@@ -218,11 +220,11 @@ struct
           ()
         else if shouldProcessDense frontier then
           let val (nextFrontier, tm) = Util.getTime (fn _ => bottomUp frontier)
-          in print ("dense  " ^ Time.fmt 4 tm ^ "\n"); search nextFrontier
+          in (*print ("dense  " ^ Time.fmt 4 tm ^ "\n");*) search nextFrontier
           end
         else
           let val (nextFrontier, tm) = Util.getTime (fn _ => topDown frontier)
-          in print ("sparse " ^ Time.fmt 4 tm ^ "\n"); search nextFrontier
+          in (*print ("sparse " ^ Time.fmt 4 tm ^ "\n");*) search nextFrontier
           end
 
       val _ = upd (parent, vtoi s, s)
@@ -486,7 +488,7 @@ struct
                 else
                   ForkJoin.choice
                     { prefer_cpu = fn _ => (loop i j; NONE)
-                    , prefer_gpu = fn (device: string) =>
+                    , prefer_gpu = fn (device: int) =>
                         let
                           val t0 = Time.now ()
                           val ctx = CtxSet.choose ctxSet device

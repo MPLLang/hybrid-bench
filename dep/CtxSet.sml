@@ -31,6 +31,9 @@ functor CtxSetFn
      sig
        val new: cfg -> ctx
        val free: ctx -> unit
+       val report: ctx -> string
+       val pauseProfiling: ctx -> unit
+       val unpauseProfiling: ctx -> unit
      end
    end): CTX_SET where type ctx = F.ctx =
 struct
@@ -40,10 +43,10 @@ struct
   val logging = CommandLineArgs.parseFlag "logging"
 
   type ctx = F.ctx
-  type ctx_set = (device_identifier * F.ctx) Seq.t
+  type ctx_set = (gpu_identifier * F.ctx) Seq.t
   type t = ctx_set
 
-  fun fromList (devices: device_identifier list) =
+  fun fromList (devices: gpu_identifier list) =
     Seq.map
       (fn device =>
          let
@@ -57,21 +60,55 @@ struct
            (device, ctx)
          end) (Seq.fromList devices)
 
+  fun writeFile fname s =
+    let val os = TextIO.openOut fname
+    in TextIO.output (os, s) before TextIO.closeOut os
+    end
+
+  fun toCtxList (ctxSet: ctx_set) =
+    Seq.toList (Seq.map (fn (_, ctx) => ctx) ctxSet)
+
+  fun report (ctxSet: ctx_set) =
+    if profile then
+        let
+          val _ =
+            List.foldl
+              (fn (ctx, idx) =>
+                 let
+                   val fname = "futhark" ^ (Int.toString idx) ^ ".json"
+                   val () = print ("Writing " ^ fname ^ "\n")
+                   val _ =
+                     (writeFile fname
+                        (F.Context.report ctx))
+                 in
+                   idx + 1
+                 end) 0 (toCtxList ctxSet)
+        in
+          ()
+        end
+      else
+        ()
+
   fun free (ctxSet: ctx_set) =
-    let val _ = Seq.map (fn (_, ctx) => F.Context.free ctx) ctxSet
+    let val () = report ctxSet
+        val _ = Seq.map (fn (_, ctx) => F.Context.free ctx) ctxSet
     in ()
     end
 
-
   fun choose (ctxSet: ctx_set) (device: device_identifier) =
     let
-      val (device, ctx) = Seq.first
-        (Seq.filter (fn (d, _) => d = device) ctxSet)
+    (* val () = print ("device is " ^ device ^ "\n") *)
+    val (_, ctx) = Seq.nth ctxSet device
+      (* val (device, ctx) = Seq.first
+        (Seq.filter (fn (d, _) => d = device) ctxSet) *)
       (*val _ = print ("chosen device: " ^ device ^ "\n")*)
     in
       ctx
     end
 
-  fun toCtxList (ctxSet: ctx_set) =
-    Seq.toList (Seq.map (fn (_, ctx) => ctx) ctxSet)
+  fun pauseProfiling (ctxSet: ctx_set) =
+    List.app F.Context.pauseProfiling (toCtxList ctxSet)
+
+  fun unpauseProfiling (ctxSet: ctx_set) =
+    List.app F.Context.unpauseProfiling (toCtxList ctxSet)
 end

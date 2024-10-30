@@ -14,7 +14,7 @@ struct
       end
 
 
-  fun parfor_hybrid split grain (lo, hi)
+  fun parfor_hybrid outer_split inner_split grain (lo, hi)
     (f: int -> unit, g: device_identifier -> (int * int) -> unit) =
     let
       fun base lo hi =
@@ -27,7 +27,7 @@ struct
             , prefer_gpu = fn device => g device (lo, hi)
             }
         else
-          let val mid = compute_mid split lo hi
+          let val mid = compute_mid inner_split lo hi
           in ForkJoin.par (fn _ => loop_choose lo mid, fn _ => loop mid hi); ()
           end
 
@@ -36,12 +36,35 @@ struct
           { prefer_cpu = fn _ => loop lo hi
           , prefer_gpu = fn device => g device (lo, hi)
           }
+
+      val n = hi - lo
+      val block_size = Real.ceil (outer_split * Real.fromInt n)
+      val num_blocks = Util.ceilDiv n block_size
+
+      fun outer_loop blo bhi =
+        if blo+1 = bhi then
+          let
+            val start = lo + blo * block_size
+            val stop = Int.min (start + block_size, lo + n)
+          in
+            loop_choose start stop
+          end
+        else
+          let
+            val bmid = blo + (bhi-blo) div 2
+          in
+            ForkJoin.par (fn _ => outer_loop blo bmid, fn _ => outer_loop bmid bhi);
+            ()
+          end
     in
-      loop lo hi
+      if n <= grain then
+        base lo hi
+      else
+        outer_loop 0 num_blocks
     end
 
 
-  fun reduce_hybrid split grain combine z (lo, hi)
+  fun reduce_hybrid outer_split inner_split grain combine z (lo, hi)
     (f: int -> 'a, g: device_identifier -> (int * int) -> 'a) =
     let
       fun base lo hi =
@@ -55,7 +78,7 @@ struct
             }
         else
           let
-            val mid = compute_mid split lo hi
+            val mid = compute_mid inner_split lo hi
           in
             combine (ForkJoin.par (fn _ => loop_choose lo mid, fn _ =>
               loop mid hi))
@@ -66,8 +89,31 @@ struct
           { prefer_cpu = fn _ => loop lo hi
           , prefer_gpu = fn device => g device (lo, hi)
           }
+
+      val n = hi - lo
+      val block_size = Real.ceil (outer_split * Real.fromInt n)
+      val num_blocks = Util.ceilDiv n block_size
+
+      fun outer_loop blo bhi =
+        if blo+1 = bhi then
+          let
+            val start = lo + blo * block_size
+            val stop = Int.min (start + block_size, lo + n)
+          in
+            loop_choose start stop
+          end
+        else
+          let
+            val bmid = blo + (bhi-blo) div 2
+          in
+            combine (ForkJoin.par (fn _ => outer_loop blo bmid,
+              fn _ => outer_loop bmid bhi))
+          end
     in
-      loop lo hi
+      if n <= grain then
+        base lo hi
+      else
+        outer_loop 0 num_blocks
     end
 
 
@@ -102,7 +148,7 @@ struct
     end
 
 
-  fun filter_hybrid split grain (lo, hi)
+  fun filter_hybrid outer_split inner_split grain (lo, hi)
     ( f_elem: int -> 'a
     , f_keep: int -> bool
     , g: device_identifier -> (int * int) -> 'a Seq.t
@@ -136,7 +182,7 @@ struct
             }
         else
           let
-            val mid = compute_mid split i j
+            val mid = compute_mid inner_split i j
           in
             TreeSeq.append (ForkJoin.par (fn _ => loop_choose i mid, fn _ =>
               loop mid j))
@@ -147,13 +193,35 @@ struct
           { prefer_cpu = fn _ => loop i j
           , prefer_gpu = fn device => gpu device i j
           }
+
+      val block_size = Real.ceil (outer_split * Real.fromInt n)
+      val num_blocks = Util.ceilDiv n block_size
+
+      fun outer_loop blo bhi =
+        if blo+1 = bhi then
+          let
+            val start = lo + blo * block_size
+            val stop = Int.min (start + block_size, lo + n)
+          in
+            loop_choose start stop
+          end
+        else
+          let
+            val bmid = blo + (bhi-blo) div 2
+          in
+            TreeSeq.append (ForkJoin.par (fn _ => outer_loop blo bmid,
+              fn _ => outer_loop bmid bhi))
+          end
     in
-      (* TODO (maybe): use TreeSeq.toBlocks here instead? This would avoid the
-       * full copy for TreeSeq.toArraySeq. But, it's not so straightforward,
-       * because eventually we would need to copy to the GPU at which point
-       * we would need to flatten anyway. Hmmm....
-       *)
-      TreeSeq.toArraySeq (loop lo hi)
+      if n <= grain then
+        TreeSeq.toArraySeq (base lo hi)
+      else
+        (* TODO (maybe): use TreeSeq.toBlocks here instead? This would avoid the
+        * full copy for TreeSeq.toArraySeq. But, it's not so straightforward,
+        * because eventually we would need to copy to the GPU at which point
+        * we would need to flatten anyway. Hmmm....
+        *)
+        TreeSeq.toArraySeq (outer_loop 0 num_blocks)
     end
 
 

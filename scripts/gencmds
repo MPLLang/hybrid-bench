@@ -2,11 +2,11 @@
 import json
 import copy
 
-def cmd(procs, gpus, impl, args):
-  cmd_template = "/usr/bin/env time -v ./main.mpl.bin @mpl procs {} max-cc-depth 1 set-affinity -- -warmup 5 -repeat 20 -devices {} -impl {} {}"
+def cmd(procs, gpus, impl, args, warmup=5, repeat=20):
   dev_list = ",".join("#{}".format(i) for i in range(0, gpus))
   dev_str = "'{}'".format(dev_list)
-  return cmd_template.format(str(procs), dev_str, impl, args)
+  cmd_template = f"/usr/bin/env time -v ./main.mpl.bin @mpl procs {procs} max-cc-depth 1 set-affinity -- -warmup {warmup} -repeat {repeat} -devices {dev_str} -impl {impl} --quiet {args}"
+  return cmd_template
 
 
 def interval_tree(procs, gpus, impl):
@@ -25,7 +25,7 @@ def dmm(procs, gpus, impl):
   row = {
     "tag": "dmm",
     "cwd": "bench/dmm-flat-mat",
-    "cmd": cmd(procs, gpus, impl, "-n 8192"),
+    "cmd": cmd(procs, gpus, impl, "-n 10000"),
     "procs": procs,
     "gpus": gpus,
     "impl": impl
@@ -49,7 +49,7 @@ def raytracer(procs, gpus, impl):
   row = {
     "tag": "raytracer",
     "cwd": "bench/raytracer",
-    "cmd": cmd(procs, gpus, impl, "-h 1000 -w 1000"),
+    "cmd": cmd(procs, gpus, impl, "-h 2000 -w 2000"),
     "procs": procs,
     "gpus": gpus,
     "impl": impl
@@ -85,7 +85,7 @@ def quickhull(procs, gpus, impl):
   row = {
     "tag": "quickhull",
     "cwd": "bench/quickhull",
-    "cmd": cmd(procs, gpus, impl, "-points /home/cc/data/geom/2d/uniform-circle-10M"),
+    "cmd": cmd(procs, gpus, impl, "-points /home/cc/data/geom/2d/uniform-circle-20M"),
     "procs": procs,
     "gpus": gpus,
     "impl": impl
@@ -106,10 +106,12 @@ def bfs(procs, gpus, impl):
 
 
 def kmeans(procs, gpus, impl):
+  warmup = 1 if impl == "cpu" and procs == 1 else 5
+  repeat = 3 if impl == "cpu" and procs == 1 else 20
   row = {
     "tag": "kmeans",
     "cwd": "bench/kmeans",
-    "cmd": cmd(procs, gpus, impl, "-n 100000 --gen-random-input -d 512 -k 16 -hist-gpu-grain 2000 -hist-gpu-split 0.08 -hist-cpu-grain 250"),
+    "cmd": cmd(procs, gpus, impl, "--gen-random-input -n 1000000 -d 512 -k 16", warmup=warmup, repeat=repeat),
     "procs": procs,
     "gpus": gpus,
     "impl": impl
@@ -168,7 +170,7 @@ def filter_gpu_procs(row):
 tests = [
   add_extra(filter_unique(filter_gpu_procs(make_row(procs, gpus, impl))))
   for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans, sparse_mxv]
-  for procs in [1,10,20,30,40,50,60,70,80]
+  for procs in [1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80]
   for gpus in [1,2,3,4]
   for impl in ["hybrid","cpu","gpu"]
 ]
@@ -177,6 +179,7 @@ tests += [
   for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans, sparse_mxv]
   for gpus in [1,2,3,4]
 ]
+tests += [ dmm(1, 1, 'cpu-openblas') ]
 tests = [ r for r in tests if r is not None ]
 
 for r in tests:

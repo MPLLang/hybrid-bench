@@ -11,12 +11,15 @@ module type euclidean_space = {
   type dist
   type point
 
-  val dist_to_f64 : dist -> f64
+  -- val dist_to_f64 : dist -> f64
   val zero_dist : dist
   val dist_less : dist -> dist -> bool
 
   val point_eq : point -> point -> bool
   val point_less : point -> point -> bool
+
+  val less_by_x: point -> point -> bool
+  val less_by_y: point -> point -> bool
 
   val signed_dist_to_line : point -> point -> point -> dist
 }
@@ -29,19 +32,22 @@ module type convex_hull = {
   val compute [n] : [n]point -> ([]point,[]point)
 }
 
-module naive_space : euclidean_space with point = {x:f64, y:f64} = {
+module naive_space_f64 : euclidean_space with point = {x:f64, y:f64} = {
   type dist = f64
   type point = {x:f64, y:f64}
 
   def zero_dist = 0f64
   def dist_less (x : dist) (y : dist) = x < y
 
-  def dist_to_f64 x = x
+  -- def dist_to_f64 x = x
 
   def point_eq (p : point) (q : point) =
     p.x == q.x && p.y == q.y
   def point_less (p : point) (q : point) =
     p.x < q.x || (p.x == q.x && p.y < q.y)
+
+  def less_by_x (p: point) (q: point) = p.x < q.x
+  def less_by_y (p: point) (q: point) = p.y < q.y
 
   def sqr (x : f64) = x * x
   def ssqr (x : f64) = f64.abs x * x
@@ -54,6 +60,37 @@ module naive_space : euclidean_space with point = {x:f64, y:f64} = {
     in ssqr (ax * by - ay * bx) / (sqr ax + sqr ay)
 }
 
+
+-- SAM_NOTE: naive_space would be better as a module-level function for DRY
+module naive_space_f32 : euclidean_space with point = {x:f32, y:f32} = {
+  type dist = f32
+  type point = {x:f32, y:f32}
+
+  def zero_dist = 0f32
+  def dist_less (x : dist) (y : dist) = x < y
+
+  -- def dist_to_f32 x = x
+
+  def point_eq (p : point) (q : point) =
+    p.x == q.x && p.y == q.y
+  def point_less (p : point) (q : point) =
+    p.x < q.x || (p.x == q.x && p.y < q.y)
+
+  def less_by_x (p: point) (q: point) = p.x < q.x
+  def less_by_y (p: point) (q: point) = p.y < q.y
+
+  def sqr (x : f32) = x * x
+  def ssqr (x : f32) = f32.abs x * x
+
+  def signed_dist_to_line (p : point) (q : point) (r : point) =
+    let ax = q.x - p.x
+    let ay = q.y - p.y
+    let bx = r.x - p.x
+    let by = r.y - p.y
+    in ssqr (ax * by - ay * bx) / (sqr ax + sqr ay)
+}
+
+
 module indexed_space (S: euclidean_space)
        : euclidean_space with point = (S.point, i32) = {
   type dist = S.dist
@@ -62,10 +99,13 @@ module indexed_space (S: euclidean_space)
   def zero_dist = S.zero_dist
   def dist_less = S.dist_less
 
-  def dist_to_f64 = S.dist_to_f64
+  -- def dist_to_f64 = S.dist_to_f64
 
   def point_eq (a: point) (b: point) = S.point_eq a.0 b.0
   def point_less (a: point) (b: point) = S.point_less a.0 b.0
+
+  def less_by_x (a: point) (b: point) = S.less_by_x a.0 b.0
+  def less_by_y (a: point) (b: point) = S.less_by_y a.0 b.0
 
   def signed_dist_to_line (p: point) (q: point) (r: point) =
     S.signed_dist_to_line p.0 q.0 r.0
@@ -138,11 +178,17 @@ module mk_quickhull (S : euclidean_space) = {
   def filter_then_semihull (start : point) (end : point) (points : []point) =
     semihull start end (filter (\p -> dist_less zero_dist (signed_dist_to_line start end p)) points)
 
-  def pmin p q = if point_less p q then p else q
-  def pmax p q = if point_less p q then q else p
+  def min_by_x p q = if less_by_x p q then p else q
+  def max_by_x p q = if less_by_x p q then q else p
+  def min_by_y p q = if less_by_y p q then p else q
+  def max_by_y p q = if less_by_y p q then q else p
 
   def min_max_point ps =
-    (reduce pmin ps[0] ps, reduce pmax ps[0] ps)
+    ( reduce min_by_x ps[0] ps
+    , reduce max_by_x ps[0] ps
+    , reduce min_by_y ps[0] ps
+    , reduce max_by_y ps[0] ps
+    )
 
   def point_furthest_from_line l r pts =
     let with_dist = map (\p -> (p, signed_dist_to_line l r p)) pts
@@ -150,8 +196,8 @@ module mk_quickhull (S : euclidean_space) = {
 
   def compute (ps : []point) =
     if length ps <= 3 then (ps, []) else
-    let leftmost = reduce pmin ps[0] ps
-    let rightmost = reduce pmax ps[0] ps
+    let leftmost = reduce min_by_x ps[0] ps
+    let rightmost = reduce max_by_x ps[0] ps
     let (_, upper_points, lower_points) =
       partition2
       (\p -> point_eq p leftmost || point_eq p rightmost)
@@ -162,77 +208,168 @@ module mk_quickhull (S : euclidean_space) = {
     in (upper_hull, lower_hull)
 }
 
-module space = (indexed_space naive_space)
-module naive_quickhull = mk_quickhull space
-type point = space.point
 
-import "lib/github.com/diku-dk/sorts/radix_sort"
-def sort_by f = radix_sort_float_by_key f f64.num_bits f64.get_bit
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- f64 entrypoints
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+
+module space_f64 = (indexed_space naive_space_f64)
+module naive_quickhull_f64 = mk_quickhull space_f64
+type point_f64 = space_f64.point
 
 
-entry semihull points l r idxs =
+entry semihull_f64 points l r idxs =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
   let start = p l
   let end = p r
-  in naive_quickhull.semihull start end (map p idxs)
+  in naive_quickhull_f64.semihull start end (map p idxs)
      |> map (.1)
      |> filter (!=l) -- Remove starting point.
 
 
-entry filter_then_semihull points l r idxs =
+entry filter_then_semihull_f64 points l r idxs =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
   let start = p l
   let end = p r
-  in naive_quickhull.filter_then_semihull start end (map p idxs)
+  in naive_quickhull_f64.filter_then_semihull start end (map p idxs)
      |> map (.1)
      |> filter (!=l)
 
 
-entry point_furthest_from_line [k] (points: [k][2]f64) (l: i32) (r: i32) (idxs: []i32) : i32 =
+entry point_furthest_from_line_f64 [k] (points: [k][2]f64) (l: i32) (r: i32) (idxs: []i32) : i32 =
   let p i = ({x=points[i,0], y=points[i,1]}, i)
-  let ((_, i), _) = naive_quickhull.point_furthest_from_line (p l) (p r) (map p idxs)
+  let ((_, i), _) = naive_quickhull_f64.point_furthest_from_line (p l) (p r) (map p idxs)
   in i
 
 
-entry min_max_point_in_range [k] (points: [k][2]f64) lo hi : (i32, i32) =
+entry min_max_point_in_range_f64 [k] (points: [k][2]f64) lo hi : (i32, i32, i32, i32) =
   let ps = take (hi-lo) (drop lo points)
   let ps = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 (lo + i))) (indices ps) ps
-  let (min, max) = naive_quickhull.min_max_point ps
-  in (min.1, max.1)
+  let (l, r, b, t) = naive_quickhull_f64.min_max_point ps
+  in (l.1, r.1, b.1, t.1)
 
 
 -- select points above the line (l, r) and then compute the semihull of these
-entry top_level_filter_then_semihull points (l: i32) (r : i32) : []i32 =
+entry top_level_filter_then_semihull_f64 points (l: i32) (r : i32) : []i32 =
   let p i = ({x=points[i,0], y=points[i,1]}, i32.i64 i)
   let start = p (i64.i32 l)
   let end = p (i64.i32 r)
-  in naive_quickhull.filter_then_semihull start end (map p (indices points))
+  in naive_quickhull_f64.filter_then_semihull start end (map p (indices points))
      |> map (.1)
      |> filter (!=l)
 
 
-entry top_level_points_above_in_range [k] (points: [k][2]f64) (lo:i64) (hi:i64) (l:i32) (r:i32) : []i32 =
+entry top_level_points_above_in_range_f64 [k] (points: [k][2]f64) (lo:i64) (hi:i64) (l:i32) (r:i32) : []i32 =
   let p i = {x=points[i,0], y=points[i,1]}
   let keep (i: i32) =
-    naive_space.dist_less
-      naive_space.zero_dist
-      (naive_space.signed_dist_to_line (p l) (p r) (p i))
+    naive_space_f64.dist_less
+      naive_space_f64.zero_dist
+      (naive_space_f64.signed_dist_to_line (p l) (p r) (p i))
   let lo = i32.i64 lo
   let hi = i32.i64 hi
   in filter keep (lo...(hi-1))
 
 
-entry points_above [k] (points: [k][2]f64) (idxs: []i32) (l:i32) (r:i32) : []i32 =
+entry points_above_f64 [k] (points: [k][2]f64) (idxs: []i32) (l:i32) (r:i32) : []i32 =
   let p i = {x=points[i,0], y=points[i,1]}
   let keep (i: i32) =
-    naive_space.dist_less
-      naive_space.zero_dist
-      (naive_space.signed_dist_to_line (p l) (p r) (p i))
+    naive_space_f64.dist_less
+      naive_space_f64.zero_dist
+      (naive_space_f64.signed_dist_to_line (p l) (p r) (p i))
   in filter keep idxs
 
 
-entry quickhull [k] (ps : [k][2]f64) : []i32 =
+entry quickhull_f64 [k] (ps : [k][2]f64) : []i32 =
   let ps' = map2 (\i p -> ({x=f64.f64 p[0], y=f64.f64 p[1]}, i32.i64 i))
                  (indices ps) ps
-  let (convex_upper, convex_lower) = naive_quickhull.compute ps'
+  let (convex_upper, convex_lower) = naive_quickhull_f64.compute ps'
+  in map (.1) (convex_upper ++ convex_lower)
+
+
+
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+-- f32 entrypoints
+--
+-- SAM_NOTE: should probably just use module-level functions for DRY... 
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+------------------------------------------------------------------------------
+
+
+module space_f32 = (indexed_space naive_space_f32)
+module naive_quickhull_f32 = mk_quickhull space_f32
+type point_f32 = space_f32.point
+
+
+entry semihull_f32 points l r idxs =
+  let p i = ({x=points[i,0], y=points[i,1]}, i)
+  let start = p l
+  let end = p r
+  in naive_quickhull_f32.semihull start end (map p idxs)
+     |> map (.1)
+     |> filter (!=l) -- Remove starting point.
+
+
+entry filter_then_semihull_f32 points l r idxs =
+  let p i = ({x=points[i,0], y=points[i,1]}, i)
+  let start = p l
+  let end = p r
+  in naive_quickhull_f32.filter_then_semihull start end (map p idxs)
+     |> map (.1)
+     |> filter (!=l)
+
+
+entry point_furthest_from_line_f32 [k] (points: [k][2]f32) (l: i32) (r: i32) (idxs: []i32) : i32 =
+  let p i = ({x=points[i,0], y=points[i,1]}, i)
+  let ((_, i), _) = naive_quickhull_f32.point_furthest_from_line (p l) (p r) (map p idxs)
+  in i
+
+
+entry min_max_point_in_range_f32 [k] (points: [k][2]f32) lo hi : (i32, i32, i32, i32) =
+  let ps = take (hi-lo) (drop lo points)
+  let ps = map2 (\i p -> ({x=f32.f32 p[0], y=f32.f32 p[1]}, i32.i64 (lo + i))) (indices ps) ps
+  let (l, r, b, t) = naive_quickhull_f32.min_max_point ps
+  in (l.1, r.1, b.1, t.1)
+
+
+-- select points above the line (l, r) and then compute the semihull of these
+entry top_level_filter_then_semihull_f32 points (l: i32) (r : i32) : []i32 =
+  let p i = ({x=points[i,0], y=points[i,1]}, i32.i64 i)
+  let start = p (i64.i32 l)
+  let end = p (i64.i32 r)
+  in naive_quickhull_f32.filter_then_semihull start end (map p (indices points))
+     |> map (.1)
+     |> filter (!=l)
+
+
+entry top_level_points_above_in_range_f32 [k] (points: [k][2]f32) (lo:i64) (hi:i64) (l:i32) (r:i32) : []i32 =
+  let p i = {x=points[i,0], y=points[i,1]}
+  let keep (i: i32) =
+    naive_space_f32.dist_less
+      naive_space_f32.zero_dist
+      (naive_space_f32.signed_dist_to_line (p l) (p r) (p i))
+  let lo = i32.i64 lo
+  let hi = i32.i64 hi
+  in filter keep (lo...(hi-1))
+
+
+entry points_above_f32 [k] (points: [k][2]f32) (idxs: []i32) (l:i32) (r:i32) : []i32 =
+  let p i = {x=points[i,0], y=points[i,1]}
+  let keep (i: i32) =
+    naive_space_f32.dist_less
+      naive_space_f32.zero_dist
+      (naive_space_f32.signed_dist_to_line (p l) (p r) (p i))
+  in filter keep idxs
+
+
+entry quickhull_f32 [k] (ps : [k][2]f32) : []i32 =
+  let ps' = map2 (\i p -> ({x=f32.f32 p[0], y=f32.f32 p[1]}, i32.i64 i))
+                 (indices ps) ps
+  let (convex_upper, convex_lower) = naive_quickhull_f32.compute ps'
   in map (.1) (convex_upper ++ convex_lower)

@@ -1,15 +1,43 @@
 structure CLA = CommandLineArgs
 structure CtxSet = CtxSetFn (structure F = Futhark)
+structure BFS = NondetBFS(CtxSet)
+structure G = BFS.G
+structure R32 = struct open MLton.Real32 open Real32 structure W = Word32 end
+structure M =
+  MatCOO (structure I = Int32 structure R = R32 structure CtxSet = CtxSet)
+
+fun mtx_to_graph (M.Mat {width, height, row_indices, col_indices, values}) : BFS.G.graph =
+  let
+    val _ = if width = height then () else raise Fail "mtx_to_graph: matrix not square"
+    val num_vertices = M.I.toInt width
+    val nnz = Seq.length row_indices
+
+    val starts =
+      SeqBasis.filter 5000 (0, nnz) (fn i => i) (fn i =>
+        i = 0 orelse Seq.nth row_indices (i-1) <> Seq.nth row_indices i)
+
+    val row_lengths = SeqBasis.tabulate 5000 (0, num_vertices) (fn _ => 0)
+    val _ =
+      ForkJoin.parfor 5000 (0, Array.length starts) (fn i =>
+        let
+          val lo = Array.sub (starts, i)
+          val hi = if i = Array.length starts - 1 then nnz else Array.sub (starts, i+1)
+          val len = hi-lo
+          val row_idx = Seq.nth row_indices (Array.sub (starts, i))
+        in
+          Array.update (row_lengths, M.I.toInt row_idx, hi-lo)
+        end)
+
+    val (offsets, _) = Seq.scan op+ 0 (ArraySlice.full row_lengths)
+  in
+    (offsets, ArraySlice.full row_lengths, col_indices)
+  end
 
 val () = print "Initialising Futhark contexts... "
 val devices = String.fields (fn c => c = #",") (CLA.parseString "devices" "")
 val ctxSet = CtxSet.fromList devices
 val () = print "Done!\n"
-
 val _ = print ("devices: " ^ String.concatWith "," devices ^ "\n")
-
-structure BFS = NondetBFS(CtxSet)
-structure G = BFS.G
 
 val dontDirOpt = CLA.parseFlag "no-dir-opt"
 val diropt = not dontDirOpt
@@ -34,7 +62,12 @@ val filename =
     [x] => x
   | _ => Util.die "missing filename"
 
-val (graph, tm) = Util.getTime (fn _ => G.parseFile filename)
+val (graph, tm) = Util.getTime (fn _ =>
+  if String.isSuffix ".mtx.bin" filename orelse String.isSuffix ".mtx" filename then
+    mtx_to_graph (M.fromFile filename)
+  else
+    G.parseFile filename)
+
 val _ = print ("num vertices: " ^ Int.toString (G.numVertices graph) ^ "\n")
 val _ = print ("num edges: " ^ Int.toString (G.numEdges graph) ^ "\n")
 
@@ -92,7 +125,8 @@ val do_bfs =
     | "gpu" =>
         (fn () =>
            let
-             val (dev, ctx) = Seq.first ctxSet
+             val dev = 0
+             val ctx = CtxSet.choose ctxSet dev
              val (graph_fut, _) = GpuData.choose graphs_fut dev
            in
              BFS.bfs_gpu ctx {diropt = diropt}

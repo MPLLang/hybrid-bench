@@ -61,7 +61,10 @@ end =
 struct
   type device_identifier = Device.device_identifier
 
-  fun distance x y =
+  val squared_distance =
+    _import "squared_distance_wrapper" : Int64.int * real array * Int64.int * real array * Int64.int -> real;
+
+  (* fun distance x y =
     let
       val d = Seq.length x
       fun loop acc i =
@@ -73,6 +76,14 @@ struct
           end
     in
       loop 0.0 0
+    end *)
+
+  fun distance x y =
+    let
+      val (x_arr, x_offset, dim) = ArraySlice.base x
+      val (y_arr, y_offset, _) = ArraySlice.base y
+    in
+      squared_distance (dim, x_arr, x_offset, y_arr, y_offset)
     end
 
   (* Our convergence criterion is that the centroids don't change too
@@ -258,8 +269,10 @@ struct
 
     val hist_gpu_grain = BenchParams.Kmeans.hist_gpu_grain
     val hist_gpu_split = BenchParams.Kmeans.hist_gpu_split
+    val hist_outer_split = BenchParams.Kmeans.hist_outer_split
     val _ = print ("hist-gpu-grain " ^ Int.toString hist_gpu_grain ^ "\n")
     val _ = print ("hist-gpu-split " ^ Real.toString hist_gpu_split ^ "\n")
+    val _ = print ("hist-outer-split " ^ Real.toString hist_outer_split ^ "\n")
 
     fun newCentroidsHybrid gpu points centroids =
       let
@@ -277,7 +290,10 @@ struct
          *   [s1/s0, s2/s0, ..., s(d)/s0]
          *)
         val cluster_results =
-          Hist.inplace_hist_hybrid_two_level hist_cpu_grain hist_gpu_grain
+          Hist.inplace_hist_hybrid_two_level
+            hist_cpu_grain
+            hist_gpu_grain
+            hist_outer_split
             hist_gpu_split
             { combine_inplace = fn (a, b) =>
                 Util.for (0, d + 1) (fn i =>

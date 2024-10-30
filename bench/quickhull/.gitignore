@@ -1,4 +1,5 @@
 main.mpl.bin
+main.no-gpu.bin
 quickhull.smlfut.c
 quickhull.sig
 quickhull.sml

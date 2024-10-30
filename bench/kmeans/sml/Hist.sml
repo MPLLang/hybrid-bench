@@ -41,7 +41,7 @@ sig
    * where `gpu(i,j)` should be equivalent to performing a full hist on the
    * range [i,j).
    *)
-  val inplace_hist_hybrid:
+  (* val inplace_hist_hybrid:
     grain (* cpu grain *)
     -> grain (* gpu grain *)
     -> real (* gpu split *)
@@ -52,12 +52,13 @@ sig
        , modify_bin: int -> 'a -> unit
        , gpu: device_identifier -> (int * int) -> 'a Seq.t
        }
-    -> 'a Seq.t
+    -> 'a Seq.t *)
 
 
   val inplace_hist_hybrid_two_level:
     grain (* cpu grain *)
     -> grain (* gpu grain *)
+    -> real (* outer split *)
     -> real (* gpu split *)
     -> { combine_inplace: 'a * 'a -> unit
        , fresh_neutral: unit -> 'a
@@ -148,7 +149,7 @@ struct
     end
 
 
-  fun inplace_hist_hybrid cpu_grain gpu_grain gpu_split
+  (* fun inplace_hist_hybrid cpu_grain gpu_grain gpu_split
     (hist_args as {combine: 'a * 'a -> 'a, fresh_neutral: unit -> 'a, num_bins})
     { lo
     , hi
@@ -198,10 +199,10 @@ struct
                 gpu device (blo, bhi)
               end
         )
-    end
+    end *)
 
 
-  fun inplace_hist_hybrid_two_level cpu_grain gpu_grain gpu_split
+  fun inplace_hist_hybrid_two_level cpu_grain gpu_grain outer_split gpu_split
     (hist_args as
        {combine_inplace: 'a * 'a -> unit, fresh_neutral: unit -> 'a, num_bins})
     { lo
@@ -247,11 +248,11 @@ struct
 
 
       fun loop start stop =
-        if stop - start <= cpu_grain then
-          base_cpu start stop
+        if stop - start <= gpu_grain then
+          loop_cpu start stop
         else
           let
-            val mid = start + (stop - start) div 2
+            val mid = start + Real.floor (gpu_split * Real.fromInt (stop-start))
             val (l, r) = ForkJoin.par (fn _ => loop_choose start mid, fn _ =>
               loop mid stop)
           in
@@ -270,7 +271,7 @@ struct
 
 
       val n = hi - lo
-      val block_size = Real.floor (gpu_split * Real.fromInt n)
+      val block_size = Real.floor (outer_split * Real.fromInt n)
       val num_blocks = Util.ceilDiv n block_size
 
       fun outer_loop blo bhi =

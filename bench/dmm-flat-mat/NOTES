@@ -1,8 +1,11 @@
 INSTALL OPENBLAS
-  openblas v0.3.23
+  git clone git@github.com:OpenMathLib/OpenBLAS.git openblas-0.3.28
+  cd openblas-0.3.28
+  git checkout v0.3.28
   make USE_THREAD=0 USE_LOCKING=1
-  make PREFIX=/path/to/folder/ install
-  export LD_LIBRARY_PATH=/path/to/folder/:$LD_LIBRARY_PATH
+  mkdir build
+  make PREFIX=build install
+  export LD_LIBRARY_PATH=$(pwd -P)/build/lib:$LD_LIBRARY_PATH
 
 might need to run with collection disabled?
   @mpl procs max-cc-depth 0 collection-type none --

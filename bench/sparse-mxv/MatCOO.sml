@@ -364,14 +364,15 @@ struct
     )
 
 
-  fun mxv_gpu ctx_set (mat: mat, mat_futs) (vec: R.real Seq.t) =
+  fun mxv_gpu (ctx_set: CtxSet.t) (mat: mat, mat_futs) (vec: R.real Seq.t) =
     if nnz mat = 0 then
       Seq.tabulate (fn _ => R.fromInt 0) (Seq.length vec)
     else
       let
         val t0 = Time.now ()
 
-        val (device, ctx) = Seq.first ctx_set
+        val device = 0
+        val ctx = CtxSet.choose ctx_set device
 
         val mat_fut' as (rf, cf, vf) =
           case mat_futs of
@@ -425,7 +426,7 @@ struct
         val t4 = Time.now ()
       in
         print
-          ("gpu " ^ device ^ " sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
+          ("gpu " ^ Int.toString device ^ " sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
            ^ Int.toString (rhi - rlo) ^ "): " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+"
            ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
         output
@@ -497,7 +498,7 @@ struct
       val t4 = Time.now ()
     in
       print
-        ("gpu " ^ device ^ " sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
+        ("gpu " ^ Int.toString device ^ " sparse-mxv (" ^ Int.toString (nnz mat) ^ ","
          ^ Int.toString (rhi - rlo) ^ "): " ^ tt t0 t1 ^ "+" ^ tt t1 t2 ^ "+"
          ^ tt t2 t3 ^ "+" ^ tt t3 t4 ^ "s\n");
 
@@ -670,8 +671,8 @@ struct
         fun loop mat blo bhi =
           if blo + 1 = bhi then
             let
-              val b = blo
-              val (device, ctx) = Seq.nth ctx_set b
+              val device = blo
+              val ctx = CtxSet.choose ctx_set device
               val mat_fut =
                 Option.map (fn datas => GpuData.choose datas device) mat_futs
               val vec_fut = Futhark.Real32Array1.new ctx vec (Seq.length vec)

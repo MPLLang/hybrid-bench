@@ -2,9 +2,9 @@
 
 structure GpuData:
 sig
-  type 'a gpu_data = (Device.device_identifier * 'a) Seq.t
+  type 'a gpu_data = (Device.gpu_identifier * 'a) Seq.t
   type 'a t = 'a gpu_data
-  val initialize: (Device.device_identifier * 'ctx) Seq.t
+  val initialize: (Device.gpu_identifier * 'ctx) Seq.t
                   -> ('ctx -> 'a)
                   -> 'a gpu_data
   val free: 'a gpu_data -> ('a -> unit) -> unit
@@ -13,7 +13,7 @@ end =
 struct
   open Device
 
-  type 'a gpu_data = (device_identifier * 'a) Seq.t
+  type 'a gpu_data = (gpu_identifier * 'a) Seq.t
   type 'a t = 'a gpu_data
 
   fun initialize ctxSet f =
@@ -27,6 +27,7 @@ struct
     in ()
     end
 
-  fun choose data device =
-    #2 (Seq.first (Seq.filter (fn (d, _) => d = device) data))
+  fun choose (data: 'a gpu_data) device =
+    #2 (Seq.nth data device)
+    (* #2 (Seq.first (Seq.filter (fn (d, _) => d = device) data)) *)
 end

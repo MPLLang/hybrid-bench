@@ -6,8 +6,9 @@ struct
     (* One big asymmetric hybrid parfor over the rows. Split in half, and
      * hybridization threshold at a grain of 10 rows.
      *)
-    val parfor_split = CommandLineArgs.parseReal "mandelbrot-parfor-split" 0.5
-    val parfor_grain = CommandLineArgs.parseInt "mandelbrot-parfor-grain" 10
+    val outer_split = CommandLineArgs.parseReal "mandelbrot-outer-split" 0.2
+    val inner_split = CommandLineArgs.parseReal "mandelbrot-inner-split" 0.5
+    val grain = CommandLineArgs.parseInt "mandelbrot-grain" 10
   end
 
 
@@ -91,15 +92,17 @@ struct
      * hybridization
      *
      * Large fanout with asymmetric divide-and-conquer at the leaves. Size
-     * of the leaves is controlled by hist_gpu_split (0 < ... < 1) and we
-     * switch to cpu-only below hist_gpu_grain.
+     * of the leaves is controlled by hist_outer_split (0 < ... < 1).
+     * Asymmetry within leaves is controlled by hist_gpu_split (0 < ... < 1).
+     * We switch to cpu-only below hist_gpu_grain.
      *
      * hist_cpu_grain is used purely for CPU-side grain control.
      *)
 
-    val hist_cpu_grain = CommandLineArgs.parseInt "hist-cpu-grain" 1000
-    val hist_gpu_grain = CommandLineArgs.parseInt "hist-gpu-grain" 100000
-    val hist_gpu_split = CommandLineArgs.parseReal "hist-gpu-split" 0.75
+    val hist_cpu_grain = CommandLineArgs.parseInt "hist-cpu-grain" 100
+    val hist_gpu_grain = CommandLineArgs.parseInt "hist-gpu-grain" 10000
+    val hist_gpu_split = CommandLineArgs.parseReal "hist-gpu-split" 0.667
+    val hist_outer_split = CommandLineArgs.parseReal "hist-outer-split" 0.2
 
   end
 
@@ -114,8 +117,9 @@ struct
      * grain size. 
      *)
 
-    val gpu_split = CommandLineArgs.parseReal "render-hybrid-gpu-split" 0.5
-    val gpu_grain = 2000
+    val outer_split = CommandLineArgs.parseReal "raytracer-outer-split" 0.22
+    val inner_split = CommandLineArgs.parseReal "raytracer-inner-split" 0.667
+    val grain = 2000
 
   end
 
@@ -132,11 +136,12 @@ struct
      * which use the `reduce_hybrid_grain` and `reduce_hybrid_split`
      *)
 
-    val semihull_par_grain = 1000
-    val semihull_hybrid_grain = 500
+    val semihull_par_grain = CommandLineArgs.parseInt "quickhull-par-grain" 1000
+    val semihull_hybrid_grain = CommandLineArgs.parseInt "quickhull-hybrid-grain" 500
 
-    val reduce_hybrid_grain = 5000
-    val reduce_hybrid_split = 0.5
+    val reduce_hybrid_grain = CommandLineArgs.parseInt "quickhull-reduce-grain" 5000
+    val reduce_hybrid_inner_split = CommandLineArgs.parseReal "quickhull-reduce-inner-split" 0.5
+    val reduce_hybrid_outer_split = CommandLineArgs.parseReal "quickhull-reduce-outer-split" 0.2
 
   end
 
@@ -163,6 +168,14 @@ struct
 
     val hybrid_gpu_work_rat =
       CommandLineArgs.parseReal "matcoo-hybrid-gpu-work-rat" 20.0
+  end
+
+
+  structure DMM =
+  struct
+    val leaf_size = CommandLineArgs.parseInt "dmm-leaf-size" 500
+    val gpu_thresh = CommandLineArgs.parseInt "dmm-gpu-thresh" 1500
+    val split_frac = CommandLineArgs.parseReal "dmm-split" 0.65
   end
 
 end

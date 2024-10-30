@@ -152,10 +152,22 @@ def parseStats(row):
       allOutput += newRow['stdout{}'.format(i)] + newRow['stderr{}'.format(i)]
 
   tms = parseTimes(allOutput)
+
   try:
     newRow['avgtime'] = sum(tms) / len(tms)
   except:
     newRow['avgtime'] = None
+
+  try:
+    newRow['mintime'] = min(tms)
+  except:
+    newRow['mintime'] = None
+
+  try:
+    newRow['medtime'] = sorted(tms)[len(tms) // 2]
+  except Exception as e:
+    sys.stderr.write("parse medtime failed: {}\n".format(e))
+    newRow['medtime'] = None
 
   # try:
   #   newRow['space'] = float(newRow['space'])
@@ -183,6 +195,22 @@ def findTrials(data, impl, tag, procs, gpus):
   return result
 
 # ======================================================================
+
+def medTime(data, impl, tag, procs, gpus):
+  trials = [ r for r in findTrials(data, impl, tag, procs, gpus) ]
+  tms = [ r['medtime'] for r in trials if 'medtime' in r ]
+  try:
+    return tms[-1]
+  except:
+    return None
+
+def minTime(data, impl, tag, procs, gpus):
+  trials = [ r for r in findTrials(data, impl, tag, procs, gpus) ]
+  tms = [ r['mintime'] for r in trials if 'mintime' in r ]
+  try:
+    return tms[-1]
+  except:
+    return None
 
 def averageTime(data, impl, tag, procs, gpus):
   trials = [ r for r in findTrials(data, impl, tag, procs, gpus) ]
@@ -526,7 +554,7 @@ if args.input_file:
 else:
   print("[INFO] no results file argument; finding most recent")
   try:
-    mostRecent = mostRecentResultsFile()
+    mostRecent = mostRecentResultsFile(suffix=".*")
   except Exception as e:
     print("[ERR] caught exception: {}".format(e))
     print("[ERR] could not find most recent results file\n " + \
@@ -732,7 +760,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-def speedupPlot(outputName, tag):
+def speedupPlot(outputName, tag, getTime):
   
   xlim = 81 # upper limit of x axis
   xstep = 10 # distance between ticks
@@ -751,7 +779,7 @@ def speedupPlot(outputName, tag):
   gpu_colors = ['thistle', 'plum', 'fuchsia', 'mediumpurple', 'darkviolet']
 
   # markers = ['.'] * len(speedupTags)
-  procs = [1,10,20,30,40,50,60,70,80]
+  procs = [1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80]
 
   fontSize = 35
   legendFontSize = 35
@@ -761,12 +789,12 @@ def speedupPlot(outputName, tag):
   usedFull = dict()
   usedNoc = dict()
 
-  baseline = tm(averageTime(D, 'cpu', tag, 1, 1))
+  baseline = tm(getTime(D, 'cpu', tag, 1, 1))
   def this_su(impl, p, g):
     try:
       pp = 1 if impl == "gpu" else p
       gg = 1 if (impl == "gpu" or impl == "cpu") else g 
-      return baseline / averageTime(D, impl, tag, pp, gg)
+      return baseline / getTime(D, impl, tag, pp, gg)
     except Exception as e:
       sys.stderr.write('[WARN] error while plotting {} speedup of {} at P={}: {}\n'.format(impl, tag, p, e))
       return None
@@ -781,7 +809,7 @@ def speedupPlot(outputName, tag):
     # ideal hybrid speedup line
     # plt.plot([0,xlim], [gpu_su,gpu_su+xlim], marker="", color="grey", linewidth=0.33*linewidth)
     
-    lines.append(plt.plot([0,xlim], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color=gpu_colors[0], alpha=0.8))
+    lines.append(tuple(("GPU", plt.plot([0,xlim], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color=gpu_colors[0], alpha=0.8))))
     if gpu_su > ylim:
       sys.stderr.write('[WARN] {}: \'gpu\' speedup {} exceeds ylim of {}\n'.format(tag, int(gpu_su), ylim))
   except Exception as e:
@@ -795,7 +823,7 @@ def speedupPlot(outputName, tag):
       # ideal hybrid speedup line
       # plt.plot([0,xlim], [gpu_su,gpu_su+xlim], marker="", color="grey", linewidth=0.33*linewidth)
       
-      lines.append(plt.plot([0,xlim], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color=gpu_colors[i], alpha=0.8))
+      lines.append(tuple(("Multi GPU {}".format(i), plt.plot([0,xlim], [gpu_su, gpu_su], linestyle='dashed', marker='', mec='black', mew=0.0, linewidth=linewidth, color=gpu_colors[i], alpha=0.8))))
       if gpu_su > ylim:
         sys.stderr.write('[WARN] {}: \'gpu\' speedup {} exceeds ylim of {}\n'.format(tag, int(gpu_su), ylim))
     except Exception as e:
@@ -811,6 +839,8 @@ def speedupPlot(outputName, tag):
       ci = i % len(colors)
       mi = i % len(markers)
       si = i % len(linestyles)
+
+      name = "CPU" if impl == "cpu" else "Hybrid {}".format(gpus)
 
       if tuple((ci, mi, si)) in usedFull:
         otherTag = usedFull[tuple((ci, mi, si))]
@@ -830,8 +860,8 @@ def speedupPlot(outputName, tag):
       color = colors[ci]
       marker = markers[mi]
       linestyle = linestyles[si]
-      lines.append(plt.plot(workers, speedups, linestyle=linestyle, marker=marker, markersize=markerSize, mec='black', mew=0.0, linewidth=linewidth, color=color, alpha=0.8))
-      max_su = max(*speedups)
+      lines.append(tuple((name, plt.plot(workers, speedups, linestyle=linestyle, marker=marker, markersize=markerSize, mec='black', mew=0.0, linewidth=linewidth, color=color, alpha=0.8))))
+      max_su = max([ x for x in speedups if x is not None ])
       if max_su > ylim:
         sys.stderr.write('[WARN] {}: \'{}\' speedup {} exceeds ylim of {}\n'.format(tag, impl, int(max_su), ylim))
 
@@ -869,8 +899,8 @@ def speedupPlot(outputName, tag):
 
   if tag == 'dmm':
     plt.legend(
+      [b[1][0] for b in lines],
       [b[0] for b in lines],
-      ['GPU','CPU','Hybrid (ours)'],
       # bbox_to_anchor=(-0.16,1.05),
       # loc='upper right',
       bbox_to_anchor=(-0.17,1.04),
@@ -912,7 +942,10 @@ def speedupPlot(outputName, tag):
 # speedupPlot("figures/mpl-speedups-1.pdf", groupA, groupATags)
 # speedupPlot("figures/mpl-speedups-2.pdf", groupB, groupBTags)
 
-# speedupPlot("figures/dmm-speedups.pdf", "dmm")
+speedupPlot("figures/dmm-avg-speedups.pdf", "dmm", averageTime)
+speedupPlot("figures/dmm-med-speedups.pdf", "dmm", medTime)
+speedupPlot("figures/dmm-min-speedups.pdf", "dmm", minTime)
+
 # speedupPlot("figures/raytracer-speedups.pdf", "raytracer")
 # speedupPlot("figures/mandelbrot-speedups.pdf", "mandelbrot")
 # speedupPlot("figures/sort-speedups.pdf", "mergesort")
@@ -920,7 +953,7 @@ def speedupPlot(outputName, tag):
 # speedupPlot("figures/primes-speedups.pdf", "new-primes")
 # speedupPlot("figures/quickhull-speedups.pdf", "quickhull")
 # speedupPlot("figures/bfs-speedups.pdf", "bfs")
-speedupPlot("figures/sparse-mxv-speedups.pdf", "sparse-mxv")
+# speedupPlot("figures/sparse-mxv-speedups.pdf", "sparse-mxv")
 # speedupPlot("figures/kmeans-speedups.pdf", "kmeans")
 
 # ============================================================================
