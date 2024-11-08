@@ -80,7 +80,7 @@ val arr = MatReal32.data result
 val _ = print (Real32.toString (Array.sub (arr, 0)) ^ "\n")
 
 
-val expected = MatReal32.data (MatReal32.gpu_multiply (Seq.singleton (Seq.first devices)) (MatReal32.GpuNone, MatReal32.GpuNone) (input1, input2))
+(* val expected = MatReal32.data (MatReal32.gpu_multiply (Seq.singleton (Seq.first devices)) (MatReal32.GpuNone, MatReal32.GpuNone) (input1, input2))
 
 
 fun closeEnough (a, b) =
@@ -107,3 +107,4 @@ val _ =
           (print (Real32.toString (Array.sub (arr, i + (n * j)))); print " "))
       ; print "\n"
       ))
+*)

@@ -10,7 +10,7 @@
 FUTHARK_BACKEND ?= cuda
 
 # Path to MPL binary.
-MPL ?= /home/cc/proj/hybrid-sched/build/bin/mpl
+MPL ?= /home/cc/mpl/build/bin/mpl
 
 MLTON ?= mlton
 
@@ -23,8 +23,8 @@ MLTONFLAGS = \
 	-disable-pass splitTypes2
 
 OPENBLAS_MLTONFLAGS = \
-	-cc-opt '-I/home/cc/installs/openblas-0.3.28/build/include/' \
-	-link-opt '-L/home/cc/installs/openblas-0.3.28/build/lib/ -lopenblas'
+	-cc-opt '-I/home/cc/openblas-0.3.28/build/include/' \
+	-link-opt '-L/home/cc/openblas-0.3.28/build/lib/ -lopenblas'
 
 ifeq ($(FUTHARK_BACKEND), c)
 MLTONFLAGS += \
@@ -32,8 +32,8 @@ MLTONFLAGS += \
 	-link-opt '-rdynamic'
 else ifeq ($(FUTHARK_BACKEND), cuda)
 MLTONFLAGS += \
-	-cc-opt '-I/opt/nvidia/cuda/include/ -I../common/ -D_GNU_SOURCE' \
-	-link-opt '-rdynamic -L/opt/nvidia/cuda/lib64/ -lcuda -lnvrtc -lcublas -lcudart -lstdc++'
+	-cc-opt '-I/usr/local/cuda/include/ -I../common/ -D_GNU_SOURCE' \
+	-link-opt '-rdynamic -L/usr/local/cuda/lib64/ -lcuda -lnvrtc -lcublas -lcudart -lstdc++'
 else ifeq ($(FUTHARK_BACKEND), hip)
 MLTONFLAGS += \
 	-cc-opt '-I../common/ -D_GNU_SOURCE' \

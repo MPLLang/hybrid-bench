@@ -8,6 +8,12 @@ def cmd(procs, gpus, impl, args, warmup=5, repeat=20):
   cmd_template = f"/usr/bin/env time -v ./main.mpl.bin @mpl procs {procs} max-cc-depth 1 set-affinity -- -warmup {warmup} -repeat {repeat} -devices {dev_str} -impl {impl} --quiet {args}"
   return cmd_template
 
+def cmd_cublasxt(procs, gpus, impl, cpu_ratio, warmup=5, repeat=20):
+  if impl == "cpu":
+    cmd_template = f"/usr/bin/env time -v ./dmm-cpu 10000 {procs} {warmup} {repeat}"
+  else:
+    cmd_template = f"/usr/bin/env time -v ./dmm-hybrid 10000 {cpu_ratio} {procs} {gpus} {warmup} {repeat}"
+  return cmd_template
 
 def interval_tree(procs, gpus, impl):
   row = {
@@ -32,6 +38,16 @@ def dmm(procs, gpus, impl):
   }
   return row
 
+def dmm_cublasxt(procs, gpus, impl, cpu_ratio):
+  row = {
+    "tag": "dmm",
+    "cwd": "bench/dmm-cublasxt",
+    "cmd": cmd_cublasxt(procs, gpus, impl, cpu_ratio),
+    "procs": procs,
+    "gpus": gpus,
+    "impl": impl,
+  }
+  return row
 
 def mandelbrot(procs, gpus, impl):
   row = {
@@ -169,14 +185,34 @@ def filter_gpu_procs(row):
 
 tests = [
   add_extra(filter_unique(filter_gpu_procs(make_row(procs, gpus, impl))))
-  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans, sparse_mxv]
+  for make_row in [interval_tree, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans, sparse_mxv]
   for procs in [1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80]
   for gpus in [1,2,3,4]
   for impl in ["hybrid","cpu","gpu"]
 ]
 tests += [
   add_extra(filter_unique(filter_gpu_procs(make_row(gpus, gpus, 'multi-gpu'))))
-  for make_row in [interval_tree, dmm, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans, sparse_mxv]
+  for make_row in [interval_tree, mandelbrot, raytracer, mergesort, new_primes, quickhull, bfs, kmeans, sparse_mxv]
+  for gpus in [1,2,3,4]
+]
+tests += [
+  add_extra(filter_unique(filter_gpu_procs(make_row(procs, gpus, "hybrid"))))
+  for make_row in [dmm]
+  for procs in [1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80]
+  for gpus in [1,2,3,4]
+]
+tests += [
+  add_extra(filter_unique(filter_gpu_procs(make_row(procs, gpus, impl, 0.2))))
+  for make_row in [dmm_cublasxt]
+  for procs in [1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80]
+  for gpus in [1,2,3,4]
+  for impl in ["hybrid","cpu","gpu"]
+]
+
+tests += [
+  # procs is 0. It doesn't matter anyway because cpu ratio is 0.0
+  add_extra(filter_unique(filter_gpu_procs(make_row(0, gpus, "multi-gpu", 0.0))))
+  for make_row in [dmm_cublasxt]
   for gpus in [1,2,3,4]
 ]
 tests += [ dmm(1, 1, 'cpu-openblas') ]

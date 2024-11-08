@@ -1,9 +1,11 @@
 #include <stdio.h>
+#include <iostream>
 #include <stdlib.h>
 #include <cuda_runtime.h>
 #include <cublasXt.h>
 #include <math.h>
 #include <time.h>        // For clock_gettime()
+#include <random>        // For clock_gettime()
 #include <string.h>
 #include <cblas.h>       // Include OpenBLAS or another CPU BLAS library
 #include <openblas_config.h>  // For controlling OpenBLAS threads
@@ -28,9 +30,6 @@
             exit(EXIT_FAILURE);                                             \
         }                                                                   \
     } while (0)
-
-#define NUM_RUNS 20
-#define WARMUP_RUNS 5
 
 double get_elapsed_time(struct timespec *start, struct timespec *end) {
     double elapsed_sec = end->tv_sec - start->tv_sec;
@@ -117,7 +116,11 @@ int main(int argc, char* argv[]) {
     M = N;
     K = N;
 
+    // std::cout << "Config type: " << openblas_get_config() << "\n"; // ... MAX_THREADS=4
+
     openblas_set_num_threads(procs);
+
+    // std::cout << "Config type: " << openblas_get_config() << "\n"; // ... MAX_THREADS=4
 
 
     // Get the number of available GPUs
@@ -158,14 +161,15 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    // Initialize matrices A and B with random values, C with zeros
+    std::mt19937 gen(std::random_device{}()); // Mersenne Twister engine
+    std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+    // We initialize h_A and h_B with random values to avoid data reuse
     for (size_t i = 0; i < (size_t)lda * K; ++i) {
-        h_A[i] = 1.0;
-        // rand() / (float)RAND_MAX;
+        h_A[i] = dist(gen);
     }
     for (size_t i = 0; i < (size_t)ldb * N; ++i) {
-        h_B[i] = 3.0;
-        // rand() / (float)RAND_MAX;
+        h_B[i] = dist(gen);
     }
     memset(h_C, 0, sizeC);
 
@@ -183,7 +187,7 @@ int main(int argc, char* argv[]) {
     // Set the CPU routine for single-precision GEMM
     CHECK_CUBLAS(cublasXtSetCpuRoutine(handle,
                                        CUBLASXT_GEMM,
-                                       CUDA_R_32F,
+                                       CUBLASXT_FLOAT,
                                        (void *)my_sgemm_));
 
     // Set the CPU ratio
@@ -191,75 +195,62 @@ int main(int argc, char* argv[]) {
     CHECK_CUBLAS(cublasXtSetCpuRatio(handle, CUBLASXT_GEMM, CUBLASXT_FLOAT, cpuRatio));
 
     // Arrays to hold timing data
-    double times[NUM_RUNS];
+    double times[repeat];
 
     struct timespec start, end;
 
     // Warm-up runs
-    for (int i = 0; i < WARMUP_RUNS; ++i) {
-        // Free and reallocate device memory before each run
-        if (d_A != NULL) CHECK_CUDA(cudaFree(d_A));
-        if (d_B != NULL) CHECK_CUDA(cudaFree(d_B));
-        if (d_C != NULL) CHECK_CUDA(cudaFree(d_C));
-
-        CHECK_CUDA(cudaMalloc((void**)&d_A, sizeA));
-        CHECK_CUDA(cudaMalloc((void**)&d_B, sizeB));
-        CHECK_CUDA(cudaMalloc((void**)&d_C, sizeC));
-
-        // Copy data from host to device
-        CHECK_CUDA(cudaMemcpy(d_A, h_A, sizeA, cudaMemcpyHostToDevice));
-        CHECK_CUDA(cudaMemcpy(d_B, h_B, sizeB, cudaMemcpyHostToDevice));
+    for (int i = 0; i < warmup; ++i) {
+        // We initialize h_A and h_B with random values to avoid data reuse
+        for (size_t i = 0; i < (size_t)lda * K; ++i) {
+            h_A[i] = rand() / (float)RAND_MAX;
+        }
+        for (size_t i = 0; i < (size_t)ldb * N; ++i) {
+            h_B[i] = rand() / (float)RAND_MAX;
+        }
+        memset(h_C, 0, sizeC);
 
         CHECK_CUBLAS(cublasXtSgemm(handle,
-                            CUBLAS_OP_N, CUBLAS_OP_N,
-                            M, N, K,
-                            &alpha,
-                            d_A, lda,
-                            d_B, ldb,
-                            &beta,
-                            d_C, ldc));
-
-        // Copy result from device to host
-        CHECK_CUDA(cudaMemcpy(h_C, d_C, sizeC, cudaMemcpyDeviceToHost));
-
+            CUBLAS_OP_N, CUBLAS_OP_N,
+            M, N, K,
+            &alpha,
+            h_A, lda,
+            h_B, ldb,
+            &beta,
+            h_C, ldc));
+        // Synchronize to ensure the operation is complete
         CHECK_CUDA(cudaDeviceSynchronize());
     }
 
     // Main timing runs
-    for (int run = 0; run < NUM_RUNS; ++run) {
-        if (d_A != NULL) CHECK_CUDA(cudaFree(d_A));
-        if (d_B != NULL) CHECK_CUDA(cudaFree(d_B));
-        if (d_C != NULL) CHECK_CUDA(cudaFree(d_C));
+    for (int run = 0; run < repeat; ++run) {
+        // We initialize h_A and h_B with random values to avoid data reuse
+        for (size_t i = 0; i < (size_t)lda * K; ++i) {
+            h_A[i] = rand() / (float)RAND_MAX;
+        }
+        for (size_t i = 0; i < (size_t)ldb * N; ++i) {
+            h_B[i] = rand() / (float)RAND_MAX;
+        }
+        memset(h_C, 0, sizeC);
 
+        // Start timing
         clock_gettime(CLOCK_MONOTONIC, &start);
 
-        CHECK_CUDA(cudaMalloc((void**)&d_A, sizeA));
-        CHECK_CUDA(cudaMalloc((void**)&d_B, sizeB));
-        CHECK_CUDA(cudaMalloc((void**)&d_C, sizeC));
-
-        // Copy data from host to device
-        CHECK_CUDA(cudaMemcpy(d_A, h_A, sizeA, cudaMemcpyHostToDevice));
-        CHECK_CUDA(cudaMemcpy(d_B, h_B, sizeB, cudaMemcpyHostToDevice));
-
-        checkMemoryLocation(d_A);
-        checkMemoryLocation(d_B);
-
+        // Perform matrix multiplication
         CHECK_CUBLAS(cublasXtSgemm(handle,
-                            CUBLAS_OP_N, CUBLAS_OP_N,
-                            M, N, K,
-                            &alpha,
-                            d_A, lda,
-                            d_B, ldb,
-                            &beta,
-                            d_C, ldc));
+                                   CUBLAS_OP_N, CUBLAS_OP_N,
+                                   M, N, K,
+                                   &alpha,
+                                   h_A, lda,
+                                   h_B, ldb,
+                                   &beta,
+                                   h_C, ldc));
 
-        CHECK_CUDA(cudaMemcpy(h_C, d_C, sizeC, cudaMemcpyDeviceToHost));
-
+        // Synchronize to ensure the operation is complete
         CHECK_CUDA(cudaDeviceSynchronize());
 
         // End timing
         clock_gettime(CLOCK_MONOTONIC, &end);
-
         // Calculate elapsed time in milliseconds
         times[run] = get_elapsed_time(&start,&end)/1000.0;
         printf("time %.4fs\n", times[run]);
@@ -274,7 +265,7 @@ int main(int argc, char* argv[]) {
         // Calculate total and find minimum
     double total = 0.0;
     double min = times[0];
-    for (int i = 0; i < NUM_RUNS; i++) {
+    for (int i = 0; i < repeat; i++) {
         total += times[i];
         if (times[i] < min) {
             min = times[i];
@@ -282,19 +273,19 @@ int main(int argc, char* argv[]) {
     }
 
     // Calculate average
-    double avg = total / NUM_RUNS;
+    double avg = total / repeat;
 
     // Calculate median
     // First, sort the array
-    qsort(times, NUM_RUNS, sizeof(double), compare_doubles);
+    qsort(times, repeat, sizeof(double), compare_doubles);
 
     double med;
-    if (NUM_RUNS % 2 == 0) {
+    if (repeat % 2 == 0) {
         // If even, median is the average of the two middle values
-        med = (times[NUM_RUNS / 2 - 1] + times[NUM_RUNS / 2]) / 2.0;
+        med = (times[repeat / 2 - 1] + times[repeat / 2]) / 2.0;
     } else {
         // If odd, median is the middle value
-        med = times[NUM_RUNS / 2];
+        med = times[repeat / 2];
     }
 
     printf("\n\n");
