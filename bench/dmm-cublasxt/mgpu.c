@@ -5,9 +5,6 @@
 #include <math.h>
 #include <time.h>        // For clock_gettime()
 #include <string.h>
-#include <cblas.h>       // Include OpenBLAS or another CPU BLAS library
-#include <openblas_config.h>  // For controlling OpenBLAS threads
-
 
 #define CHECK_CUDA(call)                                                    \
     do {                                                                    \
@@ -49,27 +46,6 @@ int compare_doubles(const void *a, const void *b) {
         return 0;
 }
 
-// CPU SGEMM routine using OpenBLAS (or another BLAS library)
-void my_sgemm_(const char *transa, const char *transb, const int *m,
-               const int *n, const int *k, const float *alpha,
-               const float *A, const int *lda,
-               const float *B, const int *ldb,
-               const float *beta,
-               float *C, const int *ldc)
-{
-    // Map Fortran character inputs to CBLAS enums
-    CBLAS_TRANSPOSE ta = (*transa == 'N' || *transa == 'n') ? CblasNoTrans : CblasTrans;
-    CBLAS_TRANSPOSE tb = (*transb == 'N' || *transb == 'n') ? CblasNoTrans : CblasTrans;
-
-    cblas_sgemm(CblasColMajor, ta, tb,
-                *m, *n, *k,
-                *alpha,
-                A, *lda,
-                B, *ldb,
-                *beta,
-                C, *ldc);
-}
-
 int main(int argc, char* argv[]) {
     // Default matrix dimensions
     int M = 4096;
@@ -79,15 +55,9 @@ int main(int argc, char* argv[]) {
     // Default number of GPUs to use
     int numGPUs = 1;
 
-    // Default CPU ratio
-    double cpuRatio = 0.1;
-
-    // Number of CPU threads (to be passed as CLA)
-    int cpuThreads = 1;
-
     // Parse command-line arguments
-    if (argc != 7) {
-        fprintf(stderr, "Usage: %s <num_gpus> <M> <N> <K> <cpu_ratio> <cpu_threads>\n", argv[0]);
+    if (argc != 5) {
+        fprintf(stderr, "Usage: %s <num_gpus> <M> <N> <K>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -95,21 +65,11 @@ int main(int argc, char* argv[]) {
     M = atoi(argv[2]);
     N = atoi(argv[3]);
     K = atoi(argv[4]);
-    cpuRatio = atof(argv[5]);
-    cpuThreads = atoi(argv[6]);
 
-
-    if (numGPUs < 1 || M < 1 || N < 1 || K < 1 || cpuRatio < 0.0 || cpuRatio > 1.0 || cpuThreads < 1) {
-        fprintf(stderr, "Error: Invalid input values.\n");
-        fprintf(stderr, "num_gpus, M, N, K must be positive integers.\n");
-        fprintf(stderr, "cpu_ratio must be a floating-point value between 0.0 and 1.0.\n");
-        fprintf(stderr, "cpu_threads must be a positive integer.\n");
-
+    if (numGPUs < 1 || M < 1 || N < 1 || K < 1) {
+        fprintf(stderr, "Error: All input values must be positive integers.\n");
         exit(EXIT_FAILURE);
     }
-
-    openblas_set_num_threads(cpuThreads);
-
 
     // Get the number of available GPUs
     int deviceCount = 0;
@@ -131,9 +91,9 @@ int main(int argc, char* argv[]) {
     float beta = 0.0f;
 
     // Allocate host memory for matrices A, B, and C
-    size_t sizeA = sizeof(float) * (size_t)lda * K;
-    size_t sizeB = sizeof(float) * (size_t)ldb * N;
-    size_t sizeC = sizeof(float) * (size_t)ldc * N;
+    size_t sizeA = sizeof(float) * lda * K;
+    size_t sizeB = sizeof(float) * ldb * N;
+    size_t sizeC = sizeof(float) * ldc * N;
 
     float* h_A = (float*)malloc(sizeA);
     float* h_B = (float*)malloc(sizeB);
@@ -145,11 +105,11 @@ int main(int argc, char* argv[]) {
     }
 
     // Initialize matrices A and B with random values, C with zeros
-    for (size_t i = 0; i < (size_t)lda * K; ++i) {
+    for (size_t i = 0; i < lda * K; ++i) {
         h_A[i] = 1.0;
         // rand() / (float)RAND_MAX;
     }
-    for (size_t i = 0; i < (size_t)ldb * N; ++i) {
+    for (size_t i = 0; i < ldb * N; ++i) {
         h_B[i] = 3.0;
         // rand() / (float)RAND_MAX;
     }
@@ -165,16 +125,6 @@ int main(int argc, char* argv[]) {
         devices[i] = i; // Use device IDs 0, 1, ..., numGPUs - 1
     }
     CHECK_CUBLAS(cublasXtDeviceSelect(handle, numGPUs, devices));
-
-    // Set the CPU routine for single-precision GEMM
-    CHECK_CUBLAS(cublasXtSetCpuRoutine(handle,
-                                       CUBLASXT_GEMM,
-                                       CUDA_R_32F,
-                                       (void *)my_sgemm_));
-
-    // Set the CPU ratio
-    // Set the CPU ratio for GEMM operations (single-precision float)
-    CHECK_CUBLAS(cublasXtSetCpuRatio(handle, CUBLASXT_GEMM, CUBLASXT_FLOAT, cpuRatio));
 
     // Arrays to hold timing data
     double times[NUM_RUNS];
@@ -259,17 +209,10 @@ int main(int argc, char* argv[]) {
         median = times[NUM_RUNS / 2];
     }
 
-    // Print raw timing results
-    printf("Raw Timing Results (in milliseconds):\n");
-    for (int i = 0; i < NUM_RUNS; ++i) {
-        printf("Run %d: %.3f ms\n", i + 1, times[i]);
-    }
-
-    // Print statistics
-    printf("\nHybrid Benchmark Results over %d runs:\n", NUM_RUNS);
+    // Print results
+    printf("Benchmark Results over %d runs:\n", NUM_RUNS);
     printf("Matrix Dimensions: M=%d, N=%d, K=%d\n", M, N, K);
     printf("Number of GPUs Used: %d\n", numGPUs);
-    printf("CPU Ratio: %.2f\n", cpuRatio);
     printf("Average Time: %.3f ms\n", average);
     printf("Minimum Time: %.3f ms\n", min_time);
     printf("Median Time: %.3f ms\n", median);
