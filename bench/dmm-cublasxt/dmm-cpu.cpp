@@ -101,6 +101,9 @@ int main(int argc, char* argv[]) {
     float* d_B = NULL;
     float* d_C = NULL;
 
+    //cudaMalloc(&d_A, sizeA);
+    //cudaMalloc(&d_B, sizeB);
+    //cudaMalloc(&d_C, sizeC);
 
     if (h_A == NULL || h_B == NULL || h_C == NULL) {
         fprintf(stderr, "Error: Host memory allocation failed.\n");
@@ -150,6 +153,9 @@ int main(int argc, char* argv[]) {
             h_B[i] = rand() / (float)RAND_MAX;
         }
         memset(h_C, 0, sizeC);
+	//cudaMemcpy(d_A, h_A, sizeA, cudaMemcpyHostToDevice);
+	//cudaMemcpy(d_B, h_B, sizeB, cudaMemcpyHostToDevice);
+	//cudaMemcpy(d_C, h_C, sizeC, cudaMemcpyHostToDevice);
 
         // Start timing
         clock_gettime(CLOCK_MONOTONIC, &start);
@@ -163,7 +169,8 @@ int main(int argc, char* argv[]) {
                     h_C, ldc);
 
         clock_gettime(CLOCK_MONOTONIC, &end);
-        // Calculate elapsed time in milliseconds
+        //cudaMemcpy(h_C, d_C, sizeC, cudaMemcpyDeviceToHost);
+	// Calculate elapsed time in milliseconds
         times[run] = get_elapsed_time(&start,&end)/1000.0;
         printf("time %.4fs\n", times[run]);
     }
