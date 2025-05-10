@@ -73,6 +73,19 @@ struct
     Slice {mat = mat, top = top, left = left, width = width, height = height} *)
 
 
+  fun resizeMatrix (Mat {width, height, data}, newWidth: int, newHeight: int) =
+    Slice
+    { left = 0
+    , top = 0
+    , width = newWidth
+    , height = newHeight
+    , mat = Mat 
+        { width = newWidth
+        , height = newHeight
+        , data = data
+        }
+    }
+
   fun splitHorizontal (Slice {left, top, height, width, mat}) {half_height} =
     let
       val upper = Slice
@@ -800,6 +813,12 @@ struct
     end
 
 
+  val hostC =  Mat
+          { width = 10000
+          , height = 10000
+          , data = ForkJoin.alloc (10000 * 10000)
+          }
+    
   fun hybrid_multiply_nonsquare (devices: Device.gpu_identifier Seq.t) (da: input_state, db: input_state) (a, b) =
     if not (width a = height b) then
       raise MatrixFormat
@@ -809,6 +828,7 @@ struct
          * free because it is uninitialized
          *)
         val c = allocate {height = height a, width = width b}
+        (* val c = resizeMatrix (hostC, height a, width b) *)
 
         val need_to_free_a = case da of GpuNone => true | _ => false
         val need_to_free_b = case db of GpuNone => true | _ => false
