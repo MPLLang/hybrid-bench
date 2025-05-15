@@ -1,3 +1,5 @@
+// Prepopulated data on the GPU
+
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
@@ -239,6 +241,7 @@ int main(int argc, char* argv[]) {
         // Start timing
         clock_gettime(CLOCK_MONOTONIC, &start);
 
+    // Prepopulate and use device data
 	cudaMemcpy(d_A, h_A, sizeA, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_B, h_B, sizeB, cudaMemcpyHostToDevice);
 	cudaMemcpy(d_C, h_C, sizeC, cudaMemcpyHostToDevice);
