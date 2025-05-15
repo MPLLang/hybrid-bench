@@ -1,3 +1,5 @@
+// Dummy kernel used to test the effect of pinned memory.
+
 #include <cuda.h>
 #include <stdio.h>
 #include <malloc.h>
@@ -20,6 +22,7 @@ int main() {
   for (int i = 0; i < 100; i++) {
     float* f = (float*) malloc(sizeof(float) * size);
     float* f1 = (float*) malloc(sizeof(float) * size);
+    // Remove these 2 lines to not pin memory.
     cudaHostRegister(f, size * sizeof(float), 0);
     cudaHostRegister(f1, size * sizeof(float), 0);
     for (int i = 0; i < size; i++) {

@@ -16,16 +16,20 @@ cudaStream_t streams[MAX_NUM_STREAMS];
 // ==========================================================================
 // timer stuff
 
-cudaEvent_t begin;
-cudaEvent_t end;
-cudaEvent_t mid;
-cudaEvent_t allocation;
+// Events used to keep track of time intervals
+cudaEvent_t begin[MAX_NUM_STREAMS];
+cudaEvent_t end[MAX_NUM_STREAMS];
+cudaEvent_t mid[MAX_NUM_STREAMS];
+cudaEvent_t allocation[MAX_NUM_STREAMS];
 
 struct my_timer_t {
   const char *name;
   struct timespec start;
   struct timespec most_recent_tick;
 };
+
+// Used as an experiment for preallocated/pinned gpu memory for the C matrix
+float *device_c_data = NULL;
 
 static void timespec_subtract(struct timespec *x, struct timespec *y) {
   if (x->tv_nsec < y->tv_nsec) {
@@ -129,8 +133,6 @@ int set_cuda_device(
   return dev;
 }
 
-float *device_c_data = NULL;
-
 extern "C"
 void initialize_stream(
   int64_t dev_id,
@@ -146,12 +148,12 @@ void initialize_stream(
   }
   set_cuda_device(gpu_id, gpu_id_str_len);
   cudaStreamCreate( &(streams[dev_id]) );
-  cudaEventCreate(&begin);
-  cudaEventCreate(&end);
-  cudaEventCreate(&mid);
-  cudaEventCreate(&allocation);
-  cudaMalloc(&device_c_data, sizeof(float) * 10000 * 10000);
-  printf("DEVICE C DATA IS %p\n", device_c_data);
+  // Events can only be used in the stream they're created in
+  cudaEventCreate(&begin[dev_id]);
+  cudaEventCreate(&end[dev_id]);
+  cudaEventCreate(&mid[dev_id]);
+  cudaEventCreate(&allocation[dev_id]);
+  cudaMalloc(&device_c_data, sizeof(float) * 10000 * 10000);  
 }
 
 // ==========================================================================
@@ -181,8 +183,8 @@ void * memcpyFloatsToGpu(
 {
   struct my_timer_t t;
   timer_begin(&t, "memcpyFloatsToGpu");
-  cudaEventRecord(begin, streams[dev_id]);
-	  
+  cudaEventRecord(begin[dev_id], streams[dev_id]);
+    
   set_cuda_device(gpu_id, gpu_id_str_len);
 
   // float *p;
@@ -192,13 +194,14 @@ void * memcpyFloatsToGpu(
   cudaMemcpyAsync(p, data, len*sizeof(float), cudaMemcpyHostToDevice, streams[dev_id]);
   // cudaDeviceSynchronize();
 
-  cudaEventRecord(end, streams[dev_id]);
+  cudaEventRecord(end[dev_id], streams[dev_id]);
   cudaStreamSynchronize(streams[dev_id]);
   //cudaHostUnregister(data);
   float time_elapsed;
-  cudaEventElapsedTime(&time_elapsed, begin, end);
+  cudaEventElapsedTime(&time_elapsed, begin[dev_id], end[dev_id]);
   printf("memcpyH->D %f\n", time_elapsed);
   timer_report_tick(&t, "done");
+  cudaHostUnregister(data);
   return p;
 }
 
@@ -212,28 +215,29 @@ void * allocAndMemcpyFloatsToGpu(
 {
   struct my_timer_t t;
   timer_begin(&t, "memcpyFloatsToGpu");
-  cudaEventRecord(begin, streams[dev_id]);
+  cudaEventRecord(begin[dev_id], streams[dev_id]);
 
   set_cuda_device(gpu_id, gpu_id_str_len);
 
   float *p;
   cudaHostRegister(data, len*sizeof(float), 0);
   cudaMallocAsync(&p, len*sizeof(float), streams[dev_id]);
-  cudaEventRecord(allocation, streams[dev_id]);
+  cudaEventRecord(allocation[dev_id], streams[dev_id]);
   cudaMemcpyAsync(p, data, len*sizeof(float), cudaMemcpyHostToDevice, streams[dev_id]);
   // cudaDeviceSynchronize();
 
-  cudaEventRecord(end, streams[dev_id]);
+  cudaEventRecord(end[dev_id], streams[dev_id]);
   cudaStreamSynchronize(streams[dev_id]);
   float time_elapsed;
-  //cudaHostUnregister(data);
-  cudaEventElapsedTime(&time_elapsed, begin, allocation);
+  cudaEventElapsedTime(&time_elapsed, begin[dev_id], allocation[dev_id]);
   printf("mallocH->D %f\n", time_elapsed);
-  cudaEventElapsedTime(&time_elapsed, allocation, end);
+  cudaEventElapsedTime(&time_elapsed, allocation[dev_id], end[dev_id]);
   printf("memcpyH->D %f\n", time_elapsed);
 
   
   timer_report_tick(&t, "done");
+  //cudaHostUnregister(data);
+  cudaStreamSynchronize(streams[dev_id]);
   return p;
 }
 
@@ -312,7 +316,7 @@ do_dmm(
 {
   struct my_timer_t t;
   timer_begin(&t, "do_dmm");
-  cudaEventRecord(begin, streams[dev_id]);
+  cudaEventRecord(begin[dev_id], streams[dev_id]);
 
   set_cuda_device(gpu_id, gpu_id_str_len);
 
@@ -325,10 +329,8 @@ do_dmm(
   float *device_c;
   // cudaMallocAsync(&device_a, abytes, streams[dev_id]);
   // cudaMallocAsync(&device_b, bbytes, streams[dev_id]);
-
-  //cudaMallocAsync(&device_c, cbytes, streams[dev_id]);
-  device_c = device_c_data;
-  cudaEventRecord(allocation, streams[dev_id]);
+  cudaMallocAsync(&device_c, cbytes, streams[dev_id]);
+  cudaEventRecord(allocation[dev_id], streams[dev_id]);
 
   /*
   int GRID = ((n*n)+(SIZE-1))/SIZE;
@@ -357,27 +359,28 @@ do_dmm(
     device_c, m);
   cublasDestroy(handle);
 
-  cudaEventRecord(mid, streams[dev_id]);
+  cudaEventRecord(mid[dev_id], streams[dev_id]);
   timer_report_tick(&t, "      cublasSgemm");
   cudaHostRegister(c, cbytes, 0);
   cudaMemcpyAsync(c, device_c, cbytes, cudaMemcpyDeviceToHost, streams[dev_id]);
 
   // cudaFreeAsync(device_a, streams[dev_id]);
   // cudaFreeAsync(device_b, streams[dev_id]);
-  
-  //cudaFreeAsync(device_c, streams[dev_id]);
+  cudaFreeAsync(device_c, streams[dev_id]);
 
-  cudaEventRecord(end, streams[dev_id]);
+  cudaEventRecord(end[dev_id], streams[dev_id]);
   cudaStreamSynchronize(streams[dev_id]);
-  //cudaHostUnregister(c);
 
   float time_elapsed;
-  cudaEventElapsedTime(&time_elapsed, begin, allocation);
+  cudaEventElapsedTime(&time_elapsed, begin[dev_id], allocation[dev_id]);
   printf("allocation %f\n", time_elapsed);
-  cudaEventElapsedTime(&time_elapsed, allocation, mid);
+  cudaEventElapsedTime(&time_elapsed, allocation[dev_id], mid[dev_id]);
   printf("gemm %f\n", time_elapsed);
-  cudaEventElapsedTime(&time_elapsed, mid, end);
+  cudaEventElapsedTime(&time_elapsed, mid[dev_id], end[dev_id]);
   printf("memcpyD->H %f\n", time_elapsed);
 
   timer_report_tick(&t, "  memcpy from gpu");
+
+  // Currently not timed - ideally we find a better way to manage pinned memory
+  cudaHostUnregister(c);
 }

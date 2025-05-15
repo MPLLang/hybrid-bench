@@ -72,7 +72,7 @@ struct
   (* fun slice {left, top, height, width} mat =
     Slice {mat = mat, top = top, left = left, width = width, height = height} *)
 
-
+  (* Used to resize a matrix so that its C data array can be reused without reallocating *)
   fun resizeMatrix (Mat {width, height, data}, newWidth: int, newHeight: int) =
     Slice
     { left = 0
@@ -812,7 +812,8 @@ struct
         end
     end
 
-
+  (* Used for testing memory reuse by having a single allocation that can be reused. 
+     "10000" is just used for testing, ideally this would be allocated depending on need *)
   val hostC =  Mat
           { width = 10000
           , height = 10000
