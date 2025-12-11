@@ -1,3 +1,7 @@
+-- ==
+-- entry: merge_sort_i32
+-- random input { [100000000]i32 }
+
 import "lib/github.com/diku-dk/sorts/insertion_sort"
 import "lib/github.com/diku-dk/sorts/merge_sort"
 import "lib/github.com/diku-dk/sorts/radix_sort"

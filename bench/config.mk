@@ -10,7 +10,7 @@
 FUTHARK_BACKEND ?= cuda
 
 # Path to MPL binary.
-MPL ?= /home/cc/proj/hybrid-sched/build/bin/mpl
+MPL ?= /home/shwestrick/proj/mpl/hybrid-sched-arm/build/bin/mpl
 
 MLTON ?= mlton
 
@@ -32,8 +32,8 @@ MLTONFLAGS += \
 	-link-opt '-rdynamic'
 else ifeq ($(FUTHARK_BACKEND), cuda)
 MLTONFLAGS += \
-	-cc-opt '-I/opt/nvidia/cuda/include/ -I../common/ -D_GNU_SOURCE' \
-	-link-opt '-rdynamic -L/opt/nvidia/cuda/lib64/ -lcuda -lnvrtc -lcublas -lcudart -lstdc++'
+	-cc-opt '-I/usr/local/cuda/include/ -I../common/ -D_GNU_SOURCE' \
+	-link-opt '-rdynamic -L/usr/local/cuda/lib64/ -lcuda -lnvrtc -lcublas -lcudart -lstdc++'
 else ifeq ($(FUTHARK_BACKEND), hip)
 MLTONFLAGS += \
 	-cc-opt '-I../common/ -D_GNU_SOURCE' \

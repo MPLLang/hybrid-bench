@@ -1,0 +1,99 @@
+diff --git a/src/moderngpu/context.hxx b/src/moderngpu/context.hxx
+index 6df9049..df15884 100644
+--- a/src/moderngpu/context.hxx
++++ b/src/moderngpu/context.hxx
+@@ -14,7 +14,6 @@ enum memory_space_t {
+   memory_space_host = 1 
+ };
+ 
+-
+ inline std::string device_prop_string(cudaDeviceProp prop) {
+   int ordinal;
+   cudaGetDevice(&ordinal);
+@@ -23,8 +22,12 @@ inline std::string device_prop_string(cudaDeviceProp prop) {
+   cudaError_t result = cudaMemGetInfo(&freeMem, &totalMem);
+   if(cudaSuccess != result) throw cuda_exception_t(result);  
+ 
+-  double memBandwidth = (prop.memoryClockRate * 1000.0) *
+-    (prop.memoryBusWidth / 8 * 2) / 1.0e9;
++  int memoryClockRate;
++  cudaDeviceGetAttribute(&memoryClockRate, cudaDevAttrMemoryClockRate, ordinal);
++  double memBandwidth = (memoryClockRate * 1000.0) * (prop.memoryBusWidth / 8 * 2) / 1.0e9;
++
++  int clockRate;
++  cudaDeviceGetAttribute(&clockRate, cudaDevAttrClockRate, ordinal);
+ 
+   std::string s = detail::stringprintf(
+     "%s : %8.3lf Mhz   (Ordinal %d)\n"
+@@ -32,10 +35,10 @@ inline std::string device_prop_string(cudaDeviceProp prop) {
+     "FreeMem: %6dMB   TotalMem: %6dMB   %2d-bit pointers.\n"
+     "Mem Clock: %8.3lf Mhz x %d bits   (%5.1lf GB/s)\n"
+     "ECC %s\n\n",
+-    prop.name, prop.clockRate / 1000.0, ordinal,
++    prop.name, clockRate / 1000.0, ordinal,
+     prop.multiProcessorCount, prop.major, prop.minor,
+     (int)(freeMem / (1<< 20)), (int)(totalMem / (1<< 20)), 8 * sizeof(int*),
+-    prop.memoryClockRate / 1000.0, prop.memoryBusWidth, memBandwidth,
++    memoryClockRate / 1000.0, prop.memoryBusWidth, memBandwidth,
+     prop.ECCEnabled ? "Enabled" : "Disabled");
+   return s;
+ }
+diff --git a/tests/test_mergesort.cu b/tests/test_mergesort.cu
+index 44c7b14..59897ee 100644
+--- a/tests/test_mergesort.cu
++++ b/tests/test_mergesort.cu
+@@ -1,11 +1,46 @@
+ #include <moderngpu/kernel_mergesort.hxx>
++#include <chrono>
++#include <iostream>
+ 
+ using namespace mgpu;
+ 
+ int main(int argc, char** argv) {
+   standard_context_t context;
+ 
++  int32_t n = 100000000;
++  auto t = std::chrono::high_resolution_clock::now();
++  mem_t<int32_t> data = fill_random(0, n, n, false, context);
++  auto elapsed = (std::chrono::high_resolution_clock::now() - t).count();
++  std::cout << "fill_random " << elapsed << std::endl;
++
++  t = std::chrono::high_resolution_clock::now();
++  mergesort(data.data(), n, less_t<int>(), context);
++  elapsed = (std::chrono::high_resolution_clock::now() - t).count();
++  std::cout << "mergesort " << elapsed << std::endl;
++
++  t = std::chrono::high_resolution_clock::now();
++  std::vector<int32_t> sorted = from_mem(data);
++  elapsed = (std::chrono::high_resolution_clock::now() - t).count();
++  std::cout << "from_mem " << elapsed << std::endl;
++
++  std::vector<int32_t> ref = from_mem(data);
++  std::sort(ref.begin(), ref.end());
++
++  for (int i = 0; i < 20; i++) {
++    std::cout << ref[i] << " ";
++  }
++  std::cout << "..." << std::endl;
++
++  for (int i = 0; i < 20; i++) {
++    std::cout << sorted[i] << " ";
++  }
++  std::cout << "..." << std::endl;
++
++  bool success = ref == sorted;
++  printf("%7d: %s\n", n, success ? "SUCCESS" : "FAILURE");
++
+   // Loop from 1K to 100M.
++  /*
+   for(int count = 2000; count <= 100000000; count += count / 10) {
+     for(int it = 1; it <= 5; ++it) {
+ 
+@@ -25,6 +60,7 @@ int main(int argc, char** argv) {
+         return 1;
+     }
+   }
++  */
+ 
+   return 0;
+ }

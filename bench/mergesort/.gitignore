@@ -1,4 +1,6 @@
 futhark/lib/
+futhark/sort
+futhark/data/
 futhark/sort.c
 futhark/sort.h
 futhark/sort.json

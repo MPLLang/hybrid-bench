@@ -36,4 +36,9 @@ val _ = print
 val _ = print
   ("result " ^ Util.summarizeArraySlice 8 Int32.toString result ^ "\n")
 
+val () =
+  ForkJoin.parfor 1000 (0, n-1) (fn i =>
+    if Seq.nth result i <= Seq.nth result (i+1) then ()
+    else print ("not sorted at index " ^ Int.toString i ^ "\n"))
+
 val _ = CtxSet.free ctxSet

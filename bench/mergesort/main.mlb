@@ -3,5 +3,7 @@ futhark/sort.sig
 futhark/sort.sml
 DualBinarySearch.sml
 HybridMerge.sml
+ann "allowFFI true" in
 HybridSort.sml
+end
 main.sml

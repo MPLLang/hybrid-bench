@@ -3,7 +3,7 @@ include ../config.mk
 FDIR=futhark
 
 main.mpl.bin: phony $(FDIR)/sort.sml
-	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb $(FDIR)/sort.c $(FDIR)/sort.smlfut.c
+	$(MPL) $(MLTONFLAGS) -output main.mpl.bin main.mlb $(FDIR)/sort.c $(FDIR)/sort.smlfut.c hooks.c
 
 main.mlton.bin: phony $(FDIR)/sort.sml
 	$(MLTON) $(MLTONFLAGS) -output main.mlton.bin main.mlton.mlb $(FDIR)/sort.c $(FDIR)/sort.smlfut.c
